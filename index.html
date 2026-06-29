@@ -254,6 +254,7 @@
   .node text{font-family:var(--font);fill:var(--ink);pointer-events:none}
   .node .nlabel{font-weight:600;font-size:13px}
   .node .nmeta{fill:var(--muted);font-size:11px}
+  .node .nowner{fill:var(--faint);font-size:9px;letter-spacing:.6px;font-weight:700}
   .node.selected .nbox{stroke:var(--accent);stroke-width:2.5}
   .edge{fill:none;stroke:var(--faint);stroke-width:2}
   .edge.hot{stroke:var(--nva)}
@@ -913,9 +914,8 @@ let _lay={}; // last layout map, for connection-drag hit-testing
 function renderCanvas(r){
   const m=state.model, svg=$("#canvas"); svg.innerHTML="";
   svg.setAttribute("class", editable()?"build":"");
-  // gauge normalisation: queues vs the busiest queue, work steps vs the busiest step
+  // dot-meter normalisation: queues against the busiest queue
   const mwQ = maxWip();
-  const mwT = Math.max(1, ...m.nodes.map(n=> n.type==="touch" ? (metricFor(n).wip||0) : 0));
 
   // layout pass: uniform cards; centred on the original centre line
   const lay={}; _lay=lay;
@@ -965,17 +965,25 @@ function renderCanvas(r){
       const WELL=26;
       g.appendChild(el("rect",{x:12,y:bt+12,width:WELL,height:WELL,rx:7,fill:hue}));
       g.appendChild(useIc(ICON_FOR(n), 16, bt+16, WELL-8, "#0f1720"));
-      // title (max 2 lines)
-      let ty=bt+23;
+      // owner eyebrow (small all-caps, above the title) — all card types
+      const ownerStr=(n.owner||"").trim();
+      if(ownerStr){ const ot=truncToWidth(ownerStr.toUpperCase(), w-TITLE_X-12, F_META);
+        g.appendChild(txt(TITLE_X,bt+20,ot,"nowner")); }
+      // title (max 2 lines) — nudged down when an owner eyebrow is present
+      let ty = ownerStr ? bt+34 : bt+25;
       L.titleLines.forEach(ln=>{ g.appendChild(txt(TITLE_X,ty,ln,"nlabel")); ty+=LBL_LH; });
-      // gauge: label + number + tank
-      const gy=bt+62;
-      g.appendChild(txt(12,gy,isQ?"In queue":"Volume","nmeta"));
-      g.appendChild(txt(w-12,gy, mt.wip!=null?fmt(mt.wip):"—", "nlabel",{"text-anchor":"end","font-size":"14"}));
-      const tankY=gy+7, tankW=w-24, denom=isQ?mwQ:mwT;
-      const frac = mt.wip!=null ? Math.max(0,Math.min(1, mt.wip/denom)) : 0;
-      g.appendChild(el("rect",{x:12,y:tankY,width:tankW,height:8,rx:4,fill:"#0f1825",stroke:"var(--line)"}));
-      if(frac>0) g.appendChild(el("rect",{x:12,y:tankY,width:Math.max(3,tankW*frac),height:8,rx:4,fill:hue}));
+      // queue-only dot meter: label + number + 10 dots (fill ∝ busiest queue)
+      if(isQ){
+        const gy=bt+62;
+        g.appendChild(txt(12,gy,"In queue","nmeta"));
+        g.appendChild(txt(w-12,gy, mt.wip!=null?fmt(mt.wip):"—", "nlabel",{"text-anchor":"end","font-size":"14"}));
+        const tankY=gy+7, frac = mt.wip!=null ? Math.max(0,Math.min(1, mt.wip/mwQ)) : 0;
+        const dotN=10, cy=tankY+4, step=(w-24)/dotN;
+        const filled = mt.wip!=null ? Math.max(mt.wip>0?1:0, Math.round(frac*dotN)) : 0;
+        for(let i=0;i<dotN;i++)
+          g.appendChild(el("circle",{cx:12+step*(i+0.5),cy,r:3.2,
+            fill:i<filled?hue:"#0f1825",stroke:"var(--line)","stroke-width":1}));
+      }
       // time + % badge (coloured by severity)
       const time=isQ?mt.wait:mt.touch;
       const share=(r.turnaround>0 && time!=null) ? time/r.turnaround : 0;
@@ -985,12 +993,9 @@ function renderCanvas(r){
       g.appendChild(useIc("ic-clock",20,badgeY+5,12,sc.c));
       g.appendChild(txt(38,badgeY+15, (time!=null?fmt(time)+" "+unit():"no data")+(share>0?` · ${Math.round(share*100)}%`:""),
         "nlabel",{fill:sc.c,"font-size":"12"}));
-      // bottom row: steps show owner as text (left) + value glyph (right); queues show nothing
+      // bottom row: steps show the value glyph (right); owner now lives in the eyebrow
       const rowY=bt+L.h-22;
       if(!isQ){
-        const owner=(n.owner||"").trim();
-        if(owner){ const ot=truncToWidth(owner, w-24-20, F_META);
-          g.appendChild(txt(12,rowY+12,ot,"nmeta")); }
         if(n.classification) g.appendChild(useIc(VAL_IC[n.classification], w-12-15, rowY, 15, "var(--muted)"));
         else g.appendChild(useIc("ic-flag", w-12-15, rowY, 15, "var(--warn)"));
       }
@@ -1099,6 +1104,9 @@ function renderInspector(){
     </div>`;
     body+=advanced(n,false);
   } else if(n.type==="wait"){
+    body+=`<div class="insp-sec"><h4>Setup</h4>
+      ${field("Owner / team","owner",n.owner||"","text")}
+    </div>`;
     body+=`<div class="insp-sec"><h4>Load</h4>
       ${field("WIP / queue size","wip",n.wip==null?"":n.wip,"number","Files waiting in this queue")}
     </div>`;
@@ -1485,6 +1493,7 @@ function buildExportSVG(){
   const styleVars=`--bg:${C.bg};--panel:${C.panel};--panel2:${C.panel2};--line:${C.line};--ink:${C.ink};--muted:${C.muted};--faint:${C.faint};--accent:${C.accent};--grid:${C.grid};--va:${C.va};--nva:${C.nva};--warn:${C.warn};--t-queue:${C.tq};--t-human:${C.th};--t-bot:${C.tb};--term:${C.term};--term-line:${C.termLine}`;
   const css=`text{font-family:'Segoe UI',system-ui,sans-serif;fill:var(--ink)}
     .nlabel{font-weight:600;font-size:13px}.nmeta{fill:var(--muted);font-size:11px}.elabel{fill:var(--muted);font-size:11px}
+    .nowner{fill:var(--faint);font-size:9px;letter-spacing:.6px;font-weight:700}
     .edge{fill:none;stroke:var(--faint);stroke-width:2}.edge.hot{stroke:var(--nva)}
     .anchor,.edge-hit,.temp-edge{display:none}`;
   const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="${styleVars}">
