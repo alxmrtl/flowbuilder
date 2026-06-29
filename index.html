@@ -198,8 +198,6 @@
   .swatchrow .swreset:disabled{opacity:.4;cursor:default}
   .typecolors{display:flex;flex-direction:column;gap:10px}
   /* load gauge preview */
-  .loadbar{height:10px;border-radius:5px;background:var(--panel2);border:1px solid var(--line);overflow:hidden;margin-top:8px}
-  .loadbar i{display:block;height:100%;border-radius:5px}
   /* drawer footer (sticky bottom) */
   .insp-foot{flex:0 0 auto;padding:12px 14px;border-top:1px solid var(--line);background:var(--panel);display:flex;gap:8px}
   .insp-foot button{flex:1;min-width:0;background:var(--panel2);border:1px solid var(--line);color:var(--ink);border-radius:7px;
@@ -299,24 +297,6 @@
   </symbol>
   <symbol id="ic-val-waste" viewBox="0 0 24 24" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
     <circle cx="6.5" cy="7" r="2.4"/><circle cx="6.5" cy="17" r="2.4"/><path d="M8.7 8.6 20 17M8.7 15.4 20 7"/>
-  </symbol>
-  <!-- state + owner glyphs -->
-  <symbol id="ic-wait" viewBox="0 0 24 24" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M6.5 3h11M6.5 21h11"/><path d="M8 3v3.2L12 11l4-4.8V3"/><path d="M8 21v-3.2L12 13l4 4.8V21"/>
-  </symbol>
-  <symbol id="ic-own-ops" viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-    <circle cx="12" cy="12" r="3.1"/>
-    <path d="M12 2.6v2.4M12 19v2.4M2.6 12h2.4M19 12h2.4M5.2 5.2l1.7 1.7M17.1 17.1l1.7 1.7M18.8 5.2l-1.7 1.7M6.9 17.1l-1.7 1.7"/>
-  </symbol>
-  <symbol id="ic-own-uw" viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-    <rect x="5" y="4" width="14" height="17" rx="2.2"/><path d="M9.2 4V2.8h5.6V4"/><path d="M8.5 10h7M8.5 13.6h7M8.5 17.2h4.4"/>
-  </symbol>
-  <symbol id="ic-own-sys" viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-    <rect x="4" y="4.5" width="16" height="6" rx="1.6"/><rect x="4" y="13.5" width="16" height="6" rx="1.6"/>
-    <circle cx="7.4" cy="7.5" r=".75" fill="currentColor" stroke="none"/><circle cx="7.4" cy="16.5" r=".75" fill="currentColor" stroke="none"/>
-  </symbol>
-  <symbol id="ic-owner" viewBox="0 0 24 24" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-    <circle cx="12" cy="8" r="3.4"/><path d="M5.5 19.5c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/>
   </symbol>
 </svg>
 <header>
@@ -441,11 +421,6 @@
       <span><svg><use href="#ic-val-value"/></svg>Valued</span>
       <span><svg><use href="#ic-val-necessary"/></svg>Necessary</span>
       <span><svg><use href="#ic-val-waste"/></svg>Could remove</span>
-      <span class="lsep"></span><span class="lgrp">Owner</span>
-      <span><svg><use href="#ic-owner"/></svg>Person / role</span>
-      <span><svg><use href="#ic-own-ops"/></svg>Ops</span>
-      <span><svg><use href="#ic-own-uw"/></svg>Underwriter</span>
-      <span><svg><use href="#ic-own-sys"/></svg>System / bot</span>
       <span class="lsep"></span>
       <span><svg><use href="#ic-clock"/></svg>badge colour = severity</span>
       <span><i style="background:var(--nva)"></i>Bottleneck</span>
@@ -460,9 +435,9 @@
   "settings": { "timeUnit": "hrs", "bottleneckMode": "relative" },
   "nodes": [
     { "id": "start", "type": "start", "label": "Start — a request arrives", "x": 40,  "y": 220 },
-    { "id": "q1", "type": "wait", "label": "Queue — pure waiting", "stepId": "q1", "x": 220, "y": 220, "waitTimeManual": 12, "wip": 8, "wipLimit": 15 },
+    { "id": "q1", "type": "wait", "label": "Queue — pure waiting", "stepId": "q1", "x": 220, "y": 220, "waitTimeManual": 12, "wip": 8 },
     { "id": "t1", "type": "touch", "label": "Human step — Valued work", "owner": "Your team", "stepId": "t1", "x": 400, "y": 220, "touchTimeManual": 2, "classification": "VA", "valueNote": "A 'touch' is where work actually happens. Set who does it and how long it takes, then tag the value. VALUED = the customer would pay for it." },
-    { "id": "q2", "type": "wait", "label": "Queue over its WIP limit", "stepId": "q2", "x": 580, "y": 220, "waitTimeManual": 40, "wip": 30, "wipLimit": 12 },
+    { "id": "q2", "type": "wait", "label": "Queue — larger backlog", "stepId": "q2", "x": 580, "y": 220, "waitTimeManual": 40, "wip": 30 },
     { "id": "t2", "type": "touch", "label": "Human step — Necessary", "owner": "Your team", "stepId": "t2", "x": 760, "y": 220, "touchTimeManual": 1, "classification": "NNVA", "valueNote": "NECESSARY = required for compliance or risk, but the customer doesn't value it directly. Minimise it, don't delete it." },
     { "id": "t3", "type": "touch", "performer": "bot", "label": "Bot step — automated", "owner": "System", "stepId": "t3", "x": 940, "y": 220, "touchTimeManual": 0.3, "classification": "VA", "valueNote": "A bot step is automated work — no person involved. Usually fast, and a good target to move manual steps onto." },
     { "id": "t4", "type": "touch", "label": "Could-remove step", "owner": "Your team", "stepId": "t4", "x": 1120, "y": 220, "touchTimeManual": 0.8, "classification": "NVA", "valueNote": "COULD REMOVE = adds no value; a candidate to eliminate. Flow efficiency = valued time / total time, so cutting these (and the queues) raises it." },
@@ -540,6 +515,12 @@ function wrapText(text, maxW, font){
   }
   if(line) lines.push(line);
   return lines.length?lines:[""];
+}
+/* single-line clamp with an ellipsis when the text overruns maxW */
+function truncToWidth(text, maxW, font){
+  const s=String(text||""); if(measure(s,font)<=maxW) return s;
+  let out=""; for(const ch of s){ if(measure(out+ch+"…",font)>maxW) break; out+=ch; }
+  return out+"…";
 }
 
 /* ============================================================
@@ -723,8 +704,6 @@ function rollup(){
 }
 function isBottleneck(node, r){
   if(node.type!=="wait") return false;
-  const mt=metricFor(node);
-  if(mt.wip!=null && node.wipLimit && mt.wip>node.wipLimit) return true;
   if(!r.waits.length) return false;
   const max=Math.max(...r.waits.map(w=>w.wait));
   return r.bottleneck && r.bottleneck.node.id===node.id && max>0;
@@ -888,11 +867,6 @@ const SEVC      = {calm:{c:"var(--va)",  bg:"rgba(52,195,143,.15)"},
                    hot: {c:"var(--nva)", bg:"rgba(240,101,72,.18)"}};
 const sevOf     = share => share>=0.30 ? "hot" : share>=0.15 ? "warn" : "calm";
 const VAL_IC    = {VA:"ic-val-value", NNVA:"ic-val-necessary", NVA:"ic-val-waste"};
-const OWNER_IC  = {ops:"ic-own-ops", underwriter:"ic-own-uw"};
-function ownerIcon(role){ if(!role) return "ic-owner"; const k=String(role).toLowerCase().trim();
-  if(OWNER_IC[k]) return OWNER_IC[k];
-  if(/system|bot|auto|policy|engine|service/.test(k)) return "ic-own-sys";
-  return "ic-owner"; }
 /* place a symbol from the library at (x,y), sized & coloured (CSS vars resolve via style) */
 function useIc(id, x, y, size, color){
   const u=el("use",{width:size,height:size,transform:`translate(${x},${y})`});
@@ -1011,11 +985,15 @@ function renderCanvas(r){
       g.appendChild(useIc("ic-clock",20,badgeY+5,12,sc.c));
       g.appendChild(txt(38,badgeY+15, (time!=null?fmt(time)+" "+unit():"no data")+(share>0?` · ${Math.round(share*100)}%`:""),
         "nlabel",{fill:sc.c,"font-size":"12"}));
-      // icon row: state (queue) OR owner + value (step) — decoded by the legend
-      const rowY=bt+L.h-22; let rxp=12;
-      const ri=(id,color)=>{ g.appendChild(useIc(id,rxp,rowY,15,color||"var(--muted)")); rxp+=22; };
-      if(isQ){ ri("ic-wait"); }
-      else { ri(ownerIcon(n.owner)); n.classification ? ri(VAL_IC[n.classification]) : ri("ic-flag","var(--warn)"); }
+      // bottom row: steps show owner as text (left) + value glyph (right); queues show nothing
+      const rowY=bt+L.h-22;
+      if(!isQ){
+        const owner=(n.owner||"").trim();
+        if(owner){ const ot=truncToWidth(owner, w-24-20, F_META);
+          g.appendChild(txt(12,rowY+12,ot,"nmeta")); }
+        if(n.classification) g.appendChild(useIc(VAL_IC[n.classification], w-12-15, rowY, 15, "var(--muted)"));
+        else g.appendChild(useIc("ic-flag", w-12-15, rowY, 15, "var(--warn)"));
+      }
       // bottleneck flag — only the single biggest bottleneck (severity badge carries the rest)
       if(r.bottleneck && r.bottleneck.node.id===n.id){
         const fw=92;
@@ -1092,16 +1070,14 @@ function renderInspector(){
     if(bottleneck) headRow+=`<span class="insp-chip hot">⚑ Bottleneck</span>`;
     else if(!n.classification) headRow+=`<span class="insp-chip warn">⚠ Unrated</span>`;
   } else if(n.type==="wait"){
-    const mt=metricFor(n);
     if(bottleneck) headRow=`<span class="insp-chip hot">⚑ Bottleneck</span>`;
-    else if(mt.wip!=null && n.wipLimit && mt.wip>n.wipLimit) headRow=`<span class="insp-chip warn">⚠ Backlog</span>`;
   }
 
   /* body sections, ordered most-used → informational */
   let body="";
   if(n.type==="touch"){
     body+=`<div class="insp-sec"><h4>Setup</h4>
-      ${field("Owner / role","owner",n.owner||"","text")}
+      ${field(n.performer==="bot"?"Bot name":"Owner / role","owner",n.owner||"","text")}
       ${field(`Touch time (${u})`,"touchTimeManual",n.touchTimeManual==null?"":n.touchTimeManual,"number","Used when no data is bound")}
     </div>`;
     body+=`<div class="insp-sec"><h4>${T.classTitle} <span class="h4note">· the conversation</span></h4>
@@ -1123,11 +1099,8 @@ function renderInspector(){
     </div>`;
     body+=advanced(n,false);
   } else if(n.type==="wait"){
-    const mt=metricFor(n);
     body+=`<div class="insp-sec"><h4>Load</h4>
       ${field("WIP / queue size","wip",n.wip==null?"":n.wip,"number","Files waiting in this queue")}
-      ${field("WIP limit (optional)","wipLimit",n.wipLimit==null?"":n.wipLimit,"number","Backlog flags when WIP exceeds this")}
-      ${loadGauge(mt.wip, n.wipLimit, n)}
     </div>`;
     body+=`<div class="insp-sec"><h4>Time</h4>
       ${field(`Wait time (${u})`,"waitTimeManual",n.waitTimeManual==null?"":n.waitTimeManual,"number","Used when no data is bound")}
@@ -1221,13 +1194,6 @@ function toggleThemePop(show){
   const pop=$("#themePop"); if(!pop) return;
   const open = show==null ? !pop.classList.contains("show") : show;
   if(open){ renderThemePop(); pop.classList.add("show"); } else pop.classList.remove("show");
-}
-function loadGauge(wip, limit, n){
-  if(wip==null) return "";
-  const lim=Math.max(limit||wip||1, 1);
-  const pct=Math.max(4, Math.min(100, (wip/lim)*100));
-  const over=limit && wip>limit;
-  return `<div class="loadbar"><i style="width:${pct}%;background:${over?"var(--nva)":typeHue(n)}"></i></div>`;
 }
 function settingsSelect(label,key,val,opts){
   return `<div class="field"><label>${label}</label><select data-setbind="${key}">
