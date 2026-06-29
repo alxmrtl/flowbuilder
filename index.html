@@ -456,28 +456,26 @@
 <!-- Embedded default model: seeds the library on first run; standalone viewers show this -->
 <script id="egp-model" type="application/json">
 {
-  "name": "Underwriting Value Stream (sample)",
+  "name": "Start here — what each block means",
   "settings": { "timeUnit": "hrs", "bottleneckMode": "relative" },
   "nodes": [
-    { "id": "start", "type": "start", "label": "Customer request", "x": 40,  "y": 220 },
-    { "id": "q_intake", "type": "wait", "label": "Intake queue", "stepId": "q_intake", "x": 220, "y": 220, "waitTimeManual": 18, "wip": 42, "wipLimit": 20 },
-    { "id": "t_intake", "type": "touch", "label": "Intake / setup", "owner": "Ops", "stepId": "t_intake", "x": 400, "y": 220, "touchTimeManual": 0.5, "classification": "NNVA", "valueNote": "Required to open the file; no transformation for the customer." },
-    { "id": "q_verify", "type": "wait", "label": "Awaiting docs", "stepId": "q_verify", "x": 580, "y": 220, "waitTimeManual": 36, "wip": 60, "wipLimit": 25 },
-    { "id": "t_verify", "type": "touch", "label": "Verification", "owner": "Ops", "stepId": "t_verify", "x": 760, "y": 220, "touchTimeManual": 1.2, "classification": "NNVA", "valueNote": "Confirms data accuracy; necessary for risk but customer doesn't pay for it." },
-    { "id": "q_uw", "type": "wait", "label": "Underwriting backlog", "stepId": "q_uw", "x": 940, "y": 220, "waitTimeManual": 24, "wip": 31, "wipLimit": 15 },
-    { "id": "t_uw", "type": "touch", "label": "Underwriting decision", "owner": "Underwriter", "stepId": "t_uw", "x": 1120, "y": 220, "touchTimeManual": 2.0, "classification": "VA", "valueNote": "Core value: pricing & risk decision the customer is buying." },
-    { "id": "t_issue", "type": "touch", "performer": "bot", "label": "Issue / bind", "owner": "Policy system", "stepId": "t_issue", "x": 1300, "y": 220, "touchTimeManual": 0.6, "classification": "VA", "valueNote": "Automated issue & bind — delivers the bound policy to the customer." },
-    { "id": "end", "type": "end", "label": "Value delivered", "x": 1480, "y": 220 }
+    { "id": "start", "type": "start", "label": "Start — a request arrives", "x": 40,  "y": 220 },
+    { "id": "q1", "type": "wait", "label": "Queue — pure waiting", "stepId": "q1", "x": 220, "y": 220, "waitTimeManual": 12, "wip": 8, "wipLimit": 15 },
+    { "id": "t1", "type": "touch", "label": "Human step — Valued work", "owner": "Your team", "stepId": "t1", "x": 400, "y": 220, "touchTimeManual": 2, "classification": "VA", "valueNote": "A 'touch' is where work actually happens. Set who does it and how long it takes, then tag the value. VALUED = the customer would pay for it." },
+    { "id": "q2", "type": "wait", "label": "Queue over its WIP limit", "stepId": "q2", "x": 580, "y": 220, "waitTimeManual": 40, "wip": 30, "wipLimit": 12 },
+    { "id": "t2", "type": "touch", "label": "Human step — Necessary", "owner": "Your team", "stepId": "t2", "x": 760, "y": 220, "touchTimeManual": 1, "classification": "NNVA", "valueNote": "NECESSARY = required for compliance or risk, but the customer doesn't value it directly. Minimise it, don't delete it." },
+    { "id": "t3", "type": "touch", "performer": "bot", "label": "Bot step — automated", "owner": "System", "stepId": "t3", "x": 940, "y": 220, "touchTimeManual": 0.3, "classification": "VA", "valueNote": "A bot step is automated work — no person involved. Usually fast, and a good target to move manual steps onto." },
+    { "id": "t4", "type": "touch", "label": "Could-remove step", "owner": "Your team", "stepId": "t4", "x": 1120, "y": 220, "touchTimeManual": 0.8, "classification": "NVA", "valueNote": "COULD REMOVE = adds no value; a candidate to eliminate. Flow efficiency = valued time / total time, so cutting these (and the queues) raises it." },
+    { "id": "end", "type": "end", "label": "Value delivered", "x": 1300, "y": 220 }
   ],
   "edges": [
-    { "id": "e1", "from": "start", "to": "q_intake" },
-    { "id": "e2", "from": "q_intake", "to": "t_intake" },
-    { "id": "e3", "from": "t_intake", "to": "q_verify" },
-    { "id": "e4", "from": "q_verify", "to": "t_verify" },
-    { "id": "e5", "from": "t_verify", "to": "q_uw" },
-    { "id": "e6", "from": "q_uw", "to": "t_uw" },
-    { "id": "e7", "from": "t_uw", "to": "t_issue" },
-    { "id": "e8", "from": "t_issue", "to": "end" }
+    { "id": "e1", "from": "start", "to": "q1" },
+    { "id": "e2", "from": "q1", "to": "t1" },
+    { "id": "e3", "from": "t1", "to": "q2" },
+    { "id": "e4", "from": "q2", "to": "t2" },
+    { "id": "e5", "from": "t2", "to": "t3" },
+    { "id": "e6", "from": "t3", "to": "t4" },
+    { "id": "e7", "from": "t4", "to": "end" }
   ]
 }
 </script>
