@@ -1,0 +1,1643 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Flow Builder — Value Stream Visualizer</title>
+<script src="vendor/xlsx.full.min.js"></script>
+<script src="vendor/jspdf.umd.min.js"></script>
+<style>
+  :root{
+    --bg:#0f1720; --panel:#16212e; --panel2:#1d2a3a; --line:#2b3a4d;
+    --ink:#e8eef5; --muted:#9fb0c3; --faint:#6b7d92;
+    --va:#34c38f; --nnva:#5a8dee; --nva:#f06548; --wait:#7b8aa0;
+    --warn:#f7b84b; --accent:#4cc9f0; --shadow:0 6px 24px rgba(0,0,0,.35);
+    --font:'Segoe UI',system-ui,-apple-system,Roboto,Arial,sans-serif;
+    /* node type hues (queue / human / bot) — tuned for the dark canvas */
+    --t-queue:#6e8bff; --t-human:#2dd4bf; --t-bot:#b08cff;
+    /* start / end terminal pills */
+    --term:#2a3543; --term-line:#cdd9e6;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);font-size:14px;overflow:hidden;
+    display:flex;flex-direction:column;height:100%}
+  header{flex:0 0 auto}
+  button{font-family:inherit;cursor:pointer}
+  .row{display:flex;align-items:center;gap:8px}
+
+  /* ---- Top bar ---- */
+  header{display:flex;align-items:center;gap:12px;padding:10px 16px;background:var(--panel);
+    border-bottom:1px solid var(--line);z-index:20}
+  header .brand{font-weight:700;letter-spacing:.3px;font-size:15px;cursor:pointer}
+  header .brand span{color:var(--accent)}
+  .modes{display:flex;background:var(--panel2);border-radius:8px;padding:3px;border:1px solid var(--line)}
+  .modes button{background:transparent;border:0;color:var(--muted);padding:6px 14px;border-radius:6px;font-weight:600}
+  .modes button.active{background:var(--accent);color:#06202a}
+  .spacer{flex:1}
+  .ctl{display:flex;align-items:center;gap:6px}
+  .ctl label{color:var(--faint);font-size:12px}
+  select,.btn{background:var(--panel2);color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:7px 10px;font-size:13px}
+  .btn:hover{border-color:var(--accent)}
+  .btn.primary{background:var(--accent);color:#06202a;border-color:var(--accent);font-weight:600}
+  .btn.on{border-color:var(--accent);color:var(--accent)}
+
+  /* chrome visibility by screen */
+  body.home #paletteBar, body.home main, body.home #analysis{display:none}
+  body.home .segctl,
+  body.home .divider, body.home #saveModel, body.home #exportSheet, body.home #importSheet,
+  body.home #exportHtml, body.home #howData, body.home .themewrap, body.home .exportwrap{display:none}
+  #home{display:none}
+  body.home #home{display:flex;flex:1 1 auto;min-height:0}
+  body.viewer #flowsBtn, body.viewer #paletteBar, body.viewer .themewrap,
+  body.viewer #importSheet, body.viewer #exportSheet, body.viewer #saveModel, body.viewer #howData{display:none}
+  .themewrap,.exportwrap{position:relative}
+  .themepop{position:absolute;right:0;top:calc(100% + 6px);width:240px;background:var(--panel);border:1px solid var(--line);
+    border-radius:10px;box-shadow:var(--shadow);padding:12px;z-index:40;display:none}
+  .themepop.show{display:block}
+  .themepop-h{font-size:10px;letter-spacing:.5px;text-transform:uppercase;color:var(--faint);font-weight:700;margin:10px 0 8px}
+  .themepop-h:first-child{margin-top:0}
+  .themepop.wide{width:288px}
+  /* theme presets */
+  .presetrow{display:flex;flex-wrap:wrap;gap:6px}
+  .preset{flex:1 1 calc(50% - 6px);background:var(--panel2);border:1px solid var(--line);color:var(--ink);
+    border-radius:8px;padding:7px 8px;font-size:12px;font-weight:600;display:flex;align-items:center;gap:7px}
+  .preset:hover{border-color:var(--accent)}
+  .preset.on{border-color:var(--accent);color:var(--accent)}
+  .preset .pv{display:inline-flex;border-radius:4px;overflow:hidden;border:1px solid rgba(0,0,0,.3)}
+  .preset .pv i{width:9px;height:14px;display:block}
+  /* inline type/menu icons (replace emoji) */
+  .t-ic{width:15px;height:15px;stroke:currentColor;fill:none;flex:0 0 auto;vertical-align:-2px}
+  /* export menu */
+  .menubtns{display:flex;flex-direction:column;gap:6px}
+  .menubtns .btn{width:100%;text-align:left}
+  .divider{width:1px;height:24px;background:var(--line);margin:0 2px}
+  .btn[disabled]{opacity:.45;cursor:not-allowed}
+  .btn.iconbtn{padding:7px 10px;font-weight:700}
+  .btn.ghost{background:transparent;border-color:transparent;color:var(--faint);font-size:12px}
+  .btn.ghost:hover{border-color:var(--line);color:var(--muted)}
+  /* explainer modal */
+  .overlay{position:fixed;inset:0;background:rgba(6,12,20,.6);display:none;align-items:center;justify-content:center;z-index:60}
+  .overlay.show{display:flex}
+  .modal{background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);
+    width:min(560px,92vw);max-height:86vh;overflow:auto;padding:20px 22px}
+  .modal-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+  .modal-h h3{margin:0;font-size:17px}
+  .modal .x{background:transparent;border:0;color:var(--muted);font-size:16px}
+  .modal p{margin:10px 0;line-height:1.5}
+  .modal ul,.modal ol{margin:8px 0;padding-left:20px;line-height:1.5}
+  .modal li{margin:6px 0}
+  .modal .mut{color:var(--muted)}
+  .modal .small{font-size:12px}
+  .modal code{background:var(--panel2);border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-size:12px}
+  .modal .steps{margin-top:14px}
+
+  /* ---- Palette bar (add boxes) — top of the build area ---- */
+  #paletteBar{flex:0 0 auto;display:flex;align-items:center;gap:8px;padding:9px 16px;background:var(--panel);
+    border-bottom:1px solid var(--line);flex-wrap:wrap}
+  #paletteBar .pb-label{color:var(--faint);font-size:11px;text-transform:uppercase;letter-spacing:.6px;margin-right:4px}
+  #paletteBar button{background:var(--panel2);border:1px solid var(--line);color:var(--ink);border-radius:9px;
+    padding:8px 12px;font-size:13px;display:flex;align-items:center;gap:7px}
+  #paletteBar button:hover{border-color:var(--accent)}
+  #paletteBar .swatch{display:inline-block;width:10px;height:10px;border-radius:3px}
+  #paletteBar .pb-hint{color:var(--faint);font-size:11px;margin-left:auto;max-width:300px;line-height:1.35}
+  #paletteBar .pb-zoom{display:flex;align-items:center;gap:6px;margin-left:14px}
+  #paletteBar .pb-zoom button{padding:6px 11px;font-size:15px;font-weight:700;line-height:1;min-width:34px;justify-content:center}
+  #paletteBar .pb-zoom span{color:var(--faint);font-size:11px;min-width:40px;text-align:center}
+
+  /* ---- Analysis area (bottom): stats + time-contribution bar ---- */
+  #analysis{flex:0 0 auto;background:var(--panel);border-top:1px solid var(--line);
+    padding:10px 16px 12px;max-height:42%;overflow:auto}
+  #analysis .a-head{color:var(--faint);font-size:11px;text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px}
+  /* ---- Stats ---- */
+  .stats{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+  .stat{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:8px 14px;min-width:120px}
+  .stat .k{color:var(--faint);font-size:11px;text-transform:uppercase;letter-spacing:.5px}
+  .stat .v{font-size:20px;font-weight:700;margin-top:2px}
+  .stat .v small{font-size:12px;color:var(--muted);font-weight:500}
+  .stat.eff .v{color:var(--va)}
+  .stat.clickable{cursor:pointer;transition:border-color .15s}
+  .stat.clickable:hover{border-color:var(--accent)}
+  .stat .info{color:var(--faint);font-size:11px;font-weight:400;vertical-align:1px}
+  .effformula{background:var(--panel2);border:1px solid var(--line);border-radius:8px;
+    padding:11px 13px;margin:14px 0;font-size:13px;line-height:1.8;color:var(--ink)}
+  .effformula b{color:var(--va)}
+  .stat.bottleneck .v{color:var(--nva);font-size:16px}
+  .stat.warnflag .v{color:var(--warn);font-size:16px}
+
+  /* ---- Home / library ---- */
+  #home{flex-direction:column;height:calc(100% - 0px);overflow:auto}
+  .home-bar{display:flex;align-items:center;gap:10px;padding:18px 28px 6px}
+  .home-bar h2{margin:0;font-size:20px}
+  .home-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px;padding:16px 28px 40px}
+  .flowcard{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;box-shadow:var(--shadow);
+    display:flex;flex-direction:column;gap:6px;transition:border-color .15s}
+  .flowcard:hover{border-color:var(--accent)}
+  .fc-name{font-size:16px;font-weight:700}
+  .fc-stat{color:var(--muted);font-size:13px}
+  .fc-stat .fc-eff{color:var(--va);font-weight:700;font-size:18px}
+  .fc-sub{color:var(--faint);font-size:12px;min-height:16px}
+  .fc-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+  .fc-actions button{background:var(--panel2);border:1px solid var(--line);color:var(--ink);border-radius:7px;
+    padding:6px 9px;font-size:12px}
+  .fc-actions button:hover{border-color:var(--accent)}
+  .fc-actions button.open{background:var(--accent);color:#06202a;border-color:var(--accent);font-weight:600}
+  .fc-actions button.del:hover{border-color:var(--nva);color:var(--nva)}
+  .home-empty{color:var(--faint);padding:40px 28px}
+
+  /* ---- Layout ---- */
+  main{flex:1 1 auto;min-height:0;display:flex;position:relative}
+  #stage{flex:1;position:relative;overflow:auto;background:
+    radial-gradient(circle at 1px 1px, var(--grid,#1b2738) 1px, transparent 0) 0 0/26px 26px, var(--bg)}
+  svg#canvas{display:block}
+
+  .palette{position:absolute;left:14px;top:14px;display:flex;flex-direction:column;gap:8px;z-index:10}
+  .palette button{background:var(--panel);border:1px solid var(--line);color:var(--ink);border-radius:9px;
+    padding:9px 12px;text-align:left;box-shadow:var(--shadow);min-width:150px;font-size:13px}
+  .palette button:hover{border-color:var(--accent)}
+  .palette .swatch{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:8px;vertical-align:middle}
+  .palette .hint{color:var(--faint);font-size:11px;margin-top:4px;max-width:150px;line-height:1.4}
+
+  #inspector{width:320px;background:var(--panel);border-left:1px solid var(--line);display:none;flex-direction:column;overflow:hidden}
+  #inspector.show{display:flex}
+  #inspector .sub{color:var(--faint);font-size:12px}
+  /* drawer header (sticky top) */
+  .insp-head{flex:0 0 auto;padding:14px 14px 12px;border-bottom:1px solid var(--line);background:var(--panel)}
+  .insp-htop{display:flex;align-items:center;gap:10px}
+  .insp-iconwell{flex:0 0 auto;width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;
+    font-size:15px;border:1.5px solid var(--hue,var(--line));background:color-mix(in srgb,var(--hue,var(--line)) 15%,transparent);color:var(--hue,var(--ink))}
+  .insp-iconwell svg{width:18px;height:18px;stroke:var(--hue,var(--ink));fill:none}
+  .insp-title{flex:1;min-width:0;background:transparent;border:1px solid transparent;color:var(--ink);font-size:15px;font-weight:600;
+    border-radius:6px;padding:4px 6px;font-family:inherit}
+  .insp-title:hover{border-color:var(--line)}
+  .insp-title:focus{border-color:var(--accent);background:var(--panel2);outline:none}
+  .insp-close{flex:0 0 auto;background:transparent;border:none;color:var(--faint);font-size:15px;cursor:pointer;padding:5px 7px;border-radius:6px;line-height:1}
+  .insp-close:hover{color:var(--ink);background:var(--panel2)}
+  .insp-hrow{display:flex;align-items:center;gap:8px;margin-top:10px}
+  .insp-chip{font-size:11px;font-weight:600;padding:3px 9px;border-radius:20px;border:1px solid;white-space:nowrap}
+  .insp-chip.hot{color:var(--nva);border-color:var(--nva);background:rgba(240,101,72,.12)}
+  .insp-chip.warn{color:var(--warn);border-color:var(--warn);background:rgba(247,184,75,.12)}
+  /* drawer body / sections (scrolls) */
+  .insp-body{flex:1 1 auto;overflow:auto;padding:14px}
+  .insp-sec{margin-bottom:18px}
+  .insp-sec>h4{margin:0 0 10px;font-size:10px;letter-spacing:.5px;text-transform:uppercase;color:var(--faint);font-weight:700;
+    display:flex;align-items:baseline;gap:6px}
+  .insp-sec>h4 .h4note{text-transform:none;letter-spacing:0;font-weight:500;font-size:11px}
+  .insp-adv{border-top:1px solid var(--line);padding-top:12px}
+  .insp-adv>summary{font-size:10px;letter-spacing:.5px;text-transform:uppercase;color:var(--faint);font-weight:700;cursor:pointer;list-style:none}
+  .insp-adv>summary::-webkit-details-marker{display:none}
+  .insp-adv>summary::before{content:"\25B8  ";color:var(--faint)}
+  .insp-adv[open]>summary::before{content:"\25BE  "}
+  .insp-adv .field{margin-top:12px;margin-bottom:0}
+  .idline{font-size:11px;color:var(--faint);font-family:ui-monospace,Menlo,monospace;word-break:break-all;padding-top:2px}
+  /* swatch / colour rows */
+  .swatchrow{display:flex;align-items:center;gap:8px}
+  .swatchrow input[type=color]{width:34px;height:30px;padding:0;border:1px solid var(--line);border-radius:7px;background:var(--panel2);cursor:pointer}
+  .swatchrow .swlabel{flex:1;min-width:0;color:var(--muted);font-size:12px}
+  .swatchrow .swreset{background:var(--panel2);border:1px solid var(--line);color:var(--muted);border-radius:6px;padding:5px 9px;font-size:11px;cursor:pointer}
+  .swatchrow .swreset:disabled{opacity:.4;cursor:default}
+  .typecolors{display:flex;flex-direction:column;gap:10px}
+  /* load gauge preview */
+  .loadbar{height:10px;border-radius:5px;background:var(--panel2);border:1px solid var(--line);overflow:hidden;margin-top:8px}
+  .loadbar i{display:block;height:100%;border-radius:5px}
+  /* drawer footer (sticky bottom) */
+  .insp-foot{flex:0 0 auto;padding:12px 14px;border-top:1px solid var(--line);background:var(--panel);display:flex;gap:8px}
+  .insp-foot button{flex:1;min-width:0;background:var(--panel2);border:1px solid var(--line);color:var(--ink);border-radius:7px;
+    padding:9px 6px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap}
+  .insp-foot button:hover{border-color:var(--accent)}
+  .insp-foot button.del{color:var(--nva);border-color:rgba(240,101,72,.4)}
+  .insp-foot button.del:hover{border-color:var(--nva);background:rgba(240,101,72,.1)}
+  .field{margin-bottom:12px}
+  .field label{display:block;color:var(--muted);font-size:12px;margin-bottom:4px}
+  .field input,.field textarea,.field select{width:100%;background:var(--panel2);border:1px solid var(--line);
+    color:var(--ink);border-radius:7px;padding:8px;font-size:13px;font-family:inherit}
+  .field textarea{min-height:64px;resize:vertical}
+  .seg{display:flex;gap:6px}
+  .seg button{flex:1;background:var(--panel2);border:1px solid var(--line);color:var(--muted);border-radius:7px;padding:8px 4px;font-size:12px;font-weight:600}
+  .seg button.va.on{background:var(--va);color:#06251a;border-color:var(--va)}
+  .seg button.nnva.on{background:var(--nnva);color:#04183a;border-color:var(--nnva)}
+  .seg button.nva.on{background:var(--nva);color:#2a0a04;border-color:var(--nva)}
+  .seg.perf button.on{background:var(--accent);color:#06202a;border-color:var(--accent)}
+  .defs{margin-top:8px;display:flex;flex-direction:column;gap:5px}
+  .def{font-size:11px;color:var(--faint);line-height:1.35;padding:6px 8px;border:1px solid transparent;border-radius:6px}
+  .def b{color:var(--muted)}
+  .def.sel{background:var(--panel2);border-color:var(--line)}
+  .def.sel.va b{color:var(--va)} .def.sel.nnva b{color:var(--nnva)} .def.sel.nva b{color:var(--nva)}
+  .def.sel b{color:var(--ink)}
+  .req{color:var(--warn);font-size:11px;margin-top:4px;display:none}
+  .req.show{display:block}
+  .danger{background:transparent;border:1px solid var(--nva);color:var(--nva);border-radius:7px;padding:8px 12px;width:100%;margin-top:8px}
+  .linkbtn{width:100%;margin-top:6px}
+  .linkbanner{background:var(--panel2);border:1px dashed var(--accent);color:var(--accent);border-radius:7px;padding:8px;font-size:12px;margin-bottom:12px;display:none}
+  .linkbanner.show{display:block}
+
+  /* time-contribution bar (in the analysis area) */
+  #ribbonWrap .title{color:var(--muted);font-size:12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:baseline}
+  #ribbonWrap .title b{color:var(--ink);font-weight:600}
+  #ribbonWrap .title .rt{color:var(--faint);font-size:11px;font-weight:500}
+  .cscale{display:flex;justify-content:space-between;font-size:10px;color:var(--faint);margin-top:5px;text-transform:uppercase;letter-spacing:.4px}
+  .ribbon{display:flex;height:26px;border-radius:6px;overflow:hidden;border:1px solid var(--line)}
+  .ribbon .seg-b{height:100%;display:flex;align-items:center;justify-content:flex-start;gap:5px;padding:0 7px;font-size:11px;color:#06202a;font-weight:600;white-space:nowrap;overflow:hidden}
+  .ribbon .seg-b .seg-ic{width:13px;height:13px;flex:0 0 auto;stroke:#06202a;fill:none;stroke-width:1.8}
+  .ribbon .seg-b .seg-lbl{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .legend{display:flex;align-items:center;gap:6px 14px;flex-wrap:wrap;margin-top:8px;font-size:11px;color:var(--muted)}
+  .legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:middle}
+  .legend svg{width:13px;height:13px;vertical-align:-2px;margin-right:4px;stroke:var(--muted);fill:none}
+  .legend .lsep{width:1px;height:12px;background:var(--line);border-radius:0;margin:0}
+  .legend .lgrp{font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:var(--faint)}
+
+  .toast{position:absolute;bottom:120px;left:50%;transform:translateX(-50%);background:var(--panel2);
+    border:1px solid var(--accent);color:var(--ink);padding:10px 16px;border-radius:9px;box-shadow:var(--shadow);
+    opacity:0;transition:opacity .25s;pointer-events:none;z-index:50}
+  .toast.show{opacity:1}
+
+  .node{cursor:default}
+  .build .node{cursor:grab}
+  .node text{font-family:var(--font);fill:var(--ink);pointer-events:none}
+  .node .nlabel{font-weight:600;font-size:13px}
+  .node .nmeta{fill:var(--muted);font-size:11px}
+  .node.selected .nbox{stroke:var(--accent);stroke-width:2.5}
+  .edge{fill:none;stroke:var(--faint);stroke-width:2}
+  .edge.hot{stroke:var(--nva)}
+  .edge-hit{fill:none;stroke:transparent;stroke-width:14;cursor:pointer}
+  .anchor{fill:var(--accent);stroke:#06202a;stroke-width:1.5;opacity:0;cursor:crosshair;transition:opacity .1s}
+  .build .node:hover .anchor{opacity:.95}
+  body.connecting .anchor{opacity:.85}
+  .anchor:hover{stroke-width:2.5;opacity:1}
+  .temp-edge{fill:none;stroke:var(--accent);stroke-width:2;stroke-dasharray:5 4;pointer-events:none}
+  .elabel{fill:var(--muted);font-size:11px;font-family:var(--font)}
+  .badge-warn{fill:var(--warn);font-size:11px;font-weight:700}
+</style>
+</head>
+<body>
+<!-- icon library (shared by the canvas cards and the legend; travels into shared viewers) -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="ic-human" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="8" r="3.6"/><path d="M5 20c0-3.9 3.1-6.6 7-6.6s7 2.7 7 6.6"/>
+  </symbol>
+  <symbol id="ic-bot" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <line x1="12" y1="3" x2="12" y2="5.5"/><circle cx="12" cy="2.4" r="1.1" fill="currentColor" stroke="none"/>
+    <rect x="4.5" y="6" width="15" height="12.5" rx="3.2"/><circle cx="9.5" cy="12" r="1.3" fill="currentColor" stroke="none"/>
+    <circle cx="14.5" cy="12" r="1.3" fill="currentColor" stroke="none"/><line x1="9.5" y1="15.4" x2="14.5" y2="15.4"/>
+  </symbol>
+  <symbol id="ic-queue" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="3" y="14.5" width="18" height="5" rx="1.2"/><rect x="5.5" y="9" width="13" height="4" rx="1.2"/>
+    <rect x="8" y="4" width="8" height="3.4" rx="1.2"/>
+  </symbol>
+  <symbol id="ic-flag" viewBox="0 0 24 24" fill="none" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 3 22 20H2L12 3Z"/><line x1="12" y1="10" x2="12" y2="14"/><circle cx="12" cy="17" r=".6" fill="currentColor" stroke="none"/>
+  </symbol>
+  <symbol id="ic-clock" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="8.4"/><path d="M12 7.6V12l3 1.8"/>
+  </symbol>
+  <!-- value-classification glyphs -->
+  <symbol id="ic-val-value" viewBox="0 0 24 24" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 3.2l2.5 5.1 5.6.8-4.05 3.95.96 5.6L12 16.0l-5 2.65.96-5.6L3.9 9.1l5.6-.8L12 3.2Z"/>
+  </symbol>
+  <symbol id="ic-val-necessary" viewBox="0 0 24 24" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 3l7 2.6v5.2c0 4.4-3 7.4-7 9.2-4-1.8-7-4.8-7-9.2V5.6L12 3Z"/><path d="M9.2 12l2 2 3.6-3.8"/>
+  </symbol>
+  <symbol id="ic-val-waste" viewBox="0 0 24 24" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="6.5" cy="7" r="2.4"/><circle cx="6.5" cy="17" r="2.4"/><path d="M8.7 8.6 20 17M8.7 15.4 20 7"/>
+  </symbol>
+  <!-- state + owner glyphs -->
+  <symbol id="ic-wait" viewBox="0 0 24 24" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M6.5 3h11M6.5 21h11"/><path d="M8 3v3.2L12 11l4-4.8V3"/><path d="M8 21v-3.2L12 13l4 4.8V21"/>
+  </symbol>
+  <symbol id="ic-own-ops" viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="3.1"/>
+    <path d="M12 2.6v2.4M12 19v2.4M2.6 12h2.4M19 12h2.4M5.2 5.2l1.7 1.7M17.1 17.1l1.7 1.7M18.8 5.2l-1.7 1.7M6.9 17.1l-1.7 1.7"/>
+  </symbol>
+  <symbol id="ic-own-uw" viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="5" y="4" width="14" height="17" rx="2.2"/><path d="M9.2 4V2.8h5.6V4"/><path d="M8.5 10h7M8.5 13.6h7M8.5 17.2h4.4"/>
+  </symbol>
+  <symbol id="ic-own-sys" viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="4" y="4.5" width="16" height="6" rx="1.6"/><rect x="4" y="13.5" width="16" height="6" rx="1.6"/>
+    <circle cx="7.4" cy="7.5" r=".75" fill="currentColor" stroke="none"/><circle cx="7.4" cy="16.5" r=".75" fill="currentColor" stroke="none"/>
+  </symbol>
+  <symbol id="ic-owner" viewBox="0 0 24 24" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="8" r="3.4"/><path d="M5.5 19.5c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/>
+  </symbol>
+</svg>
+<header>
+  <div class="brand" id="brandHome">Flow <span>Builder</span></div>
+  <button class="btn" id="flowsBtn">≣ Flows</button>
+  <div class="ctl segctl"><label>Segment</label><select id="segSel"></select></div>
+  <div class="ctl segctl"><label>Period</label><select id="perSel"></select></div>
+  <div class="spacer"></div>
+  <button class="btn" id="exportSheet" title="Download a stats sheet (CSV) with one row per step — fill it in, then Import sheet to load the numbers.">⬇ Export sheet</button>
+  <button class="btn primary" id="importSheet" title="Load a filled-out stats sheet (Excel/CSV) to populate this flow's numbers.">⬆ Import sheet</button>
+  <span class="divider"></span>
+  <div class="themewrap">
+    <button class="btn" id="themeBtn" title="Theme this flow — background, surfaces, text, accent and the Human/Bot/Queue colours. Applies everywhere, incl. menus and exports.">🎨 Appearance ▾</button>
+    <div class="themepop wide" id="themePop"></div>
+  </div>
+  <div class="exportwrap">
+    <button class="btn" id="exportImgBtn" title="Export this flow as a PNG image or a PDF document">🖼 Export ▾</button>
+    <div class="themepop" id="exportPop">
+      <div class="themepop-h">Export picture</div>
+      <div class="menubtns">
+        <button class="btn" id="exportPng">🖼 PNG image</button>
+        <button class="btn" id="exportPdf">📄 PDF document</button>
+      </div>
+    </div>
+  </div>
+  <button class="btn" id="exportHtml" title="Make a read-only copy of this flow to hand to the team">📤 Share with team</button>
+  <button class="btn ghost" id="saveModel" title="Download this flow's blueprint as JSON — for backup, or to move it to another machine (re-add via Import).">Back up design</button>
+  <button class="btn iconbtn" id="howData" title="How saving &amp; data work">ℹ</button>
+  <input type="file" id="fileData" accept=".xlsx,.xls,.csv" style="display:none" />
+</header>
+
+<!-- How saving & data work explainer -->
+<div class="overlay" id="howOverlay">
+  <div class="modal">
+    <div class="modal-h"><h3>How saving &amp; data work</h3><button class="x" id="howClose">✕</button></div>
+    <p>This is a <b>snapshot</b> tool — build a flow now and then, drop in a set of numbers, and read
+      the analysis. There's no live connection to keep running.</p>
+    <p><b>Where your flows live</b></p>
+    <ul>
+      <li><b>In this browser</b> — every flow is saved automatically (in <code>localStorage</code>) as
+        you edit, so it's here when you come back. It's per-browser/per-device, not synced across
+        machines.</li>
+      <li><b>Portable copy</b> — <b>Back up design</b> downloads the flow as JSON; re-add it on any
+        machine via <b>Home → Import…</b>. <b>Share with team</b> hands out a read-only HTML copy.</li>
+    </ul>
+    <p class="steps"><b>The stats loop — fill a sheet, then import it:</b></p>
+    <ol>
+      <li><b>Build</b> your flow. Each step has a <code>StepID</code> (its join key — editable in the
+        inspector as "Data key").</li>
+      <li><b>⬇ Export sheet</b> — downloads a CSV with the exact columns this flow needs and
+        <b>one row per step</b> (its StepID + name). This file <i>is</i> the spec.</li>
+      <li>You (or a teammate) <b>fill in the numbers</b> — touch time, wait time, WIP per step.</li>
+      <li><b>⬆ Import sheet</b> — load that file back in. The numbers populate the cards and the
+        analysis, and are <b>saved with the flow</b> (and travel into a shared copy). Re-import any
+        time to refresh; the toast shows <b>“N/N matched”</b> so you know the file lines up.</li>
+    </ol>
+    <p class="mut">Sheet columns (one row per step; add <code>Segment</code>/<code>Period</code> rows
+      if you want to compare):<br>
+      <code>StepID · StepName · NodeType · Segment · Period · TouchTimeAvg · WaitTimeAvg · WIP · Volume</code></p>
+    <p class="mut small">No sheet yet? Cards fall back to the touch/wait/WIP values you type into the
+      inspector — so a flow analyses fine before any import.</p>
+  </div>
+</div>
+
+<!-- Flow efficiency explainer -->
+<div class="overlay" id="effOverlay">
+  <div class="modal">
+    <div class="modal-h"><h3>Flow efficiency explained</h3><button class="x" id="effClose">✕</button></div>
+    <div id="effBody"></div>
+  </div>
+</div>
+
+<!-- Home / flow library -->
+<section id="home">
+  <div class="home-bar">
+    <h2>My Flows</h2>
+    <div class="spacer"></div>
+    <button class="btn primary" id="newFlow">+ New flow</button>
+    <button class="btn" id="importFlow">Import…</button>
+    <button class="btn" id="exportLib">Export library</button>
+    <input type="file" id="fileImport" accept=".json" style="display:none" />
+  </div>
+  <div class="home-grid" id="homeGrid"></div>
+</section>
+
+<div id="paletteBar">
+  <span class="pb-label">Add to flow</span>
+  <button data-add="touch" data-perf="human"><span class="swatch" style="background:var(--t-human)"></span><svg class="t-ic"><use href="#ic-human"/></svg>Human Step</button>
+  <button data-add="touch" data-perf="bot"><span class="swatch" style="background:var(--t-bot)"></span><svg class="t-ic"><use href="#ic-bot"/></svg>Bot Step</button>
+  <button data-add="wait"><span class="swatch" style="background:var(--t-queue)"></span><svg class="t-ic"><use href="#ic-queue"/></svg>Queue</button>
+  <button data-add="start"><span class="swatch" style="background:#cdd9e6"></span>Start</button>
+  <button data-add="end"><span class="swatch" style="background:#cdd9e6"></span>End</button>
+  <span class="pb-hint">Drag boxes to arrange · hover a box and drag a dot to connect (loops &amp; branches OK).</span>
+  <div class="pb-zoom">
+    <button id="zoomOut" title="Zoom out">−</button>
+    <span id="zoomLevel">100%</span>
+    <button id="zoomIn" title="Zoom in">+</button>
+  </div>
+</div>
+
+<main>
+  <div id="stage">
+    <svg id="canvas"></svg>
+    <div class="toast" id="toast"></div>
+  </div>
+  <aside id="inspector"></aside>
+</main>
+
+<section id="analysis">
+  <div class="a-head">Analysis</div>
+  <div class="stats" id="stats"></div>
+  <div id="ribbonWrap">
+    <div class="title"><span><b>Time contribution across the stream</b></span><span class="rt" id="ribbonTotal"></span></div>
+    <div class="ribbon" id="ribbon"></div>
+    <div class="cscale"><span>start</span><span>delivered</span></div>
+    <div class="legend">
+      <span class="lgrp">Type</span>
+      <span><i style="background:var(--t-queue)"></i>Queue</span>
+      <span><i style="background:var(--t-human)"></i>Human</span>
+      <span><i style="background:var(--t-bot)"></i>Bot</span>
+      <span class="lsep"></span><span class="lgrp">Value</span>
+      <span><svg><use href="#ic-val-value"/></svg>Valued</span>
+      <span><svg><use href="#ic-val-necessary"/></svg>Necessary</span>
+      <span><svg><use href="#ic-val-waste"/></svg>Could remove</span>
+      <span class="lsep"></span><span class="lgrp">Owner</span>
+      <span><svg><use href="#ic-owner"/></svg>Person / role</span>
+      <span><svg><use href="#ic-own-ops"/></svg>Ops</span>
+      <span><svg><use href="#ic-own-uw"/></svg>Underwriter</span>
+      <span><svg><use href="#ic-own-sys"/></svg>System / bot</span>
+      <span class="lsep"></span>
+      <span><svg><use href="#ic-clock"/></svg>badge colour = severity</span>
+      <span><i style="background:var(--nva)"></i>Bottleneck</span>
+    </div>
+  </div>
+</section>
+
+<!-- Embedded default model: seeds the library on first run; standalone viewers show this -->
+<script id="egp-model" type="application/json">
+{
+  "name": "Underwriting Value Stream (sample)",
+  "settings": { "timeUnit": "hrs", "bottleneckMode": "relative" },
+  "nodes": [
+    { "id": "start", "type": "start", "label": "Customer request", "x": 40,  "y": 220 },
+    { "id": "q_intake", "type": "wait", "label": "Intake queue", "stepId": "q_intake", "x": 220, "y": 220, "waitTimeManual": 18, "wip": 42, "wipLimit": 20 },
+    { "id": "t_intake", "type": "touch", "label": "Intake / setup", "owner": "Ops", "stepId": "t_intake", "x": 400, "y": 220, "touchTimeManual": 0.5, "classification": "NNVA", "valueNote": "Required to open the file; no transformation for the customer." },
+    { "id": "q_verify", "type": "wait", "label": "Awaiting docs", "stepId": "q_verify", "x": 580, "y": 220, "waitTimeManual": 36, "wip": 60, "wipLimit": 25 },
+    { "id": "t_verify", "type": "touch", "label": "Verification", "owner": "Ops", "stepId": "t_verify", "x": 760, "y": 220, "touchTimeManual": 1.2, "classification": "NNVA", "valueNote": "Confirms data accuracy; necessary for risk but customer doesn't pay for it." },
+    { "id": "q_uw", "type": "wait", "label": "Underwriting backlog", "stepId": "q_uw", "x": 940, "y": 220, "waitTimeManual": 24, "wip": 31, "wipLimit": 15 },
+    { "id": "t_uw", "type": "touch", "label": "Underwriting decision", "owner": "Underwriter", "stepId": "t_uw", "x": 1120, "y": 220, "touchTimeManual": 2.0, "classification": "VA", "valueNote": "Core value: pricing & risk decision the customer is buying." },
+    { "id": "t_issue", "type": "touch", "performer": "bot", "label": "Issue / bind", "owner": "Policy system", "stepId": "t_issue", "x": 1300, "y": 220, "touchTimeManual": 0.6, "classification": "VA", "valueNote": "Automated issue & bind — delivers the bound policy to the customer." },
+    { "id": "end", "type": "end", "label": "Value delivered", "x": 1480, "y": 220 }
+  ],
+  "edges": [
+    { "id": "e1", "from": "start", "to": "q_intake" },
+    { "id": "e2", "from": "q_intake", "to": "t_intake" },
+    { "id": "e3", "from": "t_intake", "to": "q_verify" },
+    { "id": "e4", "from": "q_verify", "to": "t_verify" },
+    { "id": "e5", "from": "t_verify", "to": "q_uw" },
+    { "id": "e6", "from": "q_uw", "to": "t_uw" },
+    { "id": "e7", "from": "t_uw", "to": "t_issue" },
+    { "id": "e8", "from": "t_issue", "to": "end" }
+  ]
+}
+</script>
+
+<script>
+"use strict";
+/* ============================================================
+   Flow Builder — Lean value-stream visualizer (single file)
+   Increment 2: flow library + home screen, load-weighting, timeline
+   ============================================================ */
+
+const NS = "http://www.w3.org/2000/svg";
+const NODE_W = 172, NODE_H = 64, QUEUE_W = 156;
+const LIB_KEY = "flowbuilder.library";
+
+/* ---- Nomenclature (edit here to re-label everywhere) ---- */
+const T = {
+  human:"Human Step", bot:"Bot Step", queue:"Queue",
+  classTitle:"Customer value",
+  cls:{ VA:{name:"Valued",        def:"The customer values it / would pay for it."},
+        NNVA:{name:"Necessary",   def:"Required (compliance, risk) but not valued by the customer."},
+        NVA:{name:"Could remove", def:"Adds no value — a candidate to eliminate."} }
+};
+const state = {
+  mode: "home",       // home | build
+  library: {flows:{}, lastOpenedId:null},
+  currentId: null,
+  model: null,
+  data: [],
+  segments: ["ALL"], periods: ["ALL"],
+  segment: "ALL", period: "ALL",
+  selected: null, linkingFrom: null,
+  zoom: 1,
+  viewer: false,
+};
+
+/* ---------- helpers ---------- */
+const $ = sel => document.querySelector(sel);
+const el = (tag, attrs={}) => { const e=document.createElementNS(NS,tag);
+  for(const k in attrs) e.setAttribute(k, attrs[k]); return e; };
+const uid = p => p + Math.random().toString(36).slice(2,8);
+const esc = s => String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const clone = o => JSON.parse(JSON.stringify(o));
+function toast(msg){ const t=$("#toast"); t.textContent=msg; t.classList.add("show");
+  clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove("show"),2200); }
+const unit = () => (state.model && state.model.settings && state.model.settings.timeUnit) || "hrs";
+const fmt = n => (n==null||isNaN(n)) ? "—" : (Math.round(n*10)/10).toLocaleString();
+const lerp = (a,b,t) => a+(b-a)*Math.max(0,Math.min(1,t));
+const Z = () => state.zoom||1;   // canvas zoom factor
+/* shared canvas for measuring SVG text so node boxes can grow to fit wrapped labels */
+const _mctx = document.createElement("canvas").getContext("2d");
+function measure(text, font){ _mctx.font=font; return _mctx.measureText(text).width; }
+function wrapText(text, maxW, font){
+  const words=String(text||"").split(/\s+/).filter(Boolean); if(!words.length) return [""];
+  const lines=[]; let line="";
+  const pushWord=w=>{ // hard-split a single word too long to fit
+    let chunk=""; for(const ch of w){ if(measure(chunk+ch,font)>maxW && chunk){ lines.push(chunk); chunk=ch; } else chunk+=ch; } line=chunk; };
+  for(const w of words){
+    const cand=line?line+" "+w:w;
+    if(measure(cand,font)<=maxW){ line=cand; }
+    else { if(line) lines.push(line); if(measure(w,font)>maxW){ pushWord(w); } else line=w; }
+  }
+  if(line) lines.push(line);
+  return lines.length?lines:[""];
+}
+
+/* ============================================================
+   LIBRARY (localStorage)
+   ============================================================ */
+function loadLibrary(){
+  try{ const l=JSON.parse(localStorage.getItem(LIB_KEY)); if(l&&l.flows) return l; }catch(e){}
+  return {flows:{}, lastOpenedId:null};
+}
+function saveLibrary(){ try{ localStorage.setItem(LIB_KEY, JSON.stringify(state.library)); }
+  catch(e){ toast("Could not save (storage blocked)"); } }
+function seedLibrary(){
+  if(Object.keys(state.library.flows).length) return;
+  try{
+    const sample=JSON.parse($("#egp-model").textContent);
+    const id=uid("flow_");
+    state.library.flows[id]={id,name:sample.name,model:sample,updatedAt:Date.now()};
+    state.library.lastOpenedId=id; saveLibrary();
+  }catch(e){}
+}
+let _saveT=null;
+function scheduleSave(){
+  if(state.viewer||!state.currentId) return;
+  clearTimeout(_saveT);
+  _saveT=setTimeout(()=>{
+    const f=state.library.flows[state.currentId];
+    if(f&&state.model){ f.model=clone(state.model); f.name=state.model.name; f.updatedAt=Date.now(); saveLibrary(); }
+  },500);
+}
+
+/* run the metrics engine on an arbitrary model with no bound data (for home cards) */
+function rollupFor(model){
+  const sm=state.model, sd=state.data, ss=state.segment, sp=state.period;
+  state.model=model; state.data=[]; state.segment="ALL"; state.period="ALL";
+  let r; try{ r=rollup(); }catch(e){ r={eff:null,bottleneck:null}; }
+  state.model=sm; state.data=sd; state.segment=ss; state.period=sp;
+  return r;
+}
+
+/* ---------- flow CRUD ---------- */
+function openFlow(id, mode){
+  const f=state.library.flows[id]; if(!f) return;
+  state.currentId=id; state.library.lastOpenedId=id; saveLibrary();
+  loadModel(clone(f.model));   // imported stats (model.data) are hydrated inside loadModel
+  setMode(mode||"build");
+}
+function newFlow(){
+  const id=uid("flow_");
+  const model={ name:"New flow", settings:{timeUnit:"hrs",bottleneckMode:"relative"},
+    nodes:[ {id:"start",type:"start",label:"Customer request",x:60,y:200},
+            {id:"end",type:"end",label:"Value delivered",x:560,y:200} ], edges:[] };
+  state.library.flows[id]={id,name:model.name,model,updatedAt:Date.now()};
+  saveLibrary(); openFlow(id,"build"); toast("New flow created");
+}
+function duplicateFlow(id){
+  const f=state.library.flows[id]; if(!f) return;
+  const nid=uid("flow_"); const m=clone(f.model); m.name=(f.name||"Flow")+" (copy)";
+  state.library.flows[nid]={id:nid,name:m.name,model:m,updatedAt:Date.now()};
+  saveLibrary(); renderHome(); toast("Duplicated");
+}
+function renameFlow(id){
+  const f=state.library.flows[id]; if(!f) return;
+  const name=window.prompt("Flow name:", f.name||"Untitled");
+  if(name==null) return;
+  f.name=name.trim()||f.name; f.model.name=f.name; f.updatedAt=Date.now();
+  if(state.currentId===id && state.model) state.model.name=f.name;
+  saveLibrary(); renderHome();
+}
+function deleteFlow(id){
+  const f=state.library.flows[id]; if(!f) return;
+  if(!window.confirm('Delete "'+f.name+'"? This cannot be undone.')) return;
+  delete state.library.flows[id];
+  if(state.currentId===id){ state.currentId=null; state.model=null; }
+  saveLibrary(); renderHome(); toast("Deleted");
+}
+function exportFlow(id){
+  const f=state.library.flows[id]; if(!f) return;
+  download((f.name||"flow").replace(/\s+/g,"-")+".json", JSON.stringify(f.model,null,2),"application/json");
+}
+function importFlowFromObj(obj){
+  // accepts a single model, or a library export {flows:{...}}
+  const add=m=>{ const id=uid("flow_"); state.library.flows[id]={id,name:m.name||"Imported flow",model:m,updatedAt:Date.now()}; };
+  if(obj && obj.flows && typeof obj.flows==="object"){ Object.values(obj.flows).forEach(f=>add(f.model||f)); }
+  else if(obj && obj.nodes){ add(obj); }
+  else { toast("Unrecognized file"); return; }
+  saveLibrary(); renderHome(); toast("Imported");
+}
+
+/* ---------- load model into engine ---------- */
+function loadModel(m){
+  state.model=m;
+  (m.nodes||[]).forEach(n=>{ if(n.x==null)n.x=40; if(n.y==null)n.y=200; });
+  state.data = Array.isArray(m.data) ? m.data : [];   // imported stats are stored on the model
+  state.selected=null; state.linkingFrom=null;
+  rebuildSegPer(); render();
+}
+
+/* ============================================================
+   DATA BINDING  (FlowData: StepID, Segment, Period, TouchTimeAvg, WaitTimeAvg, WIP/Volume)
+   ============================================================ */
+function rowsFor(stepId){
+  return state.data.filter(r =>
+    String(r.StepID)===String(stepId) &&
+    (state.segment==="ALL" || String(r.Segment)===state.segment) &&
+    (state.period==="ALL"  || String(r.Period)===state.period));
+}
+function metricFor(node){
+  const rows = node.stepId ? rowsFor(node.stepId) : [];
+  let touch=null, wait=null, wip=null, hasData=false;
+  if(rows.length){
+    hasData=true;
+    const avg=key=>{ const v=rows.map(r=>parseFloat(r[key])).filter(x=>!isNaN(x)); return v.length? v.reduce((a,b)=>a+b,0)/v.length : null; };
+    touch=avg("TouchTimeAvg"); wait=avg("WaitTimeAvg"); wip=avg("WIP"); if(wip==null) wip=avg("Volume");
+  }
+  if(node.type==="touch" && touch==null) touch = node.touchTimeManual!=null ? node.touchTimeManual : null;
+  if(node.type==="wait"  && wait==null)  wait  = node.waitTimeManual!=null ? node.waitTimeManual : null;
+  if(node.type==="wait"  && wip==null)   wip   = node.wip!=null ? node.wip : null;
+  return {touch, wait, wip, hasData};
+}
+
+/* ---------- main-path traversal ---------- */
+function mainPath(){
+  const m=state.model; if(!m) return [];
+  const start=m.nodes.find(n=>n.type==="start")||m.nodes[0]; if(!start) return [];
+  const byId=Object.fromEntries(m.nodes.map(n=>[n.id,n]));
+  const out=id=>m.edges.filter(e=>e.from===id);
+  const path=[]; const seen=new Set(); let cur=start;
+  while(cur && !seen.has(cur.id)){ seen.add(cur.id); path.push(cur);
+    const es=out(cur.id); if(!es.length) break;
+    es.sort((a,b)=>(b.splitPct||0)-(a.splitPct||0)); cur=byId[es[0].to]; }
+  return path;
+}
+/* expected-value flow weighting: how many times, on average, a unit of work passes
+   through each node — driven by edge Split %. Forward branches cap at the branch odds;
+   rework loops produce >1 via a converging series. Linear flows give every node 1.0. */
+function flowWeights(){
+  const m=state.model; if(!m||!m.nodes.length) return {visits:{}, order:[]};
+  const start=m.nodes.find(n=>n.type==="start")||m.nodes[0]; if(!start) return {visits:{}, order:[]};
+  const byId=Object.fromEntries(m.nodes.map(n=>[n.id,n]));
+  // normalized outgoing weights for a source node — blank Split % shares the leftover up to 100
+  const wOut=id=>{
+    const es=m.edges.filter(e=>e.from===id); if(!es.length) return [];
+    const explicit=es.filter(e=>e.splitPct!=null);
+    const E=explicit.reduce((a,e)=>a+(+e.splitPct||0),0);
+    const M=es.length-explicit.length;
+    const per=M>0?Math.max(0,100-E)/M:0;
+    const raw=es.map(e=>e.splitPct!=null?(+e.splitPct||0):per);
+    const tot=raw.reduce((a,b)=>a+b,0);
+    return es.map((e,i)=>({to:e.to, w: tot>0?raw[i]/tot : 1/es.length}));
+  };
+  const visits={}; m.nodes.forEach(n=>visits[n.id]=0);
+  const order=[]; const ordered=new Set();
+  const see=id=>{ if(!ordered.has(id)){ ordered.add(id); order.push(id); } };
+  let frontier={[start.id]:1}; const EPS=1e-6, CAP=2000;
+  for(let guard=0; guard<CAP; guard++){
+    let live=0; const next={};
+    for(const id in frontier){ const f=frontier[id]; if(f<=0) continue;
+      visits[id]+=f; live+=f; see(id);
+      for(const o of wOut(id)){ const add=f*o.w; if(add>0) next[o.to]=(next[o.to]||0)+add; } }
+    const rem=Object.values(next).reduce((a,b)=>a+b,0);
+    if(live<EPS) break;
+    frontier=next;
+    if(rem<EPS){ for(const id in next){ visits[id]+=next[id]; see(id); } break; }
+  }
+  return {visits, order:order.map(id=>byId[id]).filter(Boolean)};
+}
+function rollup(){
+  const path=mainPath();
+  const {visits, order}=flowWeights();
+  let touch=0, wait=0, unclassified=0; const waits=[]; const flow=[];
+  state.model.nodes.forEach(n=>{ if(n.type==="touch" && !n.classification) unclassified++; });
+  order.forEach(n=>{ const v=visits[n.id]||0; if(v<=0) return; const mt=metricFor(n);
+    if(n.type==="touch" && mt.touch!=null && mt.touch>0){ const tc=v*mt.touch; touch+=tc;
+      flow.push({node:n, kind:"touch", time:tc, visits:v, base:mt.touch}); }
+    if(n.type==="wait"  && mt.wait!=null && mt.wait>0){ const wt=v*mt.wait; wait+=wt;
+      flow.push({node:n, kind:"wait", time:wt, visits:v, base:mt.wait});
+      waits.push({node:n, wait:wt, wip:mt.wip, visits:v}); } });
+  const turnaround=touch+wait; const eff=turnaround>0? touch/turnaround : null;
+  let bottleneck=null; if(waits.length) bottleneck=waits.slice().sort((a,b)=>b.wait-a.wait)[0];
+  return {path, flow, touch, wait, turnaround, eff, waits, bottleneck, unclassified};
+}
+function isBottleneck(node, r){
+  if(node.type!=="wait") return false;
+  const mt=metricFor(node);
+  if(mt.wip!=null && node.wipLimit && mt.wip>node.wipLimit) return true;
+  if(!r.waits.length) return false;
+  const max=Math.max(...r.waits.map(w=>w.wait));
+  return r.bottleneck && r.bottleneck.node.id===node.id && max>0;
+}
+/* max WIP across wait nodes (for load-weighting) */
+function maxWip(){
+  return Math.max(1, ...state.model.nodes.map(n=>{ if(n.type!=="wait") return 0; const m=metricFor(n); return m.wip!=null?m.wip:0; }));
+}
+
+/* ============================================================
+   RENDER
+   ============================================================ */
+/* editing is on whenever we're in the flow screen and not a read-only shared viewer */
+const editable = () => state.mode==="build" && !state.viewer;
+
+function render(){
+  updateChrome();
+  if(state.mode==="home"){ renderHome(); return; }
+  if(!state.model) return;
+  applyTheme(); applyTypeColors();
+  const r=rollup();
+  renderStats(r); renderCanvas(r); renderRibbon(r);
+  renderInspector();
+  scheduleSave();
+}
+
+function updateChrome(){
+  document.body.classList.toggle("home", state.mode==="home");
+  document.body.classList.toggle("viewer", state.viewer);
+}
+
+/* ---------- Home gallery ---------- */
+function renderHome(){
+  const grid=$("#homeGrid");
+  const flows=Object.values(state.library.flows).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
+  if(!flows.length){ grid.innerHTML='<div class="home-empty">No flows yet — click <b>+ New flow</b> to begin.</div>'; return; }
+  grid.innerHTML=flows.map(f=>{
+    const r=rollupFor(f.model);
+    const eff=r.eff!=null?Math.round(r.eff*100)+"%":"—";
+    const bn=r.bottleneck?esc(r.bottleneck.node.label):"—";
+    return `<div class="flowcard" data-id="${f.id}">
+      <div class="fc-name">${esc(f.name||"Untitled")}</div>
+      <div class="fc-stat"><span class="fc-eff">${eff}</span> flow efficiency</div>
+      <div class="fc-sub">${(f.model.nodes||[]).length} nodes · bottleneck: ${bn}</div>
+      <div class="fc-actions">
+        <button class="open" data-act="open">Open ▶</button>
+        <button data-act="dup">Duplicate</button>
+        <button data-act="rename">Rename</button>
+        <button data-act="export">Export</button>
+        <button class="del" data-act="del">Delete</button>
+      </div></div>`;
+  }).join("");
+}
+
+function renderStats(r){
+  const u=unit();
+  const bn=r.bottleneck?`${r.bottleneck.node.label} · ${fmt(r.bottleneck.wait)} ${u}`:"none";
+  // turnaround: show days alongside hours so a big number is easy to grasp
+  const days=(u==="hrs" && r.turnaround!=null) ? ` <small>(${fmt(r.turnaround/24)} days)</small>` : "";
+  const cards=[
+    {cls:"",k:"Turnaround time",v:`${fmt(r.turnaround)} <small>${u}</small>${days}`},
+    {cls:"",k:"Touch time",v:`${fmt(r.touch)} <small>${u}</small>`},
+    {cls:"",k:"Wait time",v:`${fmt(r.wait)} <small>${u}</small>`},
+    {cls:"eff clickable",k:`Flow efficiency <span class="info">ⓘ</span>`,v:r.eff==null?"—":`${Math.round(r.eff*100)}<small>%</small>`,
+      title:`Touch ${fmt(r.touch)} ÷ Turnaround ${fmt(r.turnaround)} ${u} — click for the full breakdown`},
+    {cls:"bottleneck",k:"Biggest bottleneck",v:bn},
+  ];
+  if(r.unclassified>0) cards.push({cls:"warnflag",k:"Unrated steps",v:`⚠ ${r.unclassified} need a value rating`});
+  $("#stats").innerHTML=cards.map(c=>`<div class="stat ${c.cls}"${c.title?` title="${esc(c.title)}"`:""}><div class="k">${c.k}</div><div class="v">${c.v}</div></div>`).join("");
+  const effCard=$("#stats .stat.eff"); if(effCard) effCard.onclick=()=>showEffModal(r);
+}
+
+/* plain-language breakdown of how flow efficiency is calculated, with this flow's live numbers */
+function showEffModal(r){
+  const u=unit();
+  const pct=r.eff==null?"—":Math.round(r.eff*100)+"%";
+  const touch=fmt(r.touch), wait=fmt(r.wait), turn=fmt(r.turnaround);
+  const waitShare=r.turnaround>0 ? Math.round((r.wait/r.turnaround)*100)+"%" : "—";
+  $("#effBody").innerHTML=`
+    <p><b>Flow efficiency</b> is the share of an item's total time in the stream that it spends
+       <b>actually being worked on</b> — rather than sitting in a queue waiting.</p>
+    <div class="effformula">
+      Flow efficiency = Touch time ÷ Turnaround time<br>
+      = ${touch} ÷ ${turn} ${u} = <b>${pct}</b>
+    </div>
+    <p class="mut">It's measured by walking the main path of the flow and adding up:</p>
+    <ul>
+      <li><b>Touch time</b> — ${touch} ${u}: time a person or bot is actively working the item (the work steps).</li>
+      <li><b>Wait time</b> — ${wait} ${u}: time the item just sits in queues (${waitShare} of the total here).</li>
+      <li><b>Turnaround time</b> — ${turn} ${u}: the two added together — total time from start to delivered.</li>
+    </ul>
+    <p class="mut small">Higher is better. Most real value streams sit well under 25% — the rest is waiting.
+       Cutting queue/wait time usually raises this number far more than making the work itself faster.</p>`;
+  $("#effOverlay").classList.add("show");
+}
+
+function nodeColors(n){
+  if(n.type==="start"||n.type==="end") return {fill:"var(--term)",stroke:"var(--term-line)"};
+  return {fill:"var(--panel2)", stroke:typeHue(n), hue:typeHue(n)};   // every container: panel body, type-hued frame
+}
+
+const F_LABEL="600 13px 'Segoe UI',system-ui,sans-serif";
+const F_META ="11px 'Segoe UI',system-ui,sans-serif";
+const LBL_LH=16, MET_LH=14, CAP_RY=9;
+
+/* ---- design-06 visual language: type hues, severity, icons (uniform cards) ---- */
+const CARD_W=166, CARD_H=150, TITLE_X=44;
+const KIND      = n => n.type==="wait" ? "queue" : (n.performer==="bot" ? "bot" : "human");
+const TYPECOL   = {queue:"var(--t-queue)", human:"var(--t-human)", bot:"var(--t-bot)"};
+const typeHue   = n => (n && n.color) || TYPECOL[KIND(n)];   // per-node override falls back to the type hue
+const DEFAULT_TYPE_HEX = {human:"#2dd4bf", bot:"#b08cff", queue:"#6e8bff"};
+
+/* ---- whole-flow theming: presets + per-colour overrides, applied to :root ---- */
+const THEME_TYPE_VAR = {human:"--t-human", bot:"--t-bot", queue:"--t-queue"};
+/* every var a preset/picker controls (label + key). Surface vars cascade to all menus. */
+const THEME_FIELDS = [
+  ["--bg","Background"], ["--panel","Surface"], ["--panel2","Panel"], ["--line","Lines"],
+  ["--ink","Text"], ["--muted","Muted text"], ["--accent","Accent"], ["--grid","Canvas grid"]
+];
+const THEMES = {
+  Dark:{ "--bg":"#0f1720","--panel":"#16212e","--panel2":"#1d2a3a","--line":"#2b3a4d",
+    "--ink":"#e8eef5","--muted":"#9fb0c3","--faint":"#6b7d92","--accent":"#4cc9f0","--grid":"#1b2738",
+    "--t-human":"#2dd4bf","--t-bot":"#b08cff","--t-queue":"#6e8bff","--term":"#2a3543","--term-line":"#cdd9e6" },
+  Light:{ "--bg":"#f4f6fa","--panel":"#ffffff","--panel2":"#eef2f7","--line":"#d3dbe6",
+    "--ink":"#1b2735","--muted":"#566678","--faint":"#8493a6","--accent":"#2f7df6","--grid":"#dde4ee",
+    "--t-human":"#0d9488","--t-bot":"#7c4dff","--t-queue":"#3b5bdb","--term":"#dbe3ef","--term-line":"#8a9bb3" },
+  Paper:{ "--bg":"#f3ece1","--panel":"#fbf7f0","--panel2":"#efe6d8","--line":"#ddcfba",
+    "--ink":"#3b3127","--muted":"#6f6353","--faint":"#9a8c78","--accent":"#c2691b","--grid":"#e6dac7",
+    "--t-human":"#1d8a78","--t-bot":"#8a5a2b","--t-queue":"#3f6cc4","--term":"#e6d8c1","--term-line":"#b09a7c" },
+  Blueprint:{ "--bg":"#0b2647","--panel":"#0e2f56","--panel2":"#123a68","--line":"#1f4f86",
+    "--ink":"#dbe8fb","--muted":"#9cc0ea","--faint":"#6f9bce","--accent":"#5fd0ff","--grid":"#143a66",
+    "--t-human":"#56e0c8","--t-bot":"#c0a0ff","--t-queue":"#8fb0ff","--term":"#15406f","--term-line":"#9cc0ea" }
+};
+const theme      = () => (state.model&&state.model.settings&&state.model.settings.theme) || null;
+const themeVars  = () => (theme()&&theme().vars) || {};
+const currentPreset = () => (theme()&&theme().preset) || "Dark";
+/* effective value for a themed var = custom override → preset default */
+function themeVal(k){ const v=themeVars(); if(v[k]!=null) return v[k]; const base=THEMES[currentPreset()]||THEMES.Dark; return base[k]||"#000000"; }
+/* mutate the flow's theme (creating it on first edit) */
+function ensureTheme(){ state.model.settings=state.model.settings||{}; return state.model.settings.theme=state.model.settings.theme||{preset:"Dark",vars:{}}; }
+function setPreset(name){ const t=ensureTheme(); t.preset=name; t.vars={}; }   // a preset is a clean starting point
+function setThemeVar(k,val){ const t=ensureTheme(); (t.vars=t.vars||{})[k]=val; }
+function resetThemeVar(k){ const t=theme(); if(t&&t.vars) delete t.vars[k]; }
+/* push every themed var onto :root — cascades through the whole UI incl. menus & exports */
+function applyTheme(){
+  const base=THEMES[currentPreset()]||THEMES.Dark, v=themeVars(), st=document.documentElement.style;
+  for(const k in base) st.setProperty(k, v[k]!=null?v[k]:base[k]);
+}
+/* drop the per-flow theme from :root (so Home / the gallery shows in the neutral default) */
+function resetThemeRoot(){ const st=document.documentElement.style; Object.keys(THEMES.Dark).forEach(k=>st.removeProperty(k)); }
+/* resolve the effective hex for a node type (honours theme vars, then legacy typeColors) */
+const typeHexFor = kind => themeVal(THEME_TYPE_VAR[kind])
+  || ((state.model&&state.model.settings&&state.model.settings.typeColors)||{})[kind] || DEFAULT_TYPE_HEX[kind];
+/* push flow-level type-colour theming onto the root CSS vars */
+function applyTypeColors(){
+  for(const k in THEME_TYPE_VAR) document.documentElement.style.setProperty(THEME_TYPE_VAR[k], typeHexFor(k));
+}
+const ICON_FOR  = n => n.type==="wait" ? "ic-queue" : (n.performer==="bot" ? "ic-bot" : "ic-human");
+const SEVC      = {calm:{c:"var(--va)",  bg:"rgba(52,195,143,.15)"},
+                   warn:{c:"var(--warn)",bg:"rgba(247,184,75,.15)"},
+                   hot: {c:"var(--nva)", bg:"rgba(240,101,72,.18)"}};
+const sevOf     = share => share>=0.30 ? "hot" : share>=0.15 ? "warn" : "calm";
+const VAL_IC    = {VA:"ic-val-value", NNVA:"ic-val-necessary", NVA:"ic-val-waste"};
+const OWNER_IC  = {ops:"ic-own-ops", underwriter:"ic-own-uw"};
+function ownerIcon(role){ if(!role) return "ic-owner"; const k=String(role).toLowerCase().trim();
+  if(OWNER_IC[k]) return OWNER_IC[k];
+  if(/system|bot|auto|policy|engine|service/.test(k)) return "ic-own-sys";
+  return "ic-owner"; }
+/* place a symbol from the library at (x,y), sized & coloured (CSS vars resolve via style) */
+function useIc(id, x, y, size, color){
+  const u=el("use",{width:size,height:size,transform:`translate(${x},${y})`});
+  u.setAttribute("href","#"+id);
+  if(color){ u.style.stroke=color; u.style.color=color; }
+  return u;
+}
+
+/* every work/queue node is the SAME uniform card; start/end stay terminal pills */
+function nodeLayout(n){
+  if(n.type==="start"||n.type==="end"){
+    const lines=wrapText(n.label, 150-20, F_LABEL);
+    const h=Math.max(NODE_H, 18+lines.length*LBL_LH);
+    return {w:150, h, lines, kind:"pill"};
+  }
+  const mt=metricFor(n);
+  const titleLines=wrapText(n.label, CARD_W-TITLE_X-14, F_LABEL).slice(0,2);  // title clamps to 2 lines
+  return {w:CARD_W, h:CARD_H, titleLines, mt, kind:"card"};
+}
+
+/* ---- side-aware ports + routing (for Visio-style, loop-friendly connections) ---- */
+const SIDES=["top","right","bottom","left"];
+function portGeo(node, L, side){
+  const x=node.x, y=node.y, w=L.w, top=y+L.bt, cyy=y+NODE_H/2; // box is centred on the original centre line
+  switch(side){
+    case "top":    return {x:x+w/2, y:top,        nx:0,  ny:-1};
+    case "bottom": return {x:x+w/2, y:top+L.h,    nx:0,  ny:1};
+    case "left":   return {x:x,     y:cyy,        nx:-1, ny:0};
+    default:       return {x:x+w,   y:cyy,        nx:1,  ny:0}; // right
+  }
+}
+function edgePath(p1,p2){
+  const dist=Math.hypot(p2.x-p1.x, p2.y-p1.y), k=Math.max(48, dist/3);
+  const c1x=p1.x+p1.nx*k, c1y=p1.y+p1.ny*k, c2x=p2.x+p2.nx*k, c2y=p2.y+p2.ny*k;
+  return `M${p1.x},${p1.y} C${c1x},${c1y} ${c2x},${c2y} ${p2.x},${p2.y}`;
+}
+function nearestSide(node, L, px, py){
+  const x=node.x, y=node.y, w=L.w, top=y+L.bt, bottom=top+L.h;
+  const d={ top:Math.abs(py-top), bottom:Math.abs(py-bottom), left:Math.abs(px-x), right:Math.abs(px-(x+w)) };
+  return SIDES.reduce((a,b)=>d[b]<d[a]?b:a);
+}
+let _lay={}; // last layout map, for connection-drag hit-testing
+
+function renderCanvas(r){
+  const m=state.model, svg=$("#canvas"); svg.innerHTML="";
+  svg.setAttribute("class", editable()?"build":"");
+  // gauge normalisation: queues vs the busiest queue, work steps vs the busiest step
+  const mwQ = maxWip();
+  const mwT = Math.max(1, ...m.nodes.map(n=> n.type==="touch" ? (metricFor(n).wip||0) : 0));
+
+  // layout pass: uniform cards; centred on the original centre line
+  const lay={}; _lay=lay;
+  m.nodes.forEach(n=>{ const L=nodeLayout(n); L.bt=NODE_H/2 - L.h/2; lay[n.id]=L; });
+
+  const maxX=Math.max(600,...m.nodes.map(n=>n.x+lay[n.id].w+80));
+  const maxY=Math.max(440,...m.nodes.map(n=>n.y+lay[n.id].bt+lay[n.id].h+160));
+  const z=Z();
+  svg.setAttribute("viewBox",`0 0 ${maxX} ${maxY}`);
+  svg.setAttribute("width",maxX*z); svg.setAttribute("height",maxY*z);
+
+  const defs=el("defs");
+  [["arrow","var(--faint)"],["arrowHot","var(--nva)"]].forEach(([id,col])=>{
+    const mk=el("marker",{id,viewBox:"0 0 10 10",refX:"9",refY:"5",markerWidth:"7",markerHeight:"7",orient:"auto-start-reverse"});
+    mk.appendChild(el("path",{d:"M0,0 L10,5 L0,10 z",fill:col})); defs.appendChild(mk); });
+  svg.appendChild(defs);
+
+  const byId=Object.fromEntries(m.nodes.map(n=>[n.id,n]));
+  const hotPath=new Set(r.path.map(n=>n.id));
+  m.edges.forEach(e=>{
+    const a=byId[e.from], b=byId[e.to]; if(!a||!b) return;
+    const p1=portGeo(a,lay[a.id],e.fromSide||"right"), p2=portGeo(b,lay[b.id],e.toSide||"left");
+    const d=edgePath(p1,p2);
+    const onPath=hotPath.has(a.id)&&hotPath.has(b.id);
+    const hot=onPath && (isBottleneck(a,r)||isBottleneck(b,r));
+    svg.appendChild(el("path",{d,class:"edge"+(hot?" hot":""),"marker-end":`url(#${hot?'arrowHot':'arrow'})`}));
+    if(editable()){ const hit=el("path",{d,class:"edge-hit"});
+      hit.addEventListener("click",ev=>{ev.stopPropagation(); selectEdge(e.id);}); svg.appendChild(hit); }
+    if(e.splitPct){ const mx=(p1.x+p2.x)/2,my=(p1.y+p2.y)/2-6;
+      const tl=el("text",{x:mx,y:my,class:"elabel","text-anchor":"middle"}); tl.textContent=e.splitPct+"%"; svg.appendChild(tl); }
+  });
+
+  const txt=(x,y,str,cls,extra)=>{ const t=el("text",Object.assign({x,y,class:cls},extra||{})); t.textContent=str; return t; };
+
+  m.nodes.forEach(n=>{
+    const g=el("g",{class:"node"+(state.selected&&state.selected.id===n.id?" selected":""),transform:`translate(${n.x},${n.y})`});
+    const col=nodeColors(n), L=lay[n.id], w=L.w, bt=L.bt, mt=L.mt;
+
+    if(L.kind==="pill"){
+      g.appendChild(el("rect",{class:"nbox",x:0,y:bt,width:w,height:L.h,rx:Math.min(L.h,NODE_H)/2,fill:col.fill,stroke:col.stroke,"stroke-width":1.5}));
+      let by=bt+L.h/2 - (L.lines.length*LBL_LH)/2 + 12;
+      L.lines.forEach(ln=>{ g.appendChild(txt(w/2,by,ln,"nlabel",{"text-anchor":"middle"})); by+=LBL_LH; });
+    } else { // uniform card (queue + human + bot all identical)
+      const isQ=n.type==="wait", hue=typeHue(n);
+      g.appendChild(el("rect",{class:"nbox",x:0,y:bt,width:w,height:L.h,rx:13,fill:col.fill,stroke:hue,"stroke-width":1.5}));
+      // type icon-well
+      const WELL=26;
+      g.appendChild(el("rect",{x:12,y:bt+12,width:WELL,height:WELL,rx:7,fill:hue}));
+      g.appendChild(useIc(ICON_FOR(n), 16, bt+16, WELL-8, "#0f1720"));
+      // title (max 2 lines)
+      let ty=bt+23;
+      L.titleLines.forEach(ln=>{ g.appendChild(txt(TITLE_X,ty,ln,"nlabel")); ty+=LBL_LH; });
+      // gauge: label + number + tank
+      const gy=bt+62;
+      g.appendChild(txt(12,gy,isQ?"In queue":"Volume","nmeta"));
+      g.appendChild(txt(w-12,gy, mt.wip!=null?fmt(mt.wip):"—", "nlabel",{"text-anchor":"end","font-size":"14"}));
+      const tankY=gy+7, tankW=w-24, denom=isQ?mwQ:mwT;
+      const frac = mt.wip!=null ? Math.max(0,Math.min(1, mt.wip/denom)) : 0;
+      g.appendChild(el("rect",{x:12,y:tankY,width:tankW,height:8,rx:4,fill:"#0f1825",stroke:"var(--line)"}));
+      if(frac>0) g.appendChild(el("rect",{x:12,y:tankY,width:Math.max(3,tankW*frac),height:8,rx:4,fill:hue}));
+      // time + % badge (coloured by severity)
+      const time=isQ?mt.wait:mt.touch;
+      const share=(r.turnaround>0 && time!=null) ? time/r.turnaround : 0;
+      const sc=SEVC[sevOf(share)];
+      const badgeY=bt+90;
+      g.appendChild(el("rect",{x:12,y:badgeY,width:w-24,height:22,rx:7,fill:sc.bg,stroke:sc.c,"stroke-opacity":"0.5"}));
+      g.appendChild(useIc("ic-clock",20,badgeY+5,12,sc.c));
+      g.appendChild(txt(38,badgeY+15, (time!=null?fmt(time)+" "+unit():"no data")+(share>0?` · ${Math.round(share*100)}%`:""),
+        "nlabel",{fill:sc.c,"font-size":"12"}));
+      // icon row: state (queue) OR owner + value (step) — decoded by the legend
+      const rowY=bt+L.h-22; let rxp=12;
+      const ri=(id,color)=>{ g.appendChild(useIc(id,rxp,rowY,15,color||"var(--muted)")); rxp+=22; };
+      if(isQ){ ri("ic-wait"); }
+      else { ri(ownerIcon(n.owner)); n.classification ? ri(VAL_IC[n.classification]) : ri("ic-flag","var(--warn)"); }
+      // bottleneck flag — only the single biggest bottleneck (severity badge carries the rest)
+      if(r.bottleneck && r.bottleneck.node.id===n.id){
+        const fw=92;
+        g.appendChild(el("rect",{x:w-fw-6,y:bt-11,width:fw,height:18,rx:6,fill:"var(--nva)"}));
+        g.appendChild(useIc("ic-flag",w-fw-2,bt-9,13,"#2a0a04"));
+        g.appendChild(txt(w-fw+15,bt+2,"BOTTLENECK","",{fill:"#2a0a04","font-size":"9.5","font-weight":"700"}));
+      }
+    }
+
+    // connection handles (4 dots) — editing only
+    if(editable()){
+      SIDES.forEach(side=>{ const p=portGeo(n,L,side);
+        const dot=el("circle",{class:"anchor",cx:p.x-n.x,cy:p.y-n.y,r:5,"data-side":side});
+        dot.addEventListener("mousedown",ev=>startConnect(ev,n,side));
+        g.appendChild(dot); });
+    }
+
+    g.dataset.id=n.id;
+    g.addEventListener("mousedown",ev=>onNodeDown(ev,n));
+    g.addEventListener("click",ev=>{ ev.stopPropagation();
+      if(state.linkingFrom){ completeLink(n.id); return; }
+      if(!g._dragged) selectNode(n.id); });
+    svg.appendChild(g);
+  });
+  svg.onclick=()=>{ if(state.linkingFrom){ cancelLink(); } else if(!_connectJustFinished){ selectNode(null); } };
+}
+
+
+function renderRibbon(r){
+  const wrap=$("#ribbon"); wrap.innerHTML=""; const u=unit();
+  $("#ribbonTotal").textContent = r.turnaround>0 ? `${fmt(r.turnaround)} ${u} total · ${r.eff!=null?Math.round(r.eff*100)+"% value-add":""}` : "no data on path";
+  if(r.turnaround<=0 || !r.flow) return;
+  // segments coloured by TYPE — so a band lines up with its card's hue at a glance.
+  // weighted by expected passes (Split %), so branches/rework are reflected in the widths.
+  r.flow.forEach(seg=>{ const n=seg.node, pct=seg.time/r.turnaround*100;
+    const s=document.createElement("div"); s.className="seg-b"; s.style.width=pct+"%"; s.style.background=typeHue(n);
+    const passes=(seg.visits!=null && Math.abs(seg.visits-1)>0.01) ? ` · avg ${seg.visits.toFixed(2)} passes` : "";
+    s.title=`${n.label}: ${fmt(seg.time)} ${u} ${seg.kind}${passes}`;
+    if(pct>3){ const ic=document.createElementNS("http://www.w3.org/2000/svg","svg");
+      ic.setAttribute("class","seg-ic"); ic.innerHTML=`<use href="#${ICON_FOR(n)}"/>`; s.appendChild(ic); }
+    if(pct>9){ const lab=document.createElement("span"); lab.className="seg-lbl";
+      lab.textContent=`${n.label} ${fmt(seg.time)}`; s.appendChild(lab); }
+    else if(pct>4){ const lab=document.createElement("span"); lab.className="seg-lbl";
+      lab.textContent=fmt(seg.time); s.appendChild(lab); }
+    wrap.appendChild(s);
+  });
+}
+
+
+/* ============================================================
+   INSPECTOR
+   ============================================================ */
+function selectNode(id){ state.selected=id?{type:"node",id}:null; cancelLink(true); render(); }
+function selectEdge(id){ state.selected={type:"edge",id}; render(); }
+
+function renderInspector(){
+  const insp=$("#inspector");
+  if(!editable() || !state.selected){ insp.classList.remove("show"); return; }
+  insp.classList.add("show");
+  if(state.selected.type==="edge") return renderEdgeInspector();
+  const n=state.model.nodes.find(x=>x.id===state.selected.id);
+  if(!n){ insp.classList.remove("show"); return; }
+  const u=unit(); const r=rollup(); const linking=state.linkingFrom===n.id;
+  const linkBanner=`<div class="linkbanner ${linking?'show':''}">Click a target node to draw the arrow… (click empty space to cancel)</div>`;
+
+  /* header row: per-type controls + status chip */
+  let headRow="";
+  const bottleneck = r.bottleneck && r.bottleneck.node.id===n.id;
+  if(n.type==="touch"){
+    headRow=`<div class="seg perf" style="flex:1">
+        <button class="${(n.performer!=="bot")?"on":""}" data-perf="human"><svg class="t-ic"><use href="#ic-human"/></svg> Human</button>
+        <button class="${(n.performer==="bot")?"on":""}" data-perf="bot"><svg class="t-ic"><use href="#ic-bot"/></svg> Bot</button>
+      </div>`;
+    if(bottleneck) headRow+=`<span class="insp-chip hot">⚑ Bottleneck</span>`;
+    else if(!n.classification) headRow+=`<span class="insp-chip warn">⚠ Unrated</span>`;
+  } else if(n.type==="wait"){
+    const mt=metricFor(n);
+    if(bottleneck) headRow=`<span class="insp-chip hot">⚑ Bottleneck</span>`;
+    else if(mt.wip!=null && n.wipLimit && mt.wip>n.wipLimit) headRow=`<span class="insp-chip warn">⚠ Backlog</span>`;
+  }
+
+  /* body sections, ordered most-used → informational */
+  let body="";
+  if(n.type==="touch"){
+    body+=`<div class="insp-sec"><h4>Setup</h4>
+      ${field("Owner / role","owner",n.owner||"","text")}
+      ${field(`Touch time (${u})`,"touchTimeManual",n.touchTimeManual==null?"":n.touchTimeManual,"number","Used when no data is bound")}
+    </div>`;
+    body+=`<div class="insp-sec"><h4>${T.classTitle} <span class="h4note">· the conversation</span></h4>
+      <div class="field">
+        <div class="seg">
+          <button class="va ${n.classification==="VA"?"on":""}" data-cls="VA">${T.cls.VA.name}</button>
+          <button class="nnva ${n.classification==="NNVA"?"on":""}" data-cls="NNVA">${T.cls.NNVA.name}</button>
+          <button class="nva ${n.classification==="NVA"?"on":""}" data-cls="NVA">${T.cls.NVA.name}</button>
+        </div>
+        <div class="defs">
+          ${["VA","NNVA","NVA"].map(k=>`<div class="def ${n.classification===k?"sel "+k.toLowerCase():""}"><b>${T.cls[k].name}</b> — ${T.cls[k].def}</div>`).join("")}
+        </div>
+        <div class="req ${!n.classification?"show":""}">Pick one — does this step add value the customer would pay for?</div>
+      </div>
+      <div class="field"><label>Why is this step here? What value does it add?</label>
+        <textarea data-bind="valueNote" placeholder="Force the conversation…">${esc(n.valueNote||"")}</textarea>
+        <div class="req ${(n.classification && !n.valueNote)?"show":""}">Capture the rationale — this is the key conversation.</div>
+      </div>
+    </div>`;
+    body+=advanced(n,false);
+  } else if(n.type==="wait"){
+    const mt=metricFor(n);
+    body+=`<div class="insp-sec"><h4>Load</h4>
+      ${field("WIP / queue size","wip",n.wip==null?"":n.wip,"number","Files waiting in this queue")}
+      ${field("WIP limit (optional)","wipLimit",n.wipLimit==null?"":n.wipLimit,"number","Backlog flags when WIP exceeds this")}
+      ${loadGauge(mt.wip, n.wipLimit, n)}
+    </div>`;
+    body+=`<div class="insp-sec"><h4>Time</h4>
+      ${field(`Wait time (${u})`,"waitTimeManual",n.waitTimeManual==null?"":n.waitTimeManual,"number","Used when no data is bound")}
+    </div>`;
+    body+=advanced(n,false);
+  } else if(n.type==="start"){
+    body+=`<div class="insp-sec"><h4>Flow settings</h4>
+      <div class="field"><label>Flow name</label>
+        <input type="text" data-modelbind="name" value="${esc(state.model.name||"")}" /></div>
+      ${settingsSelect("Time unit","timeUnit",u,["hrs","days","min"])}
+      ${settingsSelect("Bottleneck mode","bottleneckMode",(state.model.settings&&state.model.settings.bottleneckMode)||"relative",["relative","absolute"])}
+      <div class="sub" style="margin-top:2px">Theme &amp; colours live in <b>🎨 Appearance</b> (top bar).</div>
+    </div>`;
+  }
+  /* end node: no body sections */
+
+  const canArrow = n.type!=="end";
+  const foot=`<div class="insp-foot">
+    ${canArrow?`<button id="drawArrow">↗ Draw arrow</button>`:""}
+    <button id="dupNode">⧉ Duplicate</button>
+    <button class="del" id="delNode">🗑 Delete</button>
+  </div>`;
+
+  insp.innerHTML=`<div class="insp-head">
+      <div class="insp-htop">
+        ${inspIconWell(n)}
+        <input class="insp-title" data-bind="label" value="${esc(n.label||"")}" placeholder="Untitled" />
+        <button class="insp-close" id="inspClose" title="Close">✕</button>
+      </div>
+      ${headRow?`<div class="insp-hrow">${headRow}</div>`:""}
+    </div>
+    <div class="insp-body">${linkBanner}${(n.type==="touch"||n.type==="wait")?colorOverrideRow(n):""}${body}</div>
+    ${foot}`;
+  wireInspector(n);
+}
+/* ---- inspector builders ---- */
+function inspIconWell(n){
+  const isNode = n.type==="touch" || n.type==="wait";
+  const hue = isNode ? typeHue(n) : "var(--faint)";
+  const inner = isNode ? `<svg><use href="#${ICON_FOR(n)}"/></svg>`
+                       : `<span>${n.type==="start"?"▸":"■"}</span>`;
+  return `<div class="insp-iconwell" style="--hue:${hue}">${inner}</div>`;
+}
+function colorOverrideRow(n){
+  const cur=n.color||"";
+  return `<div class="field boxcolour"><label>Box colour <span class="h4note">· this box only</span></label>
+    <div class="swatchrow">
+      <input type="color" data-nodecolor value="${cur||typeHexFor(KIND(n))}" />
+      <span class="swlabel">${cur?"Custom override":`Default · ${KIND(n)} type`}</span>
+      <button class="swreset" data-colorreset ${cur?"":"disabled"}>Reset</button>
+    </div></div>`;
+}
+function themeSwatch(label,key,icon){
+  const custom = themeVars()[key]!=null;
+  return `<div class="swatchrow">
+    <input type="color" data-themevar="${key}" value="${themeVal(key)}" />
+    <span class="swlabel">${icon?`<svg class="t-ic"><use href="#${icon}"/></svg> `:""}${label}</span>
+    <button class="swreset" data-themereset="${key}" ${custom?"":"disabled"}>Reset</button>
+  </div>`;
+}
+function presetPreview(name){ const t=THEMES[name];
+  return ["--bg","--panel","--accent","--t-human"].map(k=>`<i style="background:${t[k]}"></i>`).join(""); }
+/* Appearance popover — whole-flow theme (preset + per-colour overrides) */
+function wireThemeSwatches(root){
+  root.querySelectorAll("[data-preset]").forEach(b=>b.addEventListener("click",()=>{
+    setPreset(b.dataset.preset); applyTheme(); applyTypeColors(); render(); renderThemePop(); }));
+  root.querySelectorAll("[data-themevar]").forEach(inp=>{
+    inp.addEventListener("input",()=>{ setThemeVar(inp.dataset.themevar, inp.value); applyTheme(); applyTypeColors(); });
+    inp.addEventListener("change",()=>{ render(); renderThemePop(); }); });
+  root.querySelectorAll("[data-themereset]").forEach(b=>b.addEventListener("click",()=>{
+    resetThemeVar(b.dataset.themereset); applyTheme(); applyTypeColors(); render(); renderThemePop(); }));
+}
+function renderThemePop(){
+  const pop=$("#themePop"); if(!pop) return; const cur=currentPreset();
+  pop.innerHTML=`<div class="themepop-h">Preset</div>
+    <div class="presetrow">
+      ${Object.keys(THEMES).map(name=>`<button class="preset ${cur===name?"on":""}" data-preset="${name}">
+        <span class="pv">${presetPreview(name)}</span>${name}</button>`).join("")}
+    </div>
+    <div class="themepop-h">Surfaces &amp; detail · whole flow</div>
+    <div class="typecolors">${THEME_FIELDS.map(([k,lbl])=>themeSwatch(lbl,k)).join("")}</div>
+    <div class="themepop-h">Node types</div>
+    <div class="typecolors">
+      ${themeSwatch("Human","--t-human","ic-human")}
+      ${themeSwatch("Bot","--t-bot","ic-bot")}
+      ${themeSwatch("Queue","--t-queue","ic-queue")}
+    </div>`;
+  wireThemeSwatches(pop);
+}
+function toggleThemePop(show){
+  const pop=$("#themePop"); if(!pop) return;
+  const open = show==null ? !pop.classList.contains("show") : show;
+  if(open){ renderThemePop(); pop.classList.add("show"); } else pop.classList.remove("show");
+}
+function loadGauge(wip, limit, n){
+  if(wip==null) return "";
+  const lim=Math.max(limit||wip||1, 1);
+  const pct=Math.max(4, Math.min(100, (wip/lim)*100));
+  const over=limit && wip>limit;
+  return `<div class="loadbar"><i style="width:${pct}%;background:${over?"var(--nva)":typeHue(n)}"></i></div>`;
+}
+function settingsSelect(label,key,val,opts){
+  return `<div class="field"><label>${label}</label><select data-setbind="${key}">
+    ${opts.map(o=>`<option ${o===val?"selected":""}>${o}</option>`).join("")}</select></div>`;
+}
+function advanced(n, includeColor){
+  return `<details class="insp-adv"><summary>Advanced</summary>
+    ${field("Data key (StepID)","stepId",n.stepId||"","text","Matches the StepID column in FlowData")}
+    ${includeColor?colorOverrideRow(n):""}
+    <div class="field"><label>Node id</label><div class="idline">${esc(n.id)}</div></div>
+  </details>`;
+}
+function field(label,bind,val,type,hint){
+  return `<div class="field"><label>${label}</label>
+    <input type="${type}" data-bind="${bind}" value="${val===null||val===undefined?"":esc(val)}" />
+    ${hint?`<div class="sub" style="margin:4px 0 0">${hint}</div>`:""}</div>`;
+}
+function wireInspector(n){
+  const insp=$("#inspector");
+  insp.querySelectorAll("[data-bind]").forEach(inp=>{
+    inp.addEventListener("change",()=>{ let v=inp.value;
+      if(inp.type==="number") v=v===""?null:parseFloat(v);
+      n[inp.dataset.bind]=v===""?undefined:v; render(); }); });
+  insp.querySelectorAll("[data-cls]").forEach(b=>b.addEventListener("click",()=>{ n.classification=b.dataset.cls; render(); }));
+  insp.querySelectorAll("[data-perf]").forEach(b=>b.addEventListener("click",()=>{ n.performer=b.dataset.perf; render(); }));
+  /* flow-level settings (start drawer) */
+  insp.querySelectorAll("[data-modelbind]").forEach(inp=>inp.addEventListener("change",()=>{
+    state.model[inp.dataset.modelbind]=inp.value; render(); }));
+  insp.querySelectorAll("[data-setbind]").forEach(sel=>sel.addEventListener("change",()=>{
+    state.model.settings=state.model.settings||{}; state.model.settings[sel.dataset.setbind]=sel.value; render(); }));
+  /* per-node colour override */
+  const nc=insp.querySelector("[data-nodecolor]"); if(nc) nc.addEventListener("change",()=>{ n.color=nc.value; render(); });
+  const cr=insp.querySelector("[data-colorreset]"); if(cr) cr.addEventListener("click",()=>{ delete n.color; render(); });
+  /* actions */
+  const cl=insp.querySelector("#inspClose"); if(cl) cl.addEventListener("click",()=>selectNode(null));
+  const da=$("#drawArrow"); if(da) da.addEventListener("click",()=>startLink(n.id));
+  const dup=$("#dupNode"); if(dup) dup.addEventListener("click",()=>duplicateNode(n.id));
+  const del=$("#delNode"); if(del) del.addEventListener("click",()=>deleteNode(n.id));
+}
+function renderEdgeInspector(){
+  const e=state.model.edges.find(x=>x.id===state.selected.id);
+  if(!e){ $("#inspector").classList.remove("show"); return; }
+  const sideRow=`<div class="field"><label>Routing (which sides it attaches to)</label>
+    <div style="display:flex;gap:8px">
+      <select data-bind="fromSide" style="flex:1">${SIDES.map(o=>`<option ${o===(e.fromSide||"right")?"selected":""}>${o}</option>`).join("")}</select>
+      <span style="align-self:center;color:var(--faint)">→</span>
+      <select data-bind="toSide" style="flex:1">${SIDES.map(o=>`<option ${o===(e.toSide||"left")?"selected":""}>${o}</option>`).join("")}</select>
+    </div><div class="sub" style="margin:4px 0 0">From-side → To-side. Use top/bottom for loops.</div></div>`;
+  const insp=$("#inspector");
+  insp.innerHTML=`<div class="insp-head">
+      <div class="insp-htop">
+        <div class="insp-iconwell" style="--hue:var(--faint)"><span>↗</span></div>
+        <div class="insp-title" style="cursor:default">Connector</div>
+        <button class="insp-close" id="inspClose" title="Close">✕</button>
+      </div>
+      <div class="insp-hrow"><span class="sub">${esc(e.from)} → ${esc(e.to)}</span></div>
+    </div>
+    <div class="insp-body">
+      <div class="insp-sec"><h4>Routing</h4>
+        ${sideRow}
+        ${field("Split %","splitPct",e.splitPct==null?"":e.splitPct,"number","For branching — share of items down this path")}
+        ${field("Label","label",e.label||"","text")}
+      </div>
+    </div>
+    <div class="insp-foot"><button class="del" id="delEdge">🗑 Delete connector</button></div>`;
+  insp.querySelectorAll("[data-bind]").forEach(inp=>inp.addEventListener("change",()=>{
+    let v=inp.value; if(inp.type==="number") v=v===""?undefined:parseFloat(v);
+    e[inp.dataset.bind]=v===""?undefined:v; render(); }));
+  $("#inspClose").addEventListener("click",()=>selectNode(null));
+  $("#delEdge").addEventListener("click",()=>{ state.model.edges=state.model.edges.filter(x=>x.id!==e.id); selectNode(null); });
+}
+
+/* ---------- linking ---------- */
+function startLink(id){ state.linkingFrom=id; toast("Click the target node…"); render(); }
+function completeLink(toId){ const from=state.linkingFrom; if(!from||from===toId){ cancelLink(); return; }
+  if(state.model.edges.some(e=>e.from===from&&e.to===toId)){ toast("Already connected"); cancelLink(); return; }
+  state.model.edges.push({id:uid("e"),from,to:toId}); state.linkingFrom=null; toast("Connected"); render(); }
+function cancelLink(silent){ if(state.linkingFrom&&!silent) toast("Link cancelled"); state.linkingFrom=null; }
+
+/* ---------- add / delete ---------- */
+function addNode(type, performer){
+  const id=uid(type[0]+"_"); const stage=$("#stage");
+  const label={touch:(performer==="bot"?"New bot step":"New step"),wait:"New queue",start:"Start",end:"End"}[type];
+  const n={id,type,label,x:stage.scrollLeft+120,y:stage.scrollTop+160};
+  if(type==="touch"){ n.stepId=id; n.touchTimeManual=null; n.performer=performer==="bot"?"bot":"human"; }
+  if(type==="wait"){ n.stepId=id; n.waitTimeManual=null; }
+  state.model.nodes.push(n); selectNode(id);
+}
+function deleteNode(id){ state.model.nodes=state.model.nodes.filter(n=>n.id!==id);
+  state.model.edges=state.model.edges.filter(e=>e.from!==id&&e.to!==id); selectNode(null); }
+function duplicateNode(id){
+  const src=state.model.nodes.find(n=>n.id===id); if(!src) return;
+  const n=clone(src); n.id=uid(src.type[0]+"_");
+  if(n.type==="touch"||n.type==="wait") n.stepId=n.id;   // new node needs its own data key
+  n.x=src.x+40; n.y=src.y+40;
+  state.model.nodes.push(n); selectNode(n.id); toast("Node duplicated");
+}
+
+/* ---------- drag ---------- */
+let drag=null;
+function onNodeDown(ev,n){ if(!editable()||state.linkingFrom) return; ev.preventDefault();
+  const svg=$("#canvas"),rect=svg.getBoundingClientRect(),z=Z();
+  drag={n,dx:(ev.clientX-rect.left)/z-n.x,dy:(ev.clientY-rect.top)/z-n.y,moved:false,g:ev.currentTarget}; drag.g._dragged=false;
+  window.addEventListener("mousemove",onDragMove); window.addEventListener("mouseup",onDragUp); }
+function onDragMove(ev){ if(!drag) return; const svg=$("#canvas"),rect=svg.getBoundingClientRect(),z=Z();
+  drag.n.x=Math.max(0,(ev.clientX-rect.left)/z-drag.dx); drag.n.y=Math.max(0,(ev.clientY-rect.top)/z-drag.dy);
+  drag.moved=true; drag.g._dragged=true; render(); }
+function onDragUp(){ window.removeEventListener("mousemove",onDragMove); window.removeEventListener("mouseup",onDragUp);
+  const g=drag&&drag.g; drag=null; setTimeout(()=>{ if(g)g._dragged=false; },0); }
+
+/* ---------- Visio-style connect: drag from a node's dot to another node ---------- */
+let connectState=null, _connectJustFinished=false;
+function svgPt(ev){ const r=$("#canvas").getBoundingClientRect(),z=Z(); return {x:(ev.clientX-r.left)/z, y:(ev.clientY-r.top)/z}; }
+function startConnect(ev, n, side){
+  if(!editable()) return;
+  ev.preventDefault(); ev.stopPropagation();             // don't start a node move
+  const p=portGeo(n,_lay[n.id],side);
+  connectState={fromId:n.id, fromSide:side, p};
+  document.body.classList.add("connecting");
+  const temp=el("path",{class:"temp-edge",id:"tempEdge",d:`M${p.x},${p.y} L${p.x},${p.y}`});
+  $("#canvas").appendChild(temp);
+  window.addEventListener("mousemove",onConnectMove); window.addEventListener("mouseup",onConnectUp);
+}
+function onConnectMove(ev){ if(!connectState) return;
+  const c=svgPt(ev), p=connectState.p;
+  $("#tempEdge").setAttribute("d", edgePath(p, {x:c.x, y:c.y, nx:0, ny:0}));
+}
+function onConnectUp(ev){
+  window.removeEventListener("mousemove",onConnectMove); window.removeEventListener("mouseup",onConnectUp);
+  document.body.classList.remove("connecting");
+  const t=$("#tempEdge"); if(t) t.remove();
+  const cs=connectState; connectState=null; if(!cs) return;
+  const elUnder=document.elementFromPoint(ev.clientX, ev.clientY);
+  const g=elUnder && elUnder.closest && elUnder.closest(".node");
+  const toId=g && g.dataset.id;
+  if(toId && toId!==cs.fromId){
+    let toSide = elUnder.classList && elUnder.classList.contains("anchor") ? elUnder.getAttribute("data-side") : null;
+    if(!toSide){ const tn=state.model.nodes.find(x=>x.id===toId); const c=svgPt(ev); toSide=nearestSide(tn,_lay[toId],c.x,c.y); }
+    if(!state.model.edges.some(e=>e.from===cs.fromId&&e.to===toId&&e.fromSide===cs.fromSide&&e.toSide===toSide)){
+      state.model.edges.push({id:uid("e"),from:cs.fromId,to:toId,fromSide:cs.fromSide,toSide});
+      toast("Connected");
+    }
+  }
+  _connectJustFinished=true; setTimeout(()=>_connectJustFinished=false,0);
+  render();
+}
+
+/* ============================================================
+   SEGMENT / PERIOD
+   ============================================================ */
+function rebuildSegPer(){
+  const segs=new Set(["ALL"]),pers=new Set(["ALL"]);
+  state.data.forEach(r=>{ if(r.Segment!=null)segs.add(String(r.Segment)); if(r.Period!=null)pers.add(String(r.Period)); });
+  state.segments=[...segs]; state.periods=[...pers];
+  if(!state.segments.includes(state.segment)) state.segment="ALL";
+  if(!state.periods.includes(state.period)) state.period="ALL";
+  fillSel("#segSel",state.segments,state.segment); fillSel("#perSel",state.periods,state.period);
+}
+function fillSel(sel,items,cur){ $(sel).innerHTML=items.map(i=>`<option ${i===cur?"selected":""}>${esc(i)}</option>`).join(""); }
+
+/* ============================================================
+   FILE I/O
+   ============================================================ */
+function parseCSV(text){
+  const lines=text.replace(/\r/g,"").split("\n").filter(l=>l.length); if(!lines.length) return [];
+  const split=line=>{ const out=[];let cur="",q=false;
+    for(let i=0;i<line.length;i++){const c=line[i];
+      if(q){ if(c==='"'){ if(line[i+1]==='"'){cur+='"';i++;} else q=false; } else cur+=c; }
+      else { if(c===','){out.push(cur);cur="";} else if(c==='"')q=true; else cur+=c; } } out.push(cur); return out; };
+  const head=split(lines[0]).map(h=>h.trim());
+  return lines.slice(1).map(l=>{ const c=split(l); const o={}; head.forEach((h,i)=>o[h]=c[i]); return o; });
+}
+function ingestData(rows, sourceName, silent){
+  state.data=rows;
+  if(state.model) state.model.data=rows;   // persist the snapshot with the flow (saved + shared)
+  rebuildSegPer(); render();               // render() schedules the localStorage save
+  if(!silent){ const ms=dataMatchSummary();
+    toast(ms.missingNames.length
+      ? `Imported ${ms.matched}/${ms.total} steps — no rows for: ${ms.missingNames.slice(0,3).join(", ")}${ms.missingNames.length>3?"…":""}`
+      : `Imported — all ${ms.total} steps matched`); }
+}
+/* read a File (csv/xlsx) -> FlowData rows */
+function readDataFile(file){
+  return new Promise((resolve,reject)=>{ const rd=new FileReader(); rd.onerror=()=>reject(rd.error);
+    if(/\.csv$/i.test(file.name)){ rd.onload=()=>resolve(parseCSV(rd.result)); rd.readAsText(file); }
+    else { rd.onload=()=>{ try{ const wb=XLSX.read(rd.result,{type:"array"});
+        const sheet=wb.Sheets["FlowData"]||wb.Sheets[wb.SheetNames[0]];
+        resolve(XLSX.utils.sheet_to_json(sheet,{defval:null})); }catch(err){ reject(err); } };
+      rd.readAsArrayBuffer(file); } });
+}
+function download(name,content,mime){ const blob=new Blob([content],{type:mime||"application/octet-stream"});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),1000); }
+
+/* import a filled-out stats sheet (one-shot; snapshot stored on the model) */
+function importSheetFile(){ $("#fileData").click(); }
+
+/* data-bearing nodes (the ones a data row can feed) */
+function dataNodes(){ return (state.model?state.model.nodes:[]).filter(n=>(n.type==="touch"||n.type==="wait") && n.stepId); }
+function dataMatchSummary(){
+  const nodes=dataNodes(); const ids=new Set(state.data.map(r=>String(r.StepID)));
+  const missing=nodes.filter(n=>!ids.has(String(n.stepId)));
+  return {matched:nodes.length-missing.length, total:nodes.length, missingNames:missing.map(n=>n.label)};
+}
+/* ---------- stats sheet: the flow defines the fields to fill in ---------- */
+function csvCell(v){ v=(v==null?"":String(v)); return /[",\n]/.test(v) ? '"'+v.replace(/"/g,'""')+'"' : v; }
+function exportSheet(){
+  const cols=["StepID","StepName","NodeType","Segment","Period","TouchTimeAvg","WaitTimeAvg","WIP","Volume"];
+  const period=new Date().toISOString().slice(0,7); // YYYY-MM
+  const nodes=dataNodes();
+  if(!nodes.length){ toast("Add a step or queue first"); return; }
+  const rows=nodes.map(n=>{
+    const isWork=n.type==="touch", mt=metricFor(n);   // prefill with whatever the cards currently show
+    const type=isWork?(n.performer==="bot"?"Bot":"Human"):"Queue";
+    return [ n.stepId, n.label, type, "ALL", period,
+      isWork && mt.touch!=null ? mt.touch : "",
+      !isWork && mt.wait!=null ? mt.wait : "",
+      !isWork && mt.wip!=null ? mt.wip : "", "" ];
+  });
+  const csv=[cols.join(",")].concat(rows.map(r=>r.map(csvCell).join(","))).join("\n");
+  download((state.model.name||"flow").replace(/\s+/g,"-")+"-stats-sheet.csv", csv, "text/csv");
+  toast(`Sheet for ${nodes.length} steps downloaded — fill it in, then Import sheet`);
+}
+
+/* ============================================================
+   EXPORT TO PICTURE  (PNG / PDF) — title + map + full analysis
+   ============================================================ */
+const PAD=28;
+/* resolve a CSS custom property to its concrete value (for the standalone SVG) */
+function cssVar(name){ return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+/* build a self-contained, theme-accurate SVG of the whole sheet */
+function buildExportSVG(){
+  const r=rollup(), u=unit();
+  const canvas=$("#canvas");
+  const vb=(canvas.getAttribute("viewBox")||"0 0 800 480").split(/\s+/).map(Number);
+  const mapW=vb[2]||800, mapH=vb[3]||480;
+  const innerW=Math.max(mapW, 720);
+  const W=innerW + PAD*2;
+  const titleH=64, analysisH=176;
+  const mapTop=titleH, analysisTop=mapTop+mapH+18, H=analysisTop+analysisH+PAD;
+
+  // resolve theme colours
+  const C={ bg:cssVar("--bg")||"#0f1720", panel:cssVar("--panel")||"#16212e", panel2:cssVar("--panel2")||"#1d2a3a",
+    line:cssVar("--line")||"#2b3a4d", ink:cssVar("--ink")||"#e8eef5", muted:cssVar("--muted")||"#9fb0c3",
+    faint:cssVar("--faint")||"#6b7d92", accent:cssVar("--accent")||"#4cc9f0", grid:cssVar("--grid")||"#1b2738",
+    va:cssVar("--va")||"#34c38f", nva:cssVar("--nva")||"#f06548", warn:cssVar("--warn")||"#f7b84b",
+    tq:cssVar("--t-queue"), th:cssVar("--t-human"), tb:cssVar("--t-bot"),
+    term:cssVar("--term")||"#2a3543", termLine:cssVar("--term-line")||"#cdd9e6" };
+  const symbols=document.querySelector("body>svg[aria-hidden]").innerHTML;   // inline the icon library
+
+  // ---- title ----
+  let g=`<text x="${PAD}" y="34" font-family="${'Segoe UI,system-ui,sans-serif'}" font-size="22" font-weight="700" fill="${C.ink}">${esc(state.model.name||"Flow")}</text>`;
+  g+=`<text x="${PAD}" y="54" font-family="Segoe UI,system-ui,sans-serif" font-size="12" fill="${C.faint}">Value-stream map · ${(state.model.nodes||[]).length} nodes · exported ${new Date().toISOString().slice(0,10)}</text>`;
+
+  // ---- map ----
+  g+=`<g transform="translate(${PAD},${mapTop})">${canvas.innerHTML}</g>`;
+
+  // ---- analysis strip ----
+  const aw=innerW;
+  g+=`<g transform="translate(${PAD},${analysisTop})">`;
+  // stat tiles
+  const tiles=[
+    ["Turnaround", fmt(r.turnaround)+" "+u, C.ink],
+    ["Touch time", fmt(r.touch)+" "+u, C.ink],
+    ["Wait time", fmt(r.wait)+" "+u, C.ink],
+    ["Flow efficiency", r.eff==null?"—":Math.round(r.eff*100)+"%", C.va],
+    ["Bottleneck", r.bottleneck?esc(r.bottleneck.node.label):"none", C.nva],
+  ];
+  const tg=10, tw=(aw-tg*(tiles.length-1))/tiles.length, th=56;
+  tiles.forEach((t,i)=>{ const x=i*(tw+tg);
+    g+=`<rect x="${x}" y="0" width="${tw}" height="${th}" rx="9" fill="${C.panel2}" stroke="${C.line}"/>`;
+    g+=`<text x="${x+12}" y="22" font-family="Segoe UI,system-ui,sans-serif" font-size="10" letter-spacing="0.5" fill="${C.faint}" text-transform="uppercase">${t[0].toUpperCase()}</text>`;
+    g+=`<text x="${x+12}" y="44" font-family="Segoe UI,system-ui,sans-serif" font-size="16" font-weight="700" fill="${t[2]}">${t[1]}</text>`; });
+  // ribbon
+  const ry=th+22;
+  g+=`<text x="0" y="${ry-6}" font-family="Segoe UI,system-ui,sans-serif" font-size="11" fill="${C.muted}">Time contribution across the stream</text>`;
+  g+=`<rect x="0" y="${ry}" width="${aw}" height="24" rx="6" fill="${C.panel2}" stroke="${C.line}"/>`;
+  if(r.turnaround>0 && r.flow){ let cx=0;
+    r.flow.forEach(seg=>{ const wpx=(seg.time/r.turnaround)*aw;
+      g+=`<rect x="${cx}" y="${ry}" width="${Math.max(1,wpx)}" height="24" fill="${typeHexResolved(seg.node,C)}"/>`; cx+=wpx; }); }
+  // legend
+  const ly=ry+44;
+  const leg=[["Queue",C.tq],["Human",C.th],["Bot",C.tb],["Bottleneck",C.nva]];
+  let lx=0;
+  leg.forEach(([lab,col])=>{ g+=`<rect x="${lx}" y="${ly-10}" width="11" height="11" rx="3" fill="${col}"/>`;
+    g+=`<text x="${lx+16}" y="${ly}" font-family="Segoe UI,system-ui,sans-serif" font-size="11" fill="${C.muted}">${lab}</text>`;
+    lx+=16+lab.length*6.6+22; });
+  g+=`</g>`;
+
+  const styleVars=`--bg:${C.bg};--panel:${C.panel};--panel2:${C.panel2};--line:${C.line};--ink:${C.ink};--muted:${C.muted};--faint:${C.faint};--accent:${C.accent};--grid:${C.grid};--va:${C.va};--nva:${C.nva};--warn:${C.warn};--t-queue:${C.tq};--t-human:${C.th};--t-bot:${C.tb};--term:${C.term};--term-line:${C.termLine}`;
+  const css=`text{font-family:'Segoe UI',system-ui,sans-serif;fill:var(--ink)}
+    .nlabel{font-weight:600;font-size:13px}.nmeta{fill:var(--muted);font-size:11px}.elabel{fill:var(--muted);font-size:11px}
+    .edge{fill:none;stroke:var(--faint);stroke-width:2}.edge.hot{stroke:var(--nva)}
+    .anchor,.edge-hit,.temp-edge{display:none}`;
+  const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="${styleVars}">
+    <style>${css}</style><defs>${symbols}</defs>
+    <rect x="0" y="0" width="${W}" height="${H}" fill="${C.bg}"/>${g}</svg>`;
+  return {svg, w:W, h:H};
+}
+/* resolve a node's hue to a concrete colour for the export (honours per-node override) */
+function typeHexResolved(n,C){ if(n.color) return n.color; const k=KIND(n); return k==="queue"?C.tq:k==="bot"?C.tb:C.th; }
+/* rasterise the SVG string to a PNG data-url at the given pixel scale */
+function svgToPng(svgStr, w, h, scale){
+  return new Promise((resolve,reject)=>{ const img=new Image();
+    img.onload=()=>{ const c=document.createElement("canvas"); c.width=Math.round(w*scale); c.height=Math.round(h*scale);
+      const ctx=c.getContext("2d"); ctx.setTransform(scale,0,0,scale,0,0); ctx.drawImage(img,0,0);
+      resolve(c.toDataURL("image/png")); };
+    img.onerror=()=>reject(new Error("render failed"));
+    img.src="data:image/svg+xml;charset=utf-8,"+encodeURIComponent(svgStr); });
+}
+function downloadDataUrl(name,dataUrl){ const a=document.createElement("a"); a.href=dataUrl; a.download=name; a.click(); }
+async function exportPicture(kind){
+  if(!state.model){ return; }
+  closeMenus();
+  try{
+    const {svg,w,h}=buildExportSVG();
+    const png=await svgToPng(svg,w,h,2);
+    const base=(state.model.name||"flow").replace(/\s+/g,"-");
+    if(kind==="png"){ downloadDataUrl(base+".png", png); toast("PNG exported"); }
+    else{ const J=window.jspdf&&window.jspdf.jsPDF; if(!J){ toast("PDF engine not loaded"); return; }
+      const doc=new J({orientation:w>h?"l":"p",unit:"pt",format:[w,h]});
+      doc.addImage(png,"PNG",0,0,w,h); doc.save(base+".pdf"); toast("PDF exported"); }
+  }catch(e){ toast("Export failed — try again"); }
+}
+
+/* ============================================================
+   WIRING
+   ============================================================ */
+function setMode(m){ state.mode=m; state.selected=null; cancelLink(true); render(); }   // m: "home" | "build"
+function goHome(){ if(state.currentId) scheduleSave(); state.mode="home"; resetThemeRoot(); updateChrome(); renderHome(); }
+
+$("#flowsBtn").onclick=goHome;
+$("#brandHome").onclick=()=>{ if(!state.viewer) goHome(); };
+$("#segSel").onchange=e=>{ state.segment=e.target.value; render(); };
+$("#perSel").onchange=e=>{ state.period=e.target.value; render(); };
+$("#paletteBar").querySelectorAll("[data-add]").forEach(b=>b.addEventListener("click",()=>addNode(b.dataset.add,b.dataset.perf)));
+
+/* zoom the build canvas */
+function setZoom(z){ state.zoom=Math.max(0.4,Math.min(2,Math.round(z*100)/100));
+  const zl=$("#zoomLevel"); if(zl) zl.textContent=Math.round(state.zoom*100)+"%"; render(); }
+$("#zoomIn").onclick=()=>setZoom(Z()+0.1);
+$("#zoomOut").onclick=()=>setZoom(Z()-0.1);
+
+/* stats sheet: export a blank/prefilled sheet, import a filled one (snapshot, no live link) */
+$("#exportSheet").onclick=exportSheet;
+$("#importSheet").onclick=importSheetFile;
+$("#fileData").onchange=async e=>{ const f=e.target.files[0]; if(!f) return;
+  try{ ingestData(await readDataFile(f), f.name, false); }
+  catch(err){ toast("Couldn't read that file"); } e.target.value=""; };
+
+/* explainer */
+$("#howData").onclick=()=>$("#howOverlay").classList.add("show");
+$("#howClose").onclick=()=>$("#howOverlay").classList.remove("show");
+$("#howOverlay").onclick=e=>{ if(e.target.id==="howOverlay") $("#howOverlay").classList.remove("show"); };
+$("#effClose").onclick=()=>$("#effOverlay").classList.remove("show");
+$("#effOverlay").onclick=e=>{ if(e.target.id==="effOverlay") $("#effOverlay").classList.remove("show"); };
+
+/* Appearance + Export popovers (only one open at a time) */
+function closeMenus(){ toggleThemePop(false); const ep=$("#exportPop"); if(ep) ep.classList.remove("show"); }
+$("#themeBtn").onclick=e=>{ e.stopPropagation(); const open=$("#themePop").classList.contains("show"); closeMenus(); if(!open) toggleThemePop(true); };
+$("#exportImgBtn").onclick=e=>{ e.stopPropagation(); const ep=$("#exportPop"); const open=ep.classList.contains("show"); closeMenus(); if(!open) ep.classList.add("show"); };
+$("#exportPng").onclick=()=>exportPicture("png");
+$("#exportPdf").onclick=()=>exportPicture("pdf");
+document.addEventListener("click",e=>{ if(!e.target.closest(".themewrap")&&!e.target.closest(".exportwrap")) closeMenus(); });
+document.addEventListener("keydown",e=>{ if(e.key==="Escape") closeMenus(); });
+
+/* save design / share */
+$("#saveModel").onclick=()=>{ download((state.model.name||"flow-builder").replace(/\s+/g,"-")+".json", JSON.stringify(state.model,null,2),"application/json"); toast("Design backed up (JSON)"); };
+$("#exportHtml").onclick=()=>{
+  const cl=document.documentElement.cloneNode(true);
+  cl.setAttribute("data-viewer","1");
+  cl.querySelector("#egp-model").textContent=JSON.stringify(state.model,null,2);
+  download((state.model.name||"flow-builder").replace(/\s+/g,"-")+"-viewer.html","<!DOCTYPE html>\n"+cl.outerHTML,"text/html");
+  toast("Read-only copy created — share it with the team");
+};
+
+/* home controls */
+$("#newFlow").onclick=newFlow;
+$("#exportLib").onclick=()=>download("flow-builder-library.json", JSON.stringify(state.library,null,2),"application/json");
+$("#importFlow").onclick=()=>$("#fileImport").click();
+$("#fileImport").onchange=e=>{ const f=e.target.files[0]; if(!f) return; const rd=new FileReader();
+  rd.onload=()=>{ try{ importFlowFromObj(JSON.parse(rd.result)); }catch(err){ toast("Invalid JSON"); } }; rd.readAsText(f); e.target.value=""; };
+$("#homeGrid").addEventListener("click",ev=>{
+  const card=ev.target.closest(".flowcard"); if(!card) return; const id=card.dataset.id;
+  const act=ev.target.dataset.act;
+  if(act==="open") openFlow(id,"build");
+  else if(act==="dup") duplicateFlow(id);
+  else if(act==="rename") renameFlow(id);
+  else if(act==="export") exportFlow(id);
+  else if(act==="del") deleteFlow(id);
+});
+
+/* ============================================================
+   BOOT
+   ============================================================ */
+(function boot(){
+  if(document.documentElement.getAttribute("data-viewer")==="1"){
+    // standalone read-only viewer: show the embedded flow directly
+    state.viewer=true;
+    try{ loadModel(JSON.parse($("#egp-model").textContent)); }catch(e){}
+    setMode("build"); return;   // read-only is enforced by editable() (viewer=true), not by mode
+  }
+  state.library=loadLibrary(); seedLibrary();
+  state.currentId=state.library.lastOpenedId;
+  const cur=state.currentId && state.library.flows[state.currentId];
+  state.model = cur ? clone(cur.model) : null;
+  if(state.model) rebuildSegPer();
+  setMode("home");
+})();
+</script>
+</body>
+</html>
