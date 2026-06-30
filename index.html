@@ -436,13 +436,13 @@
   "settings": { "timeUnit": "hrs", "bottleneckMode": "relative" },
   "nodes": [
     { "id": "start", "type": "start", "label": "Start — a request arrives", "x": 40,  "y": 220 },
-    { "id": "q1", "type": "wait", "label": "Queue — pure waiting", "stepId": "q1", "x": 220, "y": 220, "waitTimeManual": 12, "wip": 8 },
-    { "id": "t1", "type": "touch", "label": "Human step — Valued work", "owner": "Your team", "stepId": "t1", "x": 400, "y": 220, "touchTimeManual": 2, "classification": "VA", "valueNote": "A 'touch' is where work actually happens. Set who does it and how long it takes, then tag the value. VALUED = the customer would pay for it." },
-    { "id": "q2", "type": "wait", "label": "Queue — larger backlog", "stepId": "q2", "x": 580, "y": 220, "waitTimeManual": 40, "wip": 30 },
-    { "id": "t2", "type": "touch", "label": "Human step — Necessary", "owner": "Your team", "stepId": "t2", "x": 760, "y": 220, "touchTimeManual": 1, "classification": "NNVA", "valueNote": "NECESSARY = required for compliance or risk, but the customer doesn't value it directly. Minimise it, don't delete it." },
-    { "id": "t3", "type": "touch", "performer": "bot", "label": "Bot step — automated", "owner": "System", "stepId": "t3", "x": 940, "y": 220, "touchTimeManual": 0.3, "classification": "VA", "valueNote": "A bot step is automated work — no person involved. Usually fast, and a good target to move manual steps onto." },
-    { "id": "t4", "type": "touch", "label": "Could-remove step", "owner": "Your team", "stepId": "t4", "x": 1120, "y": 220, "touchTimeManual": 0.8, "classification": "NVA", "valueNote": "COULD REMOVE = adds no value; a candidate to eliminate. Flow efficiency = valued time / total time, so cutting these (and the queues) raises it." },
-    { "id": "end", "type": "end", "label": "Value delivered", "x": 1300, "y": 220 }
+    { "id": "q1", "type": "wait", "label": "Queue — pure waiting", "stepId": "q1", "x": 240, "y": 220, "waitTimeManual": 12, "wip": 8 },
+    { "id": "t1", "type": "touch", "label": "Human step — Valued work", "owner": "Your team", "stepId": "t1", "x": 540, "y": 220, "touchTimeManual": 2, "throughputManual": 1.2, "capacityManual": 1.3, "classification": "VA", "valueNote": "A 'touch' is where work actually happens. Set who does it and how long it takes, then tag the value. VALUED = the customer would pay for it." },
+    { "id": "q2", "type": "wait", "label": "Queue — larger backlog", "stepId": "q2", "x": 840, "y": 220, "waitTimeManual": 40, "wip": 30 },
+    { "id": "t2", "type": "touch", "label": "Human step — Necessary", "owner": "Your team", "stepId": "t2", "x": 1140, "y": 220, "touchTimeManual": 1, "throughputManual": 3, "capacityManual": 8, "classification": "NNVA", "valueNote": "NECESSARY = required for compliance or risk, but the customer doesn't value it directly. Minimise it, don't delete it." },
+    { "id": "t3", "type": "touch", "performer": "bot", "label": "Bot step — automated", "owner": "System", "stepId": "t3", "x": 1440, "y": 220, "touchTimeManual": 0.3, "throughputManual": 480, "capacityManual": 4000, "classification": "VA", "valueNote": "A bot step is automated work — no person involved. Usually fast, and a good target to move manual steps onto." },
+    { "id": "t4", "type": "touch", "label": "Could-remove step", "owner": "Your team", "stepId": "t4", "x": 1740, "y": 220, "touchTimeManual": 0.8, "throughputManual": 2, "capacityManual": 5, "classification": "NVA", "valueNote": "COULD REMOVE = adds no value; a candidate to eliminate. Flow efficiency = valued time / total time, so cutting these (and the queues) raises it." },
+    { "id": "end", "type": "end", "label": "Value delivered", "x": 2040, "y": 220 }
   ],
   "edges": [
     { "id": "e1", "from": "start", "to": "q1" },
@@ -630,16 +630,19 @@ function rowsFor(stepId){
 }
 function metricFor(node){
   const rows = node.stepId ? rowsFor(node.stepId) : [];
-  let touch=null, wait=null, wip=null, hasData=false;
+  let touch=null, wait=null, wip=null, throughput=null, capacity=null, hasData=false;
   if(rows.length){
     hasData=true;
     const avg=key=>{ const v=rows.map(r=>parseFloat(r[key])).filter(x=>!isNaN(x)); return v.length? v.reduce((a,b)=>a+b,0)/v.length : null; };
     touch=avg("TouchTimeAvg"); wait=avg("WaitTimeAvg"); wip=avg("WIP"); if(wip==null) wip=avg("Volume");
+    throughput=avg("Throughput"); capacity=avg("Capacity");
   }
-  if(node.type==="touch" && touch==null) touch = node.touchTimeManual!=null ? node.touchTimeManual : null;
+  if(node.type==="touch" && touch==null)      touch      = node.touchTimeManual!=null ? node.touchTimeManual : null;
+  if(node.type==="touch" && throughput==null) throughput = node.throughputManual!=null ? node.throughputManual : null;
+  if(node.type==="touch" && capacity==null)   capacity   = node.capacityManual!=null  ? node.capacityManual  : null;
   if(node.type==="wait"  && wait==null)  wait  = node.waitTimeManual!=null ? node.waitTimeManual : null;
   if(node.type==="wait"  && wip==null)   wip   = node.wip!=null ? node.wip : null;
-  return {touch, wait, wip, hasData};
+  return {touch, wait, wip, throughput, capacity, hasData};
 }
 
 /* ---------- main-path traversal ---------- */
@@ -811,7 +814,7 @@ const F_META ="11px 'Segoe UI',system-ui,sans-serif";
 const LBL_LH=16, MET_LH=14, CAP_RY=9;
 
 /* ---- design-06 visual language: type hues, severity, icons (uniform cards) ---- */
-const CARD_W=166, CARD_H=150, TITLE_X=44;
+const CARD_W=236, CARD_H=156, TITLE_X=44;
 const KIND      = n => n.type==="wait" ? "queue" : (n.performer==="bot" ? "bot" : "human");
 const TYPECOL   = {queue:"var(--t-queue)", human:"var(--t-human)", bot:"var(--t-bot)"};
 const typeHue   = n => (n && n.color) || TYPECOL[KIND(n)];   // per-node override falls back to the type hue
@@ -914,8 +917,11 @@ let _lay={}; // last layout map, for connection-drag hit-testing
 function renderCanvas(r){
   const m=state.model, svg=$("#canvas"); svg.innerHTML="";
   svg.setAttribute("class", editable()?"build":"");
-  // dot-meter normalisation: queues against the busiest queue
+  // queue-cells normalisation: queues against the busiest queue
   const mwQ = maxWip();
+  // per-node share of total lead time (drives the time-segment position + %)
+  const tl={}; { let acc=0; const tot=r.turnaround||0;
+    r.flow.forEach(f=>{ tl[f.node.id]={start: tot>0?acc/tot*100:0, pct: tot>0?f.time/tot*100:0}; acc+=f.time; }); }
 
   // layout pass: uniform cards; centred on the original centre line
   const lay={}; _lay=lay;
@@ -958,48 +964,80 @@ function renderCanvas(r){
       g.appendChild(el("rect",{class:"nbox",x:0,y:bt,width:w,height:L.h,rx:Math.min(L.h,NODE_H)/2,fill:col.fill,stroke:col.stroke,"stroke-width":1.5}));
       let by=bt+L.h/2 - (L.lines.length*LBL_LH)/2 + 12;
       L.lines.forEach(ln=>{ g.appendChild(txt(w/2,by,ln,"nlabel",{"text-anchor":"middle"})); by+=LBL_LH; });
-    } else { // uniform card (queue + human + bot all identical)
+    } else { // uniform card — V2 split columns: primary (quantity/rate) | time
       const isQ=n.type==="wait", hue=typeHue(n);
-      g.appendChild(el("rect",{class:"nbox",x:0,y:bt,width:w,height:L.h,rx:13,fill:col.fill,stroke:hue,"stroke-width":1.5}));
+      g.appendChild(el("rect",{class:"nbox",x:0,y:bt,width:w,height:L.h,rx:14,fill:col.fill,stroke:hue,"stroke-width":1.5}));
       // type icon-well
       const WELL=26;
       g.appendChild(el("rect",{x:12,y:bt+12,width:WELL,height:WELL,rx:7,fill:hue}));
       g.appendChild(useIc(ICON_FOR(n), 16, bt+16, WELL-8, "#0f1720"));
+      // value glyph (steps only) — small, top-right; bottleneck handled below
+      if(!isQ){
+        if(n.classification) g.appendChild(useIc(VAL_IC[n.classification], w-12-15, bt+13, 15, "var(--muted)"));
+        else g.appendChild(useIc("ic-flag", w-12-15, bt+13, 15, "var(--warn)"));
+      }
       // owner eyebrow (small all-caps, above the title) — all card types
       const ownerStr=(n.owner||"").trim();
-      if(ownerStr){ const ot=truncToWidth(ownerStr.toUpperCase(), w-TITLE_X-12, F_META);
+      if(ownerStr){ const ot=truncToWidth(ownerStr.toUpperCase(), w-TITLE_X-30, F_META);
         g.appendChild(txt(TITLE_X,bt+20,ot,"nowner")); }
       // title (max 2 lines) — nudged down when an owner eyebrow is present
       let ty = ownerStr ? bt+34 : bt+25;
       L.titleLines.forEach(ln=>{ g.appendChild(txt(TITLE_X,ty,ln,"nlabel")); ty+=LBL_LH; });
-      // queue-only dot meter: label + number + 10 dots (fill ∝ busiest queue)
+
+      // ---- two equal metric columns ----
+      const NUMF="800 21px 'Segoe UI',system-ui,sans-serif";
+      const padL=12, midX=Math.round(w/2), colTop=bt+72, vizY=colTop+38;
+      g.appendChild(el("line",{x1:midX,y1:colTop-2,x2:midX,y2:bt+L.h-12,stroke:"var(--line)","stroke-width":1}));
+      // label + big number (+ unit) at a column's x; both columns use the same 21px number (balance)
+      const drawNum=(x,label,numStr,unitStr,numColor)=>{
+        g.appendChild(txt(x,colTop+4,label,"nowner"));
+        g.appendChild(txt(x,colTop+26,numStr,"",{"font-size":"21","font-weight":"800",fill:numColor||"var(--ink)"}));
+        if(unitStr){ const nw=measure(numStr,NUMF);
+          g.appendChild(txt(x+nw+5,colTop+26,unitStr,"nmeta",{"font-size":"10"})); }
+      };
+
+      // LEFT = primary
       if(isQ){
-        const gy=bt+62;
-        g.appendChild(txt(12,gy,"In queue","nmeta"));
-        g.appendChild(txt(w-12,gy, mt.wip!=null?fmt(mt.wip):"—", "nlabel",{"text-anchor":"end","font-size":"14"}));
-        const tankY=gy+7, frac = mt.wip!=null ? Math.max(0,Math.min(1, mt.wip/mwQ)) : 0;
-        const dotN=10, cy=tankY+4, step=(w-24)/dotN;
-        const filled = mt.wip!=null ? Math.max(mt.wip>0?1:0, Math.round(frac*dotN)) : 0;
-        for(let i=0;i<dotN;i++)
-          g.appendChild(el("circle",{cx:12+step*(i+0.5),cy,r:3.2,
-            fill:i<filled?hue:"#0f1825",stroke:"var(--line)","stroke-width":1}));
+        drawNum(padL,"IN QUEUE", mt.wip!=null?fmt(mt.wip):"—","cases", mt.wip!=null?null:"var(--faint)");
+        const cw=midX-padL-14, cols=10, rows=2, gap=3, cellH=8;
+        const cellW=(cw-gap*(cols-1))/cols;
+        const frac=mt.wip!=null?Math.max(0,Math.min(1,mt.wip/mwQ)):0;
+        const onN=mt.wip!=null?Math.max(mt.wip>0?1:0,Math.round(frac*cols*rows)):0;
+        for(let i=0;i<cols*rows;i++){ const rI=Math.floor(i/cols), cI=i%cols;
+          g.appendChild(el("rect",{x:padL+cI*(cellW+gap),y:vizY+rI*(cellH+gap),width:cellW,height:cellH,rx:2,
+            fill:i<onN?hue:"#0f1825",stroke:i<onN?hue:"var(--line)","stroke-width":1})); }
+      } else {
+        const tp=mt.throughput, cap=mt.capacity;
+        const load=(tp!=null&&cap!=null&&cap>0)?Math.max(0,Math.min(1,tp/cap)):null;
+        const lc=load==null?"var(--faint)":SEVC[load>=0.8?"hot":load>=0.6?"warn":"calm"].c;
+        drawNum(padL, n.performer==="bot"?"THROUGHPUT":"PACE", tp!=null?fmt(tp):"—","/day", tp!=null?null:"var(--faint)");
+        // capacity scale: idle (left) → at capacity (right), red danger zone at the top end
+        const sX=padL, sW=midX-padL-14, tY=vizY+14, tH=10, dz=0.85;
+        g.appendChild(el("rect",{x:sX,y:tY,width:sW,height:tH,rx:5,fill:"#0f1825",stroke:"var(--line)","stroke-width":1}));
+        g.appendChild(el("rect",{x:sX+sW*dz,y:tY,width:sW*(1-dz),height:tH,rx:5,fill:"rgba(240,101,72,.35)"}));
+        if(load!=null){
+          g.appendChild(el("rect",{x:sX,y:tY,width:Math.max(sW*load,3),height:tH,rx:5,fill:lc}));
+          const mx=sX+sW*load;
+          g.appendChild(txt(Math.min(Math.max(mx,sX+13),sX+sW-13),tY-5,Math.round(load*100)+"%","",
+            {"text-anchor":"middle","font-size":"10.5","font-weight":"800",fill:lc}));
+        } else g.appendChild(txt(sX+sW/2,tY-5,"no data","nmeta",{"text-anchor":"middle","font-size":"9"}));
+        g.appendChild(txt(sX,tY+tH+11,"IDLE","",{"font-size":"7.5","font-weight":"700",fill:"var(--faint)","letter-spacing":"0.4"}));
+        g.appendChild(txt(sX+sW,tY+tH+11,"AT CAPACITY","",{"text-anchor":"end","font-size":"7.5","font-weight":"700",fill:"var(--faint)","letter-spacing":"0.4"}));
       }
-      // time + % badge (coloured by severity)
-      const time=isQ?mt.wait:mt.touch;
-      const share=(r.turnaround>0 && time!=null) ? time/r.turnaround : 0;
-      const sc=SEVC[sevOf(share)];
-      const badgeY=bt+90;
-      g.appendChild(el("rect",{x:12,y:badgeY,width:w-24,height:22,rx:7,fill:sc.bg,stroke:sc.c,"stroke-opacity":"0.5"}));
-      g.appendChild(useIc("ic-clock",20,badgeY+5,12,sc.c));
-      g.appendChild(txt(38,badgeY+15, (time!=null?fmt(time)+" "+unit():"no data")+(share>0?` · ${Math.round(share*100)}%`:""),
-        "nlabel",{fill:sc.c,"font-size":"12"}));
-      // bottom row: steps show the value glyph (right); owner now lives in the eyebrow
-      const rowY=bt+L.h-22;
-      if(!isQ){
-        if(n.classification) g.appendChild(useIc(VAL_IC[n.classification], w-12-15, rowY, 15, "var(--muted)"));
-        else g.appendChild(useIc("ic-flag", w-12-15, rowY, 15, "var(--warn)"));
-      }
-      // bottleneck flag — only the single biggest bottleneck (severity badge carries the rest)
+
+      // RIGHT = time (positioned segment with % to the left)
+      const rx=midX+12, time=isQ?mt.wait:mt.touch;
+      const info=tl[n.id]||{start:0,pct:0}, pct = time!=null ? info.pct : null;
+      const sc=SEVC[sevOf((pct||0)/100)];
+      drawNum(rx, isQ?"WAIT":"TOUCH", time!=null?fmt(time):"—", unit(), time!=null?null:"var(--faint)");
+      { const trackX=rx+30, trackW=w-12-trackX, trackY=vizY+8, trackH=11;
+        g.appendChild(txt(rx,trackY+9, pct!=null?(pct<1?"<1%":Math.round(pct)+"%"):"—","",
+          {"font-size":"11","font-weight":"800",fill:pct!=null?sc.c:"var(--faint)"}));
+        g.appendChild(el("rect",{x:trackX,y:trackY,width:trackW,height:trackH,rx:4,fill:"#0f1825",stroke:"var(--line)","stroke-width":1}));
+        if(pct!=null){ const wpx=Math.max(trackW*Math.max(pct,2)/100,4), sx=trackX+Math.min(trackW*info.start/100, trackW-wpx);
+          g.appendChild(el("rect",{x:sx,y:trackY,width:wpx,height:trackH,rx:3,fill:sc.c})); } }
+
+      // bottleneck flag — only the single biggest bottleneck
       if(r.bottleneck && r.bottleneck.node.id===n.id){
         const fw=92;
         g.appendChild(el("rect",{x:w-fw-6,y:bt-11,width:fw,height:18,rx:6,fill:"var(--nva)"}));
@@ -1084,6 +1122,8 @@ function renderInspector(){
     body+=`<div class="insp-sec"><h4>Setup</h4>
       ${field(n.performer==="bot"?"Bot name":"Owner / role","owner",n.owner||"","text")}
       ${field(`Touch time (${u})`,"touchTimeManual",n.touchTimeManual==null?"":n.touchTimeManual,"number","Used when no data is bound")}
+      ${field("Throughput (cases/day)","throughputManual",n.throughputManual==null?"":n.throughputManual,"number","Cases this step completes per day")}
+      ${field("Capacity (cases/day)","capacityManual",n.capacityManual==null?"":n.capacityManual,"number","Most it could do per day — drives the capacity dial (load = throughput ÷ capacity)")}
     </div>`;
     body+=`<div class="insp-sec"><h4>${T.classTitle} <span class="h4note">· the conversation</span></h4>
       <div class="field">
@@ -1286,7 +1326,7 @@ function addNode(type, performer){
   const id=uid(type[0]+"_"); const stage=$("#stage");
   const label={touch:(performer==="bot"?"New bot step":"New step"),wait:"New queue",start:"Start",end:"End"}[type];
   const n={id,type,label,x:stage.scrollLeft+120,y:stage.scrollTop+160};
-  if(type==="touch"){ n.stepId=id; n.touchTimeManual=null; n.performer=performer==="bot"?"bot":"human"; }
+  if(type==="touch"){ n.stepId=id; n.touchTimeManual=null; n.throughputManual=null; n.capacityManual=null; n.performer=performer==="bot"?"bot":"human"; }
   if(type==="wait"){ n.stepId=id; n.waitTimeManual=null; }
   state.model.nodes.push(n); selectNode(id);
 }
@@ -1408,7 +1448,7 @@ function dataMatchSummary(){
 /* ---------- stats sheet: the flow defines the fields to fill in ---------- */
 function csvCell(v){ v=(v==null?"":String(v)); return /[",\n]/.test(v) ? '"'+v.replace(/"/g,'""')+'"' : v; }
 function exportSheet(){
-  const cols=["StepID","StepName","NodeType","Segment","Period","TouchTimeAvg","WaitTimeAvg","WIP","Volume"];
+  const cols=["StepID","StepName","NodeType","Segment","Period","TouchTimeAvg","WaitTimeAvg","WIP","Volume","Throughput","Capacity"];
   const period=new Date().toISOString().slice(0,7); // YYYY-MM
   const nodes=dataNodes();
   if(!nodes.length){ toast("Add a step or queue first"); return; }
@@ -1418,7 +1458,9 @@ function exportSheet(){
     return [ n.stepId, n.label, type, "ALL", period,
       isWork && mt.touch!=null ? mt.touch : "",
       !isWork && mt.wait!=null ? mt.wait : "",
-      !isWork && mt.wip!=null ? mt.wip : "", "" ];
+      !isWork && mt.wip!=null ? mt.wip : "", "",
+      isWork && mt.throughput!=null ? mt.throughput : "",
+      isWork && mt.capacity!=null ? mt.capacity : "" ];
   });
   const csv=[cols.join(",")].concat(rows.map(r=>r.map(csvCell).join(","))).join("\n");
   download((state.model.name||"flow").replace(/\s+/g,"-")+"-stats-sheet.csv", csv, "text/csv");
