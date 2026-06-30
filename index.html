@@ -100,6 +100,10 @@
     padding:8px 12px;font-size:13px;display:flex;align-items:center;gap:7px}
   #paletteBar button:hover{border-color:var(--accent)}
   #paletteBar .swatch{display:inline-block;width:10px;height:10px;border-radius:3px}
+  #paletteBar .swatch-group{background:transparent;border:1.5px solid var(--accent);border-radius:3px}
+  #paletteBar .swatch-comment{background:#f4d77a;border-radius:2px}
+  #paletteBar .pb-sep{width:1px;align-self:stretch;background:var(--line);margin:2px 4px}
+  #paletteBar button.tool-on{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 18%,var(--panel2));box-shadow:0 0 0 1px var(--accent) inset}
   #paletteBar .pb-hint{color:var(--faint);font-size:11px;margin-left:auto;max-width:300px;line-height:1.35}
   #paletteBar .pb-zoom{display:flex;align-items:center;gap:6px;margin-left:14px}
   #paletteBar .pb-zoom button{padding:6px 11px;font-size:15px;font-weight:700;line-height:1;min-width:34px;justify-content:center}
@@ -260,6 +264,25 @@
   .node.selected .nbox{stroke:var(--accent);stroke-width:2.5}
   .node.multi .nbox{stroke:var(--accent);stroke-width:2}
   .marquee{fill:var(--accent);fill-opacity:.08;stroke:var(--accent);stroke-width:1;stroke-dasharray:4 3;pointer-events:none}
+  /* ---- annotation tools (group / comment) ---- */
+  body.tool-group #stage, body.tool-comment #stage{cursor:crosshair}
+  body.tool-group .node, body.tool-comment .node{opacity:.5;transition:opacity .08s}
+  body.tool-group .node.in-group{opacity:1}
+  .group .gbox{fill:var(--accent);fill-opacity:.05;stroke:var(--accent);stroke-opacity:.55;stroke-width:1.5;stroke-dasharray:6 4;rx:14}
+  .build .group .gbox{pointer-events:all;cursor:grab}
+  .group .glabel{font-family:var(--font);fill:var(--accent);font-size:13px;font-weight:700;pointer-events:none}
+  .comment .cbox{fill:#f4d77a;stroke:#caa83f;stroke-width:1;rx:8}
+  .build .comment .cbox{pointer-events:all;cursor:grab}
+  .comment .ctext{width:100%;height:100%;box-sizing:border-box;border:0;background:transparent;resize:none;
+    font-family:var(--font);font-size:12.5px;line-height:1.35;color:#3a2f12;padding:8px;outline:none;pointer-events:none}
+  .comment .ctext::placeholder{color:#9a8443}
+  .build .comment .ctext.editing{pointer-events:auto;cursor:text}
+  .glabel-edit{width:100%;box-sizing:border-box;background:var(--panel2);border:1px solid var(--accent);color:var(--ink);
+    border-radius:5px;font-family:var(--font);font-size:13px;font-weight:700;padding:2px 6px;outline:none}
+  .anno-resize{fill:var(--accent);stroke:#06202a;stroke-width:1;opacity:0;cursor:nwse-resize;transition:opacity .1s}
+  .build .group:hover .anno-resize,.build .comment:hover .anno-resize{opacity:.9}
+  .comment .anno-resize{fill:#caa83f}
+  .build .group:hover .del-handle,.build .comment:hover .del-handle{opacity:1;pointer-events:all}
   .edge{fill:none;stroke:var(--faint);stroke-width:2}
   .edge.hot{stroke:var(--nva)}
   .edge-hit{fill:none;stroke:transparent;stroke-width:14;cursor:pointer}
@@ -404,6 +427,9 @@
   <button data-add="wait"><span class="swatch" style="background:var(--t-queue)"></span><svg class="t-ic"><use href="#ic-queue"/></svg>Queue</button>
   <button data-add="start"><span class="swatch" style="background:#cdd9e6"></span>Start</button>
   <button data-add="end"><span class="swatch" style="background:#cdd9e6"></span>End</button>
+  <span class="pb-sep"></span>
+  <button data-tool="group" title="Draw a box around several steps to group and label them"><span class="swatch swatch-group"></span>Group</button>
+  <button data-tool="comment" title="Drop a note anywhere on the map"><span class="swatch swatch-comment"></span>Comment</button>
   <span class="pb-hint">Drag boxes to arrange · drag empty space to select several · hover a box and drag a dot to connect (loops &amp; branches OK).</span>
   <button id="autoArrange" title="Tidy the layout into a left-to-right flow grid">Auto-arrange</button>
   <div class="pb-zoom">
@@ -502,6 +528,7 @@ const state = {
   selectedIds: [],   // ids of marquee multi-selected nodes (for group move)
   zoom: 1,
   viewer: false,
+  tool: null,        // null | "group" | "comment" — armed annotation tool
 };
 
 /* ---------- helpers ---------- */
@@ -629,6 +656,7 @@ function importFlowFromObj(obj){
 /* ---------- load model into engine ---------- */
 function loadModel(m){
   state.model=m;
+  m.groups = m.groups || []; m.comments = m.comments || [];   // visual annotations
   (m.nodes||[]).forEach(n=>{ if(n.x==null)n.x=40; if(n.y==null)n.y=200; });
   state.data = Array.isArray(m.data) ? m.data : [];   // imported stats are stored on the model
   state.selected=null; state.linkingFrom=null;
@@ -945,8 +973,9 @@ function renderCanvas(r){
   const lay={}; _lay=lay;
   m.nodes.forEach(n=>{ const L=nodeLayout(n); L.bt=NODE_H/2 - L.h/2; lay[n.id]=L; });
 
-  const maxX=Math.max(600,...m.nodes.map(n=>n.x+lay[n.id].w+80));
-  const maxY=Math.max(440,...m.nodes.map(n=>n.y+lay[n.id].bt+lay[n.id].h+160));
+  const anno=[...(m.groups||[]),...(m.comments||[])];
+  const maxX=Math.max(600,...m.nodes.map(n=>n.x+lay[n.id].w+80),...anno.map(a=>a.x+a.w+80));
+  const maxY=Math.max(440,...m.nodes.map(n=>n.y+lay[n.id].bt+lay[n.id].h+160),...anno.map(a=>a.y+a.h+120));
   const z=Z();
   svg.setAttribute("viewBox",`0 0 ${maxX} ${maxY}`);
   svg.setAttribute("width",maxX*z); svg.setAttribute("height",maxY*z);
@@ -956,6 +985,25 @@ function renderCanvas(r){
     const mk=el("marker",{id,viewBox:"0 0 10 10",refX:"9",refY:"5",markerWidth:"7",markerHeight:"7",orient:"auto-start-reverse"});
     mk.appendChild(el("path",{d:"M0,0 L10,5 L0,10 z",fill:col})); defs.appendChild(mk); });
   svg.appendChild(defs);
+
+  // groups render first so they sit behind edges and nodes
+  (m.groups||[]).forEach(grp=>{
+    const g=el("g",{class:"group"}); g.dataset.gid=grp.id;
+    const box=el("rect",{class:"gbox",x:grp.x,y:grp.y,width:grp.w,height:grp.h,rx:14});
+    g.appendChild(box);
+    const lbl=el("text",{class:"glabel",x:grp.x+12,y:grp.y+20}); lbl.textContent=grp.label||"Group";
+    g.appendChild(lbl);
+    if(editable()){
+      box.addEventListener("mousedown",ev=>startAnnoMove(ev,grp));
+      lbl.style.pointerEvents="all"; lbl.style.cursor="text";
+      lbl.addEventListener("mousedown",ev=>ev.stopPropagation());
+      lbl.addEventListener("dblclick",ev=>{ ev.stopPropagation(); editGroupLabel(grp); });
+      const rh=el("rect",{class:"anno-resize",x:grp.x+grp.w-7,y:grp.y+grp.h-7,width:12,height:12,rx:3});
+      rh.addEventListener("mousedown",ev=>startAnnoResize(ev,grp)); g.appendChild(rh);
+      g.appendChild(annoDelHandle(grp.x+grp.w, grp.y, ()=>removeAnno("groups",grp.id)));
+    }
+    svg.appendChild(g);
+  });
 
   const byId=Object.fromEntries(m.nodes.map(n=>[n.id,n]));
   const hotPath=new Set(r.path.map(n=>n.id));
@@ -1085,11 +1133,39 @@ function renderCanvas(r){
     g.addEventListener("mousedown",ev=>onNodeDown(ev,n));
     g.addEventListener("click",ev=>{ ev.stopPropagation();
       if(state.linkingFrom){ completeLink(n.id); return; }
-      if(!g._dragged) selectNode(n.id); });
+      if(!g._dragged && !_annoJustFinished) selectNode(n.id); });
     svg.appendChild(g);
   });
-  svg.onclick=()=>{ if(state.linkingFrom){ cancelLink(); } else if(!_connectJustFinished && !_marqueeJustFinished){ state.selectedIds=[]; selectNode(null); } };
-  svg.onmousedown=ev=>{ if(ev.target===svg) startMarquee(ev); };
+  // comments render last so they float above the flow
+  (m.comments||[]).forEach(cm=>{
+    const g=el("g",{class:"comment"}); g.dataset.cid=cm.id;
+    const box=el("rect",{class:"cbox",x:cm.x,y:cm.y,width:cm.w,height:cm.h,rx:8});
+    g.appendChild(box);
+    const fo=el("foreignObject",{x:cm.x,y:cm.y,width:cm.w,height:cm.h});
+    const ta=document.createElement("textarea");
+    ta.className="ctext"; ta.value=cm.text||""; ta.placeholder="Type a note…"; ta.readOnly=true;
+    if(editable()){
+      box.addEventListener("mousedown",ev=>startAnnoMove(ev,cm));
+      box.addEventListener("dblclick",ev=>{ ev.stopPropagation(); ta.readOnly=false; ta.classList.add("editing"); ta.focus(); });
+      ta.addEventListener("mousedown",ev=>ev.stopPropagation());
+      ta.addEventListener("input",()=>{ cm.text=ta.value; scheduleSave(); });
+      ta.addEventListener("blur",()=>{ ta.readOnly=true; ta.classList.remove("editing"); });
+    }
+    fo.appendChild(ta); g.appendChild(fo);
+    if(editable()){
+      const rh=el("rect",{class:"anno-resize",x:cm.x+cm.w-7,y:cm.y+cm.h-7,width:12,height:12,rx:3});
+      rh.addEventListener("mousedown",ev=>startAnnoResize(ev,cm)); g.appendChild(rh);
+      g.appendChild(annoDelHandle(cm.x+cm.w, cm.y, ()=>removeAnno("comments",cm.id)));
+    }
+    svg.appendChild(g);
+    if(state._editComment===cm.id){ state._editComment=null; ta.readOnly=false; ta.classList.add("editing"); setTimeout(()=>ta.focus(),0); }
+  });
+
+  svg.onclick=()=>{ if(state.linkingFrom){ cancelLink(); } else if(!_connectJustFinished && !_marqueeJustFinished && !_annoJustFinished){ state.selectedIds=[]; selectNode(null); } };
+  svg.onmousedown=ev=>{ if(ev.target!==svg) return;
+    if(state.tool==="group"){ startGroupSel(ev); return; }
+    if(state.tool==="comment"){ placeComment(ev); return; }
+    startMarquee(ev); };
 }
 
 
@@ -1372,7 +1448,10 @@ function duplicateNode(id){
 
 /* ---------- drag ---------- */
 let drag=null;
-function onNodeDown(ev,n){ if(!editable()||state.linkingFrom) return; ev.preventDefault();
+function onNodeDown(ev,n){ if(!editable()||state.linkingFrom) return;
+  if(state.tool==="group"){ startGroupSel(ev); return; }
+  if(state.tool==="comment"){ placeComment(ev); return; }
+  ev.preventDefault();
   const svg=$("#canvas"),rect=svg.getBoundingClientRect(),z=Z();
   drag={n,dx:(ev.clientX-rect.left)/z-n.x,dy:(ev.clientY-rect.top)/z-n.y,moved:false,g:ev.currentTarget,gx0:n.x,gy0:n.y}; drag.g._dragged=false;
   // grabbing a member of a marquee group moves the whole group; anything else is a plain single drag
@@ -1417,6 +1496,85 @@ function onMarqueeUp(ev){ window.removeEventListener("mousemove",onMarqueeMove);
   _marqueeJustFinished=true; setTimeout(()=>{ _marqueeJustFinished=false; },0); // suppress the trailing svg click
   render(); }
 
+/* ---------- annotations: groups & comments ---------- */
+let _annoJustFinished=false;
+function annoDone(){ _annoJustFinished=true; setTimeout(()=>{ _annoJustFinished=false; },0); }
+function setTool(t){
+  state.tool = (state.tool===t) ? null : t;
+  $("#paletteBar").querySelectorAll("[data-tool]").forEach(b=>b.classList.toggle("tool-on", b.dataset.tool===state.tool));
+  document.body.classList.toggle("tool-group", state.tool==="group");
+  document.body.classList.toggle("tool-comment", state.tool==="comment");
+  if(state.tool){ state.selectedIds=[]; selectNode(null); }
+}
+
+/* GROUP: drag a box; nodes inside light up live; on release a padded box is drawn around them */
+let groupSel=null;
+function groupHits(x0,y0,x1,y1){
+  const hits=[]; (state.model.nodes||[]).forEach(n=>{ const L=_lay[n.id]; if(!L) return;
+    const nx0=n.x, ny0=n.y+(L.bt||0), nx1=n.x+L.w, ny1=n.y+(L.bt||0)+L.h;
+    if(nx0<x1 && nx1>x0 && ny0<y1 && ny1>y0) hits.push(n); });
+  return hits;
+}
+function startGroupSel(ev){ ev.preventDefault(); const p=svgPt(ev);
+  groupSel={x0:p.x,y0:p.y,moved:false,rect:el("rect",{class:"marquee",x:p.x,y:p.y,width:0,height:0})};
+  $("#canvas").appendChild(groupSel.rect);
+  window.addEventListener("mousemove",onGroupSelMove); window.addEventListener("mouseup",onGroupSelUp); }
+function onGroupSelMove(ev){ if(!groupSel) return; const p=svgPt(ev);
+  const x=Math.min(groupSel.x0,p.x), y=Math.min(groupSel.y0,p.y), w=Math.abs(p.x-groupSel.x0), h=Math.abs(p.y-groupSel.y0);
+  groupSel.rect.setAttribute("x",x); groupSel.rect.setAttribute("y",y);
+  groupSel.rect.setAttribute("width",w); groupSel.rect.setAttribute("height",h);
+  if(w>3||h>3) groupSel.moved=true;
+  const hit=new Set(groupHits(x,y,x+w,y+h).map(n=>n.id));
+  $("#canvas").querySelectorAll("g.node").forEach(g=>g.classList.toggle("in-group", hit.has(g.dataset.id))); }
+function onGroupSelUp(ev){ window.removeEventListener("mousemove",onGroupSelMove); window.removeEventListener("mouseup",onGroupSelUp);
+  const gs=groupSel; groupSel=null; if(gs&&gs.rect.parentNode) gs.rect.parentNode.removeChild(gs.rect);
+  setTool(null);
+  if(!gs||!gs.moved){ render(); return; }
+  const p=svgPt(ev);
+  const hits=groupHits(Math.min(gs.x0,p.x),Math.min(gs.y0,p.y),Math.max(gs.x0,p.x),Math.max(gs.y0,p.y));
+  if(!hits.length){ render(); return; }
+  const PAD=22, TOP=PAD+16;   // extra headroom up top for the label
+  let bx0=Infinity,by0=Infinity,bx1=-Infinity,by1=-Infinity;
+  hits.forEach(n=>{ const L=_lay[n.id], ny0=n.y+(L.bt||0);
+    bx0=Math.min(bx0,n.x); by0=Math.min(by0,ny0); bx1=Math.max(bx1,n.x+L.w); by1=Math.max(by1,ny0+L.h); });
+  const g={id:uid("grp"), x:Math.max(0,bx0-PAD), y:Math.max(0,by0-TOP), w:0, h:0, label:"Group"};
+  g.w=(bx1+PAD)-g.x; g.h=(by1+PAD)-g.y;
+  state.model.groups.push(g); annoDone(); render(); }
+
+/* COMMENT: click to drop a note, then double-click it to type */
+function placeComment(ev){ ev.preventDefault(); const p=svgPt(ev);
+  const c={id:uid("cmt"), x:Math.max(0,p.x-100), y:Math.max(0,p.y-60), w:200, h:120, text:""};
+  state.model.comments.push(c); setTool(null); state._editComment=c.id; annoDone(); render(); }
+
+/* shared move / resize for both annotation kinds (groups move independently of nodes) */
+let annoDrag=null;
+function startAnnoMove(ev, ent){ if(!editable()) return; ev.preventDefault(); ev.stopPropagation(); const p=svgPt(ev);
+  annoDrag={ent, mode:"move", ox:p.x-ent.x, oy:p.y-ent.y};
+  window.addEventListener("mousemove",onAnnoMove); window.addEventListener("mouseup",onAnnoUp); }
+function startAnnoResize(ev, ent){ if(!editable()) return; ev.preventDefault(); ev.stopPropagation(); const p=svgPt(ev);
+  annoDrag={ent, mode:"resize", ox:p.x-(ent.x+ent.w), oy:p.y-(ent.y+ent.h)};
+  window.addEventListener("mousemove",onAnnoMove); window.addEventListener("mouseup",onAnnoUp); }
+function onAnnoMove(ev){ if(!annoDrag) return; const p=svgPt(ev), e=annoDrag.ent;
+  if(annoDrag.mode==="move"){ e.x=Math.max(0,p.x-annoDrag.ox); e.y=Math.max(0,p.y-annoDrag.oy); }
+  else { e.w=Math.max(60,p.x-annoDrag.ox-e.x); e.h=Math.max(40,p.y-annoDrag.oy-e.y); }
+  render(); }
+function onAnnoUp(){ window.removeEventListener("mousemove",onAnnoMove); window.removeEventListener("mouseup",onAnnoUp); annoDrag=null; }
+function removeAnno(kind,id){ const a=state.model[kind]; const i=a.findIndex(x=>x.id===id); if(i>=0)a.splice(i,1); render(); }
+function annoDelHandle(cx,cy,onDel){ const dh=el("g",{class:"del-handle"});
+  dh.appendChild(el("circle",{cx,cy,r:9}));
+  dh.appendChild(el("line",{x1:cx-3.5,y1:cy-3.5,x2:cx+3.5,y2:cy+3.5}));
+  dh.appendChild(el("line",{x1:cx+3.5,y1:cy-3.5,x2:cx-3.5,y2:cy+3.5}));
+  dh.addEventListener("mousedown",ev=>ev.stopPropagation());
+  dh.addEventListener("click",ev=>{ ev.stopPropagation(); onDel(); }); return dh; }
+function editGroupLabel(grp){ const svg=$("#canvas");
+  const fo=el("foreignObject",{x:grp.x+8,y:grp.y+4,width:Math.max(120,grp.w-16),height:26});
+  const inp=document.createElement("input"); inp.type="text"; inp.value=grp.label||""; inp.className="glabel-edit";
+  fo.appendChild(inp); svg.appendChild(fo); inp.focus(); inp.select();
+  const commit=()=>{ grp.label=inp.value.trim()||"Group"; render(); };
+  inp.addEventListener("blur",commit);
+  inp.addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); inp.blur(); }
+    else if(e.key==="Escape"){ inp.value=grp.label||""; inp.blur(); } }); }
+
 /* ---------- auto-arrange: lay nodes out as a left-to-right flow grid ---------- */
 function autoArrange(){
   if(!editable()||!state.model||!state.model.nodes.length) return;
@@ -1446,7 +1604,7 @@ function autoArrange(){
 let connectState=null, _connectJustFinished=false;
 function svgPt(ev){ const r=$("#canvas").getBoundingClientRect(),z=Z(); return {x:(ev.clientX-r.left)/z, y:(ev.clientY-r.top)/z}; }
 function startConnect(ev, n, side){
-  if(!editable()) return;
+  if(!editable()||state.tool) return;
   ev.preventDefault(); ev.stopPropagation();             // don't start a node move
   const p=portGeo(n,_lay[n.id],side);
   connectState={fromId:n.id, fromSide:side, p};
@@ -1662,7 +1820,7 @@ async function exportPicture(kind){
 /* ============================================================
    WIRING
    ============================================================ */
-function setMode(m){ state.mode=m; state.selected=null; cancelLink(true); render(); }   // m: "home" | "build"
+function setMode(m){ state.mode=m; state.selected=null; cancelLink(true); if(state.tool) setTool(null); render(); }   // m: "home" | "build"
 function goHome(){ if(state.currentId) scheduleSave(); state.mode="home"; resetThemeRoot(); updateChrome(); renderHome(); }
 
 $("#flowsBtn").onclick=goHome;
@@ -1670,6 +1828,7 @@ $("#brandHome").onclick=()=>{ if(!state.viewer) goHome(); };
 $("#segSel").onchange=e=>{ state.segment=e.target.value; render(); };
 $("#perSel").onchange=e=>{ state.period=e.target.value; render(); };
 $("#paletteBar").querySelectorAll("[data-add]").forEach(b=>b.addEventListener("click",()=>addNode(b.dataset.add,b.dataset.perf)));
+$("#paletteBar").querySelectorAll("[data-tool]").forEach(b=>b.addEventListener("click",()=>setTool(b.dataset.tool)));
 
 /* zoom the build canvas */
 function setZoom(z){ state.zoom=Math.max(0.4,Math.min(2,Math.round(z*100)/100));
@@ -1699,7 +1858,7 @@ $("#exportImgBtn").onclick=e=>{ e.stopPropagation(); const ep=$("#exportPop"); c
 $("#exportPng").onclick=()=>exportPicture("png");
 $("#exportPdf").onclick=()=>exportPicture("pdf");
 document.addEventListener("click",e=>{ if(!e.target.closest(".themewrap")&&!e.target.closest(".exportwrap")) closeMenus(); });
-document.addEventListener("keydown",e=>{ if(e.key==="Escape") closeMenus(); });
+document.addEventListener("keydown",e=>{ if(e.key==="Escape"){ closeMenus(); if(state.tool) setTool(null); } });
 
 /* save design / share */
 $("#saveModel").onclick=()=>{ download((state.model.name||"flow-builder").replace(/\s+/g,"-")+".json", JSON.stringify(state.model,null,2),"application/json"); toast("Design backed up (JSON)"); };
