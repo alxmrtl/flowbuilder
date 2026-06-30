@@ -256,6 +256,8 @@
   .node .nmeta{fill:var(--muted);font-size:11px}
   .node .nowner{fill:var(--faint);font-size:9px;letter-spacing:.6px;font-weight:700}
   .node.selected .nbox{stroke:var(--accent);stroke-width:2.5}
+  .node.multi .nbox{stroke:var(--accent);stroke-width:2}
+  .marquee{fill:var(--accent);fill-opacity:.08;stroke:var(--accent);stroke-width:1;stroke-dasharray:4 3;pointer-events:none}
   .edge{fill:none;stroke:var(--faint);stroke-width:2}
   .edge.hot{stroke:var(--nva)}
   .edge-hit{fill:none;stroke:transparent;stroke-width:14;cursor:pointer}
@@ -390,7 +392,8 @@
   <button data-add="wait"><span class="swatch" style="background:var(--t-queue)"></span><svg class="t-ic"><use href="#ic-queue"/></svg>Queue</button>
   <button data-add="start"><span class="swatch" style="background:#cdd9e6"></span>Start</button>
   <button data-add="end"><span class="swatch" style="background:#cdd9e6"></span>End</button>
-  <span class="pb-hint">Drag boxes to arrange · hover a box and drag a dot to connect (loops &amp; branches OK).</span>
+  <span class="pb-hint">Drag boxes to arrange · drag empty space to select several · hover a box and drag a dot to connect (loops &amp; branches OK).</span>
+  <button id="autoArrange" title="Tidy the layout into a left-to-right flow grid">Auto-arrange</button>
   <div class="pb-zoom">
     <button id="zoomOut" title="Zoom out">−</button>
     <span id="zoomLevel">100%</span>
@@ -484,6 +487,7 @@ const state = {
   segments: ["ALL"], periods: ["ALL"],
   segment: "ALL", period: "ALL",
   selected: null, linkingFrom: null,
+  selectedIds: [],   // ids of marquee multi-selected nodes (for group move)
   zoom: 1,
   viewer: false,
 };
@@ -957,7 +961,7 @@ function renderCanvas(r){
   const txt=(x,y,str,cls,extra)=>{ const t=el("text",Object.assign({x,y,class:cls},extra||{})); t.textContent=str; return t; };
 
   m.nodes.forEach(n=>{
-    const g=el("g",{class:"node"+(state.selected&&state.selected.id===n.id?" selected":""),transform:`translate(${n.x},${n.y})`});
+    const g=el("g",{class:"node"+(state.selected&&state.selected.id===n.id?" selected":"")+(state.selectedIds.includes(n.id)?" multi":""),transform:`translate(${n.x},${n.y})`});
     const col=nodeColors(n), L=lay[n.id], w=L.w, bt=L.bt, mt=L.mt;
 
     if(L.kind==="pill"){
@@ -1061,7 +1065,8 @@ function renderCanvas(r){
       if(!g._dragged) selectNode(n.id); });
     svg.appendChild(g);
   });
-  svg.onclick=()=>{ if(state.linkingFrom){ cancelLink(); } else if(!_connectJustFinished){ selectNode(null); } };
+  svg.onclick=()=>{ if(state.linkingFrom){ cancelLink(); } else if(!_connectJustFinished && !_marqueeJustFinished){ state.selectedIds=[]; selectNode(null); } };
+  svg.onmousedown=ev=>{ if(ev.target===svg) startMarquee(ev); };
 }
 
 
@@ -1089,7 +1094,7 @@ function renderRibbon(r){
 /* ============================================================
    INSPECTOR
    ============================================================ */
-function selectNode(id){ state.selected=id?{type:"node",id}:null; cancelLink(true); render(); }
+function selectNode(id){ state.selected=id?{type:"node",id}:null; state.selectedIds=[]; cancelLink(true); render(); }
 function selectEdge(id){ state.selected={type:"edge",id}; render(); }
 
 function renderInspector(){
@@ -1344,13 +1349,73 @@ function duplicateNode(id){
 let drag=null;
 function onNodeDown(ev,n){ if(!editable()||state.linkingFrom) return; ev.preventDefault();
   const svg=$("#canvas"),rect=svg.getBoundingClientRect(),z=Z();
-  drag={n,dx:(ev.clientX-rect.left)/z-n.x,dy:(ev.clientY-rect.top)/z-n.y,moved:false,g:ev.currentTarget}; drag.g._dragged=false;
+  drag={n,dx:(ev.clientX-rect.left)/z-n.x,dy:(ev.clientY-rect.top)/z-n.y,moved:false,g:ev.currentTarget,gx0:n.x,gy0:n.y}; drag.g._dragged=false;
+  // grabbing a member of a marquee group moves the whole group; anything else is a plain single drag
+  if(state.selectedIds.length>1 && state.selectedIds.includes(n.id)){
+    drag.group=state.selectedIds.map(id=>state.model.nodes.find(x=>x.id===id)).filter(Boolean)
+      .map(node=>({node,x0:node.x,y0:node.y}));
+  } else { state.selectedIds=[]; }
   window.addEventListener("mousemove",onDragMove); window.addEventListener("mouseup",onDragUp); }
 function onDragMove(ev){ if(!drag) return; const svg=$("#canvas"),rect=svg.getBoundingClientRect(),z=Z();
-  drag.n.x=Math.max(0,(ev.clientX-rect.left)/z-drag.dx); drag.n.y=Math.max(0,(ev.clientY-rect.top)/z-drag.dy);
+  const px=(ev.clientX-rect.left)/z-drag.dx, py=(ev.clientY-rect.top)/z-drag.dy;
+  if(drag.group){ // rigid group move: shift all members by one delta, clamped so none crosses 0
+    let ddx=px-drag.gx0, ddy=py-drag.gy0;
+    ddx=Math.max(ddx, -Math.min(...drag.group.map(it=>it.x0)));
+    ddy=Math.max(ddy, -Math.min(...drag.group.map(it=>it.y0)));
+    drag.group.forEach(it=>{ it.node.x=it.x0+ddx; it.node.y=it.y0+ddy; });
+  } else { drag.n.x=Math.max(0,px); drag.n.y=Math.max(0,py); }
   drag.moved=true; drag.g._dragged=true; render(); }
 function onDragUp(){ window.removeEventListener("mousemove",onDragMove); window.removeEventListener("mouseup",onDragUp);
   const g=drag&&drag.g; drag=null; setTimeout(()=>{ if(g)g._dragged=false; },0); }
+
+/* ---------- marquee (rubber-band) multi-select ---------- */
+let marquee=null, _marqueeJustFinished=false;
+function startMarquee(ev){ if(!editable()||state.linkingFrom) return; ev.preventDefault();
+  const p=svgPt(ev);
+  marquee={x0:p.x,y0:p.y,moved:false,rect:el("rect",{class:"marquee",x:p.x,y:p.y,width:0,height:0})};
+  $("#canvas").appendChild(marquee.rect);
+  window.addEventListener("mousemove",onMarqueeMove); window.addEventListener("mouseup",onMarqueeUp); }
+function onMarqueeMove(ev){ if(!marquee) return; const p=svgPt(ev);
+  const x=Math.min(marquee.x0,p.x), y=Math.min(marquee.y0,p.y), w=Math.abs(p.x-marquee.x0), h=Math.abs(p.y-marquee.y0);
+  marquee.rect.setAttribute("x",x); marquee.rect.setAttribute("y",y);
+  marquee.rect.setAttribute("width",w); marquee.rect.setAttribute("height",h);
+  if(w>3||h>3) marquee.moved=true; }
+function onMarqueeUp(ev){ window.removeEventListener("mousemove",onMarqueeMove); window.removeEventListener("mouseup",onMarqueeUp);
+  const m=marquee; marquee=null; if(m&&m.rect.parentNode) m.rect.parentNode.removeChild(m.rect);
+  if(!m||!m.moved) return;                              // a click, not a drag — let svg.onclick clear
+  const p=svgPt(ev);
+  const rx0=Math.min(m.x0,p.x), ry0=Math.min(m.y0,p.y), rx1=Math.max(m.x0,p.x), ry1=Math.max(m.y0,p.y);
+  const hits=[]; (state.model.nodes||[]).forEach(n=>{ const L=_lay[n.id]; if(!L) return;
+    const nx0=n.x, ny0=n.y+(L.bt||0), nx1=n.x+L.w, ny1=n.y+(L.bt||0)+L.h;   // box-intersection test
+    if(nx0<rx1 && nx1>rx0 && ny0<ry1 && ny1>ry0) hits.push(n.id); });
+  state.selectedIds=hits; state.selected=null;
+  _marqueeJustFinished=true; setTimeout(()=>{ _marqueeJustFinished=false; },0); // suppress the trailing svg click
+  render(); }
+
+/* ---------- auto-arrange: lay nodes out as a left-to-right flow grid ---------- */
+function autoArrange(){
+  if(!editable()||!state.model||!state.model.nodes.length) return;
+  const m=state.model;
+  const start=m.nodes.find(n=>n.type==="start")||m.nodes[0];
+  // column = shortest edge-distance from start (BFS); the spine order comes from flowWeights()
+  const col={}; const q=[start.id]; col[start.id]=0;
+  while(q.length){ const id=q.shift(); m.edges.filter(e=>e.from===id).forEach(e=>{
+    if(col[e.to]==null){ col[e.to]=col[id]+1; q.push(e.to); } }); }
+  // disconnected nodes get parked in trailing columns so nothing is lost
+  let extra=Math.max(-1,...Object.values(col));
+  const {order}=flowWeights();
+  const spine=order.length?order.slice():m.nodes.slice();
+  m.nodes.forEach(n=>{ if(!spine.find(s=>s.id===n.id)) spine.push(n); });
+  spine.forEach(n=>{ if(col[n.id]==null) col[n.id]=++extra; });
+  // assign a row within each column, in spine order
+  const COL_GAP=300, ROW_GAP=120, MARGIN_X=40, MARGIN_Y=120;
+  const rowOf={};
+  spine.forEach(n=>{ const c=col[n.id]; const r=(rowOf[c]||0); rowOf[c]=r+1;
+    n.x=MARGIN_X+c*COL_GAP; n.y=MARGIN_Y+r*ROW_GAP; });
+  m.edges.forEach(e=>{ delete e.fromSide; delete e.toSide; });   // clean default right→left routing
+  render();
+  toast("Layout tidied");
+}
 
 /* ---------- Visio-style connect: drag from a node's dot to another node ---------- */
 let connectState=null, _connectJustFinished=false;
@@ -1586,6 +1651,7 @@ function setZoom(z){ state.zoom=Math.max(0.4,Math.min(2,Math.round(z*100)/100));
   const zl=$("#zoomLevel"); if(zl) zl.textContent=Math.round(state.zoom*100)+"%"; render(); }
 $("#zoomIn").onclick=()=>setZoom(Z()+0.1);
 $("#zoomOut").onclick=()=>setZoom(Z()-0.1);
+$("#autoArrange").onclick=autoArrange;
 
 /* stats sheet: export a blank/prefilled sheet, import a filled one (snapshot, no live link) */
 $("#exportSheet").onclick=exportSheet;
