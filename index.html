@@ -211,6 +211,13 @@
   .insp-foot button.del:hover{border-color:var(--nva);background:rgba(240,101,72,.1)}
   .field{margin-bottom:12px}
   .field label{display:block;color:var(--muted);font-size:12px;margin-bottom:4px}
+  /* checkbox row (group toggle + member list) */
+  .checkrow{display:flex;align-items:center;gap:9px;cursor:pointer;margin-bottom:0;padding:6px 2px;color:var(--ink);font-size:13px}
+  .checkrow input[type=checkbox]{width:16px;height:16px;flex:0 0 auto;accent-color:var(--accent);cursor:pointer;margin:0}
+  .checkrow .ck-label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .memberlist{display:flex;flex-direction:column;gap:2px;max-height:240px;overflow:auto}
+  .memberlist .checkrow{border-top:1px solid var(--line)}
+  .memberlist .checkrow:first-child{border-top:0}
   .field input,.field textarea,.field select{width:100%;background:var(--panel2);border:1px solid var(--line);
     color:var(--ink);border-radius:7px;padding:8px;font-size:13px;font-family:inherit}
   .field textarea{min-height:64px;resize:vertical}
@@ -270,7 +277,15 @@
   body.tool-group .node.in-group{opacity:1}
   .group .gbox{fill:var(--accent);fill-opacity:.05;stroke:var(--accent);stroke-opacity:.55;stroke-width:1.5;stroke-dasharray:6 4;rx:14}
   .build .group .gbox{pointer-events:all;cursor:grab}
+  .group.selected .gbox{stroke-opacity:1;stroke-width:2;stroke-dasharray:none;fill-opacity:.09}
   .group .glabel{font-family:var(--font);fill:var(--accent);font-size:13px;font-weight:700;pointer-events:none}
+  /* per-group metrics table (top-right of the group frame) */
+  .gmetrics{border-collapse:collapse;font-family:var(--font);background:var(--panel);border:1px solid var(--line);
+    border-radius:7px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.18);width:max-content}
+  .gmetrics th,.gmetrics td{padding:3px 9px;text-align:right;font-size:11px;line-height:1.2;white-space:nowrap}
+  .gmetrics th{color:var(--muted);font-weight:600;border-bottom:1px solid var(--line)}
+  .gmetrics td{color:var(--ink);font-weight:700;font-variant-numeric:tabular-nums}
+  .gmetrics th:first-child,.gmetrics td:first-child{text-align:left}
   .comment .cbox{fill:#f4d77a;stroke:#caa83f;stroke-width:1;rx:8}
   .build .comment .cbox{pointer-events:all;cursor:grab}
   .comment .ctext{width:100%;height:100%;box-sizing:border-box;border:0;background:transparent;resize:none;
@@ -658,6 +673,12 @@ function loadModel(m){
   state.model=m;
   m.groups = m.groups || []; m.comments = m.comments || [];   // visual annotations
   (m.nodes||[]).forEach(n=>{ if(n.x==null)n.x=40; if(n.y==null)n.y=200; });
+  // older flows stored only the rect: default the show-info toggle, and flag missing
+  // membership for a one-time spatial backfill once node layout (_lay) exists (renderCanvas)
+  m.groups.forEach(grp=>{
+    if(grp.showInfo==null) grp.showInfo=true;
+    if(!Array.isArray(grp.members)) grp._backfill=true;
+  });
   state.data = Array.isArray(m.data) ? m.data : [];   // imported stats are stored on the model
   state.selected=null; state.linkingFrom=null;
   rebuildSegPer(); render();
@@ -749,6 +770,17 @@ function rollup(){
   const turnaround=touch+wait; const eff=turnaround>0? touch/turnaround : null;
   let bottleneck=null; if(waits.length) bottleneck=waits.slice().sort((a,b)=>b.wait-a.wait)[0];
   return {path, flow, touch, wait, turnaround, eff, waits, bottleneck, unclassified};
+}
+/* flow-weighted Turnaround / Touch / Wait totals for a group's member boxes only */
+function groupRollup(grp){
+  const {visits}=flowWeights();
+  const mem=new Set(grp.members||[]);
+  let touch=0, wait=0;
+  state.model.nodes.forEach(n=>{ if(!mem.has(n.id)) return;
+    const v=visits[n.id]||0; if(v<=0) return; const mt=metricFor(n);
+    if(n.type==="touch" && mt.touch!=null && mt.touch>0) touch += v*mt.touch;
+    if(n.type==="wait"  && mt.wait!=null  && mt.wait>0)  wait  += v*mt.wait; });
+  return {touch, wait, turnaround:touch+wait};
 }
 function isBottleneck(node, r){
   if(node.type!=="wait") return false;
@@ -988,16 +1020,28 @@ function renderCanvas(r){
 
   // groups render first so they sit behind edges and nodes
   (m.groups||[]).forEach(grp=>{
-    const g=el("g",{class:"group"}); g.dataset.gid=grp.id;
+    // one-time membership backfill for flows saved before explicit members existed
+    if(grp._backfill){ grp.members=groupHits(grp.x,grp.y,grp.x+grp.w,grp.y+grp.h).map(n=>n.id); delete grp._backfill; }
+    const sel=state.selected&&state.selected.type==="group"&&state.selected.id===grp.id;
+    const g=el("g",{class:"group"+(sel?" selected":"")}); g.dataset.gid=grp.id;
     const box=el("rect",{class:"gbox",x:grp.x,y:grp.y,width:grp.w,height:grp.h,rx:14});
+    if(grp.color){ box.style.stroke=grp.color; box.style.fill=grp.color; }  // inline style beats the CSS rule
     g.appendChild(box);
-    const lbl=el("text",{class:"glabel",x:grp.x+12,y:grp.y+20}); lbl.textContent=grp.label||"Group";
-    g.appendChild(lbl);
+    const showInfo=grp.showInfo!==false;
+    if(showInfo){
+      const lbl=el("text",{class:"glabel",x:grp.x+12,y:grp.y+20}); lbl.textContent=grp.label||"Group";
+      if(grp.color) lbl.style.fill=grp.color;
+      g.appendChild(lbl);
+      if(editable()){
+        lbl.style.pointerEvents="all"; lbl.style.cursor="text";
+        lbl.addEventListener("mousedown",ev=>ev.stopPropagation());
+        lbl.addEventListener("dblclick",ev=>{ ev.stopPropagation(); editGroupLabel(grp); });
+      }
+      g.appendChild(groupMetricsEl(grp));
+    }
     if(editable()){
       box.addEventListener("mousedown",ev=>startAnnoMove(ev,grp));
-      lbl.style.pointerEvents="all"; lbl.style.cursor="text";
-      lbl.addEventListener("mousedown",ev=>ev.stopPropagation());
-      lbl.addEventListener("dblclick",ev=>{ ev.stopPropagation(); editGroupLabel(grp); });
+      box.addEventListener("click",ev=>{ ev.stopPropagation(); if(!_annoMoved) selectGroup(grp.id); });
       const rh=el("rect",{class:"anno-resize",x:grp.x+grp.w-7,y:grp.y+grp.h-7,width:12,height:12,rx:3});
       rh.addEventListener("mousedown",ev=>startAnnoResize(ev,grp)); g.appendChild(rh);
       g.appendChild(annoDelHandle(grp.x+grp.w, grp.y, ()=>removeAnno("groups",grp.id)));
@@ -1195,12 +1239,14 @@ function renderRibbon(r){
    ============================================================ */
 function selectNode(id){ state.selected=id?{type:"node",id}:null; state.selectedIds=[]; cancelLink(true); render(); }
 function selectEdge(id){ state.selected={type:"edge",id}; render(); }
+function selectGroup(id){ state.selected=id?{type:"group",id}:null; state.selectedIds=[]; cancelLink(true); render(); }
 
 function renderInspector(){
   const insp=$("#inspector");
   if(!editable() || !state.selected){ insp.classList.remove("show"); return; }
   insp.classList.add("show");
   if(state.selected.type==="edge") return renderEdgeInspector();
+  if(state.selected.type==="group") return renderGroupInspector();
   const n=state.model.nodes.find(x=>x.id===state.selected.id);
   if(!n){ insp.classList.remove("show"); return; }
   const u=unit(); const r=rollup(); const linking=state.linkingFrom===n.id;
@@ -1420,6 +1466,80 @@ function renderEdgeInspector(){
   $("#delEdge").addEventListener("click",()=>{ state.model.edges=state.model.edges.filter(x=>x.id!==e.id); selectNode(null); });
 }
 
+/* on-canvas metrics table to the right of a group's title (flow-weighted member totals) */
+function groupMetricsEl(grp){
+  const u=unit(), gr=groupRollup(grp);
+  const fo=el("foreignObject",{x:grp.x+12,y:grp.y+8,width:Math.max(80,grp.w-24),height:56});
+  fo.style.pointerEvents="none";
+  const wrap=document.createElement("div");
+  wrap.style.cssText="display:flex;justify-content:flex-end;width:100%";
+  wrap.innerHTML=`<table class="gmetrics"><thead><tr><th>TAT (${u})</th><th>Touch</th><th>Wait</th></tr></thead>
+    <tbody><tr><td>${fmt(gr.turnaround)}</td><td>${fmt(gr.touch)}</td><td>${fmt(gr.wait)}</td></tr></tbody></table>`;
+  fo.appendChild(wrap); return fo;
+}
+function renderGroupInspector(){
+  const insp=$("#inspector");
+  const grp=state.model.groups.find(g=>g.id===state.selected.id);
+  if(!grp){ insp.classList.remove("show"); return; }
+  const u=unit(), gr=groupRollup(grp);
+  const accent=(getComputedStyle(document.body).getPropertyValue("--accent")||"#5ec6c6").trim();
+  const cur=grp.color||"";
+  const boxes=state.model.nodes.filter(n=>n.type==="touch"||n.type==="wait");
+  const mem=new Set(grp.members||[]);
+  const memberRows = boxes.length
+    ? boxes.map(n=>`<label class="checkrow"><input type="checkbox" data-member="${n.id}" ${mem.has(n.id)?"checked":""}/>
+        <span class="ck-label">${esc(n.label||"Untitled")}</span></label>`).join("")
+    : `<div class="sub">No step or queue boxes yet.</div>`;
+  insp.innerHTML=`<div class="insp-head">
+      <div class="insp-htop">
+        <div class="insp-iconwell" style="--hue:${grp.color||"var(--accent)"}"><span>▢</span></div>
+        <input class="insp-title" data-glabel value="${esc(grp.label||"")}" placeholder="Group name" />
+        <button class="insp-close" id="inspClose" title="Close">✕</button>
+      </div>
+    </div>
+    <div class="insp-body">
+      <div class="insp-sec">
+        <div class="field boxcolour"><label>Group colour</label>
+          <div class="swatchrow">
+            <input type="color" data-gcolor value="${cur||accent}" />
+            <span class="swlabel">${cur?"Custom colour":"Default · accent"}</span>
+            <button class="swreset" data-gcolorreset ${cur?"":"disabled"}>Reset</button>
+          </div></div>
+        <label class="checkrow"><input type="checkbox" data-gshow ${grp.showInfo!==false?"checked":""}/>
+          <span class="ck-label">Show title &amp; metrics on canvas</span></label>
+      </div>
+      <div class="insp-sec"><h4>Totals <span class="h4note">· members, flow-weighted</span></h4>
+        <table class="gmetrics" style="width:100%">
+          <thead><tr><th>TAT (${u})</th><th>Touch</th><th>Wait</th></tr></thead>
+          <tbody><tr><td>${fmt(gr.turnaround)}</td><td>${fmt(gr.touch)}</td><td>${fmt(gr.wait)}</td></tr></tbody></table>
+      </div>
+      <div class="insp-sec"><h4>Boxes in this group</h4>
+        <div class="memberlist">${memberRows}</div>
+      </div>
+    </div>
+    <div class="insp-foot"><button class="del" id="delGroup">🗑 Delete group</button></div>`;
+  wireGroupInspector(grp);
+}
+function wireGroupInspector(grp){
+  const insp=$("#inspector");
+  const lab=insp.querySelector("[data-glabel]");
+  if(lab){
+    lab.addEventListener("input",()=>{ grp.label=lab.value;
+      const t=$("#canvas").querySelector(`g.group[data-gid="${grp.id}"] .glabel`); if(t) t.textContent=grp.label||"Group"; });
+    lab.addEventListener("change",()=>{ grp.label=lab.value.trim()||"Group"; render(); });
+  }
+  const gc=insp.querySelector("[data-gcolor]"); if(gc) gc.addEventListener("change",()=>{ grp.color=gc.value; render(); });
+  const gcr=insp.querySelector("[data-gcolorreset]"); if(gcr) gcr.addEventListener("click",()=>{ delete grp.color; render(); });
+  const gs=insp.querySelector("[data-gshow]"); if(gs) gs.addEventListener("change",()=>{ grp.showInfo=gs.checked; render(); });
+  insp.querySelectorAll("[data-member]").forEach(cb=>cb.addEventListener("change",()=>{
+    const id=cb.dataset.member; grp.members=grp.members||[];
+    if(cb.checked){ if(!grp.members.includes(id)) grp.members.push(id); }
+    else grp.members=grp.members.filter(x=>x!==id);
+    render(); }));
+  const cl=insp.querySelector("#inspClose"); if(cl) cl.addEventListener("click",()=>selectNode(null));
+  const del=insp.querySelector("#delGroup"); if(del) del.addEventListener("click",()=>{ removeAnno("groups",grp.id); selectNode(null); });
+}
+
 /* ---------- linking ---------- */
 function startLink(id){ state.linkingFrom=id; toast("Click the target node…"); render(); }
 function completeLink(toId){ const from=state.linkingFrom; if(!from||from===toId){ cancelLink(); return; }
@@ -1537,7 +1657,8 @@ function onGroupSelUp(ev){ window.removeEventListener("mousemove",onGroupSelMove
   let bx0=Infinity,by0=Infinity,bx1=-Infinity,by1=-Infinity;
   hits.forEach(n=>{ const L=_lay[n.id], ny0=n.y+(L.bt||0);
     bx0=Math.min(bx0,n.x); by0=Math.min(by0,ny0); bx1=Math.max(bx1,n.x+L.w); by1=Math.max(by1,ny0+L.h); });
-  const g={id:uid("grp"), x:Math.max(0,bx0-PAD), y:Math.max(0,by0-TOP), w:0, h:0, label:"Group"};
+  const g={id:uid("grp"), x:Math.max(0,bx0-PAD), y:Math.max(0,by0-TOP), w:0, h:0, label:"Group",
+           members:hits.map(n=>n.id), showInfo:true};
   g.w=(bx1+PAD)-g.x; g.h=(by1+PAD)-g.y;
   state.model.groups.push(g); annoDone(); render(); }
 
@@ -1547,14 +1668,14 @@ function placeComment(ev){ ev.preventDefault(); const p=svgPt(ev);
   state.model.comments.push(c); setTool(null); state._editComment=c.id; annoDone(); render(); }
 
 /* shared move / resize for both annotation kinds (groups move independently of nodes) */
-let annoDrag=null;
+let annoDrag=null, _annoMoved=false;   // _annoMoved distinguishes a drag from a click-to-select
 function startAnnoMove(ev, ent){ if(!editable()) return; ev.preventDefault(); ev.stopPropagation(); const p=svgPt(ev);
-  annoDrag={ent, mode:"move", ox:p.x-ent.x, oy:p.y-ent.y};
+  _annoMoved=false; annoDrag={ent, mode:"move", ox:p.x-ent.x, oy:p.y-ent.y};
   window.addEventListener("mousemove",onAnnoMove); window.addEventListener("mouseup",onAnnoUp); }
 function startAnnoResize(ev, ent){ if(!editable()) return; ev.preventDefault(); ev.stopPropagation(); const p=svgPt(ev);
-  annoDrag={ent, mode:"resize", ox:p.x-(ent.x+ent.w), oy:p.y-(ent.y+ent.h)};
+  _annoMoved=true; annoDrag={ent, mode:"resize", ox:p.x-(ent.x+ent.w), oy:p.y-(ent.y+ent.h)};
   window.addEventListener("mousemove",onAnnoMove); window.addEventListener("mouseup",onAnnoUp); }
-function onAnnoMove(ev){ if(!annoDrag) return; const p=svgPt(ev), e=annoDrag.ent;
+function onAnnoMove(ev){ if(!annoDrag) return; _annoMoved=true; const p=svgPt(ev), e=annoDrag.ent;
   if(annoDrag.mode==="move"){ e.x=Math.max(0,p.x-annoDrag.ox); e.y=Math.max(0,p.y-annoDrag.oy); }
   else { e.w=Math.max(60,p.x-annoDrag.ox-e.x); e.h=Math.max(40,p.y-annoDrag.oy-e.y); }
   render(); }
