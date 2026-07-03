@@ -272,6 +272,17 @@
   .node.multi .nbox{stroke:var(--accent);stroke-width:2}
   .marquee{fill:var(--accent);fill-opacity:.08;stroke:var(--accent);stroke-width:1;stroke-dasharray:4 3;pointer-events:none}
   .guide{stroke:var(--accent);stroke-width:1;stroke-dasharray:4 4;opacity:.85;pointer-events:none}
+  .subchip{cursor:pointer}
+  .sublist{display:flex;flex-direction:column;gap:6px;margin-bottom:8px}
+  .subrow{display:flex;gap:6px;align-items:center}
+  .subrow .subname{flex:1;min-width:0;text-align:left;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:7px 10px;color:var(--ink);cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .subrow .subname:hover{border-color:var(--accent)}
+  .subrow button:not(.subname){background:var(--panel2);border:1px solid var(--line);border-radius:8px;color:var(--muted);cursor:pointer;padding:6px 9px}
+  .subrow button:disabled{opacity:.35;cursor:default}
+  .subrow .subx:hover:not(:disabled){color:var(--nva);border-color:var(--nva)}
+  button.addsub{width:100%;background:transparent;border:1px dashed var(--line);border-radius:8px;color:var(--muted);padding:8px;cursor:pointer}
+  button.addsub:hover{border-color:var(--accent);color:var(--accent)}
+  .backparent{background:transparent;border:none;color:var(--accent);cursor:pointer;padding:0 6px 0 0;font-size:12px}
   /* ---- annotation tools (group / comment) ---- */
   body.tool-group #stage, body.tool-comment #stage{cursor:crosshair}
   body.tool-group .node, body.tool-comment .node{opacity:.5;transition:opacity .08s}
@@ -713,6 +724,18 @@ function rowsFor(stepId){
     (state.period==="ALL"  || String(r.Period)===state.period));
 }
 function metricFor(node){
+  // a step with sub-steps reports their rollup: touch = Σ children, pace/capacity = the
+  // slowest child (chain constraint). Its own manual fields are ignored while children exist.
+  if(node.type==="touch" && node.children && node.children.length){
+    let touch=null, throughput=null, capacity=null, hasData=false;
+    node.children.forEach(cid=>{ const k=state.model.nodes.find(x=>x.id===cid); if(!k) return;
+      const mt=metricFor(k);
+      if(mt.touch!=null) touch=(touch||0)+mt.touch;
+      if(mt.throughput!=null) throughput = throughput==null?mt.throughput:Math.min(throughput,mt.throughput);
+      if(mt.capacity!=null)   capacity   = capacity==null?mt.capacity:Math.min(capacity,mt.capacity);
+      if(mt.hasData) hasData=true; });
+    return {touch, wait:null, wip:null, throughput, capacity, hasData, rolled:true};
+  }
   const rows = node.stepId ? rowsFor(node.stepId) : [];
   let touch=null, wait=null, wip=null, throughput=null, capacity=null, hasData=false;
   if(rows.length){
@@ -910,6 +933,13 @@ const LBL_LH=16, MET_LH=14, CAP_RY=9;
 
 /* ---- design-06 visual language: type hues, severity, icons (uniform cards) ---- */
 const CARD_W=236, CARD_H=156, TITLE_X=44;
+/* ---- sub-steps: a touch step can hold child steps (granularity control) ----
+   Children are full nodes flagged with parentId; they carry NO edges — arrows always
+   attach to the parent, whose card widens into a frame when expanded. */
+const SUB_PADF=16, SUB_GAP=24, SUB_HEAD=34;
+const frameWOf = N => SUB_PADF*2 + N*CARD_W + (N-1)*SUB_GAP;
+const hasSubs  = n => !!(n && n.children && n.children.length);
+const childrenOf = n => (n.children||[]).map(id=>state.model.nodes.find(x=>x.id===id)).filter(Boolean);
 const KIND      = n => n.type==="wait" ? "queue" : (n.performer==="bot" ? "bot" : "human");
 const TYPECOL   = {queue:"var(--t-queue)", human:"var(--t-human)", bot:"var(--t-bot)"};
 const typeHue   = n => (n && n.color) || TYPECOL[KIND(n)];   // per-node override falls back to the type hue
@@ -984,6 +1014,9 @@ function nodeLayout(n){
     return {w:150, h, lines, kind:"pill"};
   }
   const mt=metricFor(n);
+  if(n.type==="touch" && hasSubs(n) && n.expanded){   // expanded meta step → wide frame holding its child cards
+    return {w:frameWOf(n.children.length), h:SUB_HEAD+CARD_H+SUB_PADF+10, mt, kind:"frame"};
+  }
   const titleLines=wrapText(n.label, CARD_W-TITLE_X-14, F_LABEL).slice(0,2);  // title clamps to 2 lines
   return {w:CARD_W, h:CARD_H, titleLines, mt, kind:"card"};
 }
@@ -1018,11 +1051,23 @@ function renderCanvas(r){
   const mwQ = maxWip();
   // per-node share of total lead time (drives the time-segment position + %)
   const tl={}; { let acc=0; const tot=r.turnaround||0;
-    r.flow.forEach(f=>{ tl[f.node.id]={start: tot>0?acc/tot*100:0, pct: tot>0?f.time/tot*100:0}; acc+=f.time; }); }
+    r.flow.forEach(f=>{ tl[f.node.id]={start: tot>0?acc/tot*100:0, pct: tot>0?f.time/tot*100:0}; acc+=f.time; });
+    // sub-steps inherit their slice of the parent's band (child touch × parent visits)
+    r.flow.forEach(f=>{ const p=f.node; if(p.type!=="touch"||!hasSubs(p)) return;
+      let cacc=(tl[p.id]||{start:0}).start;
+      childrenOf(p).forEach(k=>{ const kmt=metricFor(k);
+        const pct = (tot>0 && kmt.touch!=null) ? (kmt.touch*(f.visits||1))/tot*100 : 0;
+        tl[k.id]={start:cacc, pct}; cacc+=pct; }); }); }
 
   // layout pass: uniform cards; centred on the original centre line
   const lay={}; _lay=lay;
   m.nodes.forEach(n=>{ const L=nodeLayout(n); L.bt=NODE_H/2 - L.h/2; lay[n.id]=L; });
+  // expanded meta steps position their children inside the frame (children have no free x/y)
+  m.nodes.forEach(n=>{ if(n.type==="touch" && n.expanded && hasSubs(n)){
+    const L=lay[n.id], topY=n.y+L.bt;
+    childrenOf(n).forEach((k,i)=>{ const KL=lay[k.id]; if(!KL) return;
+      k.x=n.x+SUB_PADF+i*(CARD_W+SUB_GAP); k.y=topY+SUB_HEAD-KL.bt; });
+  }});
 
   const anno=[...(m.groups||[]),...(m.comments||[])];
   const maxX=Math.max(600,...m.nodes.map(n=>n.x+lay[n.id].w+80),...anno.map(a=>a.x+a.w+80));
@@ -1091,10 +1136,29 @@ function renderCanvas(r){
   const txt=(x,y,str,cls,extra)=>{ const t=el("text",Object.assign({x,y,class:cls},extra||{})); t.textContent=str; return t; };
 
   m.nodes.forEach(n=>{
+    // children only render while their parent is expanded (they live inside its frame)
+    if(n.parentId){ const p=byId[n.parentId];
+      if(!p || !p.expanded || !(p.children||[]).includes(n.id)) return; }
     const g=el("g",{class:"node"+(state.selected&&state.selected.id===n.id?" selected":"")+(state.selectedIds.includes(n.id)?" multi":""),transform:`translate(${n.x},${n.y})`});
     const col=nodeColors(n), L=lay[n.id], w=L.w, bt=L.bt, mt=L.mt;
 
-    if(L.kind==="pill"){
+    if(L.kind==="frame"){ // expanded meta step: dashed hue frame + header; child cards draw themselves
+      const hue=typeHue(n);
+      g.appendChild(el("rect",{class:"nbox",x:0,y:bt,width:w,height:L.h,rx:16,fill:col.fill,stroke:hue,"stroke-width":1.5,"stroke-dasharray":"7 5"}));
+      g.appendChild(el("rect",{x:0,y:bt,width:w,height:L.h,rx:16,fill:hue,"fill-opacity":"0.05","pointer-events":"none"}));
+      const WELL=20;
+      g.appendChild(el("rect",{x:12,y:bt+7,width:WELL,height:WELL,rx:6,fill:hue}));
+      g.appendChild(useIc(ICON_FOR(n), 15, bt+10, WELL-6, "#0f1720"));
+      g.appendChild(txt(40,bt+21,truncToWidth(n.label,w-260,F_LABEL),"nlabel"));
+      const sum = mt.touch!=null ? `Σ ${fmt(mt.touch)} ${unit()} · ` : "";
+      g.appendChild(txt(w-96,bt+21,`${sum}${n.children.length} sub-steps`,"nmeta",{"text-anchor":"end"}));
+      const chip=el("g",{class:"subchip"});
+      chip.appendChild(el("rect",{x:w-88,y:bt+6,width:76,height:20,rx:7,fill:hue}));
+      chip.appendChild(txt(w-50,bt+20,"▾ CLOSE","",{fill:"#0f1720","font-size":"9.5","font-weight":"800","text-anchor":"middle"}));
+      chip.addEventListener("mousedown",ev=>ev.stopPropagation());
+      chip.addEventListener("click",ev=>{ ev.stopPropagation(); toggleExpand(n.id); });
+      g.appendChild(chip);
+    } else if(L.kind==="pill"){
       g.appendChild(el("rect",{class:"nbox",x:0,y:bt,width:w,height:L.h,rx:Math.min(L.h,NODE_H)/2,fill:col.fill,stroke:col.stroke,"stroke-width":1.5}));
       let by=bt+L.h/2 - (L.lines.length*LBL_LH)/2 + 12;
       L.lines.forEach(ln=>{ g.appendChild(txt(w/2,by,ln,"nlabel",{"text-anchor":"middle"})); by+=LBL_LH; });
@@ -1179,11 +1243,21 @@ function renderCanvas(r){
         g.appendChild(useIc("ic-flag",w-fw-2,bt-9,13,"#2a0a04"));
         g.appendChild(txt(w-fw+15,bt+2,"BOTTLENECK","",{fill:"#2a0a04","font-size":"9.5","font-weight":"700"}));
       }
+      // collapsed meta step: chip that expands the sub-steps in place
+      if(!isQ && hasSubs(n)){
+        const label=`▸ ${n.children.length} SUB-STEPS`, cw=30+label.length*5.6;
+        const chip=el("g",{class:"subchip"});
+        chip.appendChild(el("rect",{x:8,y:bt+L.h-9,width:cw,height:18,rx:6,fill:hue}));
+        chip.appendChild(txt(8+cw/2,bt+L.h+4,label,"",{fill:"#0f1720","font-size":"9.5","font-weight":"800","text-anchor":"middle"}));
+        chip.addEventListener("mousedown",ev=>ev.stopPropagation());
+        chip.addEventListener("click",ev=>{ ev.stopPropagation(); toggleExpand(n.id); });
+        g.appendChild(chip);
+      }
     }
 
-    // connection handles (4 dots) — editing only
+    // connection handles (4 dots) — editing only; sub-steps carry no arrows of their own
     if(editable()){
-      SIDES.forEach(side=>{ const p=portGeo(n,L,side);
+      if(!n.parentId) SIDES.forEach(side=>{ const p=portGeo(n,L,side);
         const dot=el("circle",{class:"anchor",cx:p.x-n.x,cy:p.y-n.y,r:5,"data-side":side});
         dot.addEventListener("mousedown",ev=>startConnect(ev,n,side));
         g.appendChild(dot); });
@@ -1297,13 +1371,31 @@ function renderInspector(){
     const toolSeg=`<div class="field"><label>Tool</label><div class="seg tool">
         ${toolBtn("","None")}${toolBtn("uipath","UiPath")}${toolBtn("copilot","Copilot")}${toolBtn("excel","Excel")}
       </div></div>`;
+    const kids=childrenOf(n);
+    const metricFields = kids.length
+      ? `<div class="field"><label>Times &amp; pace <span class="h4note">· rolled up</span></label>
+           <div class="sub">Touch <b>${fmt(metricFor(n).touch)} ${u}</b> = the sum of ${kids.length} sub-steps; pace/capacity follow the slowest one. Edit the sub-steps to change these.</div></div>`
+      : field(`Touch time (${u})`,"touchTimeManual",n.touchTimeManual==null?"":n.touchTimeManual,"number","Used when no data is bound")
+        +field("Pace (cases/day)","throughputManual",n.throughputManual==null?"":n.throughputManual,"number","Cases this step completes per day")
+        +field("Capacity (cases/day)","capacityManual",n.capacityManual==null?"":n.capacityManual,"number","Most it could do per day — drives the capacity dial (load = pace ÷ capacity)");
     body+=`<div class="insp-sec"><h4>Setup</h4>
       ${toolSeg}
       ${field(n.performer==="bot"?"Bot name":"Owner / role","owner",n.owner||"","text")}
-      ${field(`Touch time (${u})`,"touchTimeManual",n.touchTimeManual==null?"":n.touchTimeManual,"number","Used when no data is bound")}
-      ${field("Pace (cases/day)","throughputManual",n.throughputManual==null?"":n.throughputManual,"number","Cases this step completes per day")}
-      ${field("Capacity (cases/day)","capacityManual",n.capacityManual==null?"":n.capacityManual,"number","Most it could do per day — drives the capacity dial (load = pace ÷ capacity)")}
+      ${metricFields}
     </div>`;
+    if(!n.parentId){
+      const rows=kids.map((k,i)=>`<div class="subrow">
+          <button class="subname" data-subsel="${k.id}" title="Edit this sub-step">${esc(k.label)}</button>
+          <button data-submove="${i},-1" ${i===0?"disabled":""} title="Move earlier">↑</button>
+          <button data-submove="${i},1" ${i===kids.length-1?"disabled":""} title="Move later">↓</button>
+          <button class="subx" data-subdel="${k.id}" title="Remove sub-step">✕</button>
+        </div>`).join("");
+      body+=`<div class="insp-sec"><h4>Sub-steps <span class="h4note">· break the step down</span></h4>
+        ${rows?`<div class="sublist">${rows}</div>`
+              :`<div class="sub" style="margin-bottom:8px">Split this step into smaller steps — times roll up automatically and the card expands in place on the map.</div>`}
+        <button id="addSub" class="addsub">+ Add sub-step</button>
+      </div>`;
+    }
     body+=`<details class="insp-adv"><summary>${T.classTitle} <span class="h4note">· the conversation</span></summary>
       <div class="field">
         <div class="seg">
@@ -1340,12 +1432,15 @@ function renderInspector(){
   }
   /* end node: no body sections */
 
-  const canArrow = n.type!=="end";
+  const canArrow = n.type!=="end" && !n.parentId;   // sub-steps carry no arrows of their own
   const foot=`<div class="insp-foot">
     ${canArrow?`<button id="drawArrow">↗ Draw arrow</button>`:""}
+    ${n.parentId?`<button id="promoteSub" title="Turn this sub-step into a full step on the map">⬆ Promote</button>`:""}
     <button id="dupNode">⧉ Duplicate</button>
     <button class="del" id="delNode">🗑 Delete</button>
   </div>`;
+  if(n.parentId){ const par=state.model.nodes.find(x=>x.id===n.parentId);
+    headRow=`<button class="backparent" id="backToParent">◂ ${esc(par?par.label:"Parent step")}</button>`+headRow; }
 
   insp.innerHTML=`<div class="insp-head">
       <div class="insp-htop">
@@ -1455,7 +1550,17 @@ function wireInspector(n){
   const cl=insp.querySelector("#inspClose"); if(cl) cl.addEventListener("click",()=>selectNode(null));
   const da=$("#drawArrow"); if(da) da.addEventListener("click",()=>startLink(n.id));
   const dup=$("#dupNode"); if(dup) dup.addEventListener("click",()=>duplicateNode(n.id));
-  const del=$("#delNode"); if(del) del.addEventListener("click",()=>deleteNode(n.id));
+  const del=$("#delNode"); if(del) del.addEventListener("click",()=>n.parentId?removeSubStep(n.id):deleteNode(n.id));
+  /* sub-steps */
+  const asb=insp.querySelector("#addSub"); if(asb) asb.addEventListener("click",()=>addSubStep(n.id));
+  insp.querySelectorAll("[data-subsel]").forEach(b=>b.addEventListener("click",()=>{
+    if(!n.expanded) toggleExpand(n.id); selectNode(b.dataset.subsel); }));
+  insp.querySelectorAll("[data-subdel]").forEach(b=>b.addEventListener("click",()=>removeSubStep(b.dataset.subdel)));
+  insp.querySelectorAll("[data-submove]").forEach(b=>b.addEventListener("click",()=>{
+    const [i,d]=b.dataset.submove.split(",").map(Number), c=n.children, j=i+d;
+    if(!c||j<0||j>=c.length) return; [c[i],c[j]]=[c[j],c[i]]; render(); }));
+  const bp=insp.querySelector("#backToParent"); if(bp) bp.addEventListener("click",()=>selectNode(n.parentId));
+  const pr=insp.querySelector("#promoteSub"); if(pr) pr.addEventListener("click",()=>promoteSub(n.id));
 }
 function renderEdgeInspector(){
   const e=state.model.edges.find(x=>x.id===state.selected.id);
@@ -1581,14 +1686,70 @@ function addNode(type, performer){
   if(type==="wait"){ n.stepId=id; n.waitTimeManual=null; }
   state.model.nodes.push(n); selectNode(id);
 }
-function deleteNode(id){ state.model.nodes=state.model.nodes.filter(n=>n.id!==id);
-  state.model.edges=state.model.edges.filter(e=>e.from!==id&&e.to!==id); selectNode(null); }
+function deleteNode(id){ const m=state.model, n=m.nodes.find(x=>x.id===id);
+  const doomed=new Set([id]);
+  if(n && n.children) n.children.forEach(c=>doomed.add(c));          // a meta step takes its sub-steps with it
+  if(n && n.parentId){ const p=m.nodes.find(x=>x.id===n.parentId);   // a sub-step signs out of its parent
+    if(p && p.children){ p.children=p.children.filter(c=>c!==id);
+      if(!p.children.length){ delete p.children; delete p.expanded; } } }
+  m.nodes=m.nodes.filter(x=>!doomed.has(x.id));
+  m.edges=m.edges.filter(e=>!doomed.has(e.from)&&!doomed.has(e.to)); selectNode(null); }
 function duplicateNode(id){
   const src=state.model.nodes.find(n=>n.id===id); if(!src) return;
   const n=clone(src); n.id=uid(src.type[0]+"_");
   if(n.type==="touch"||n.type==="wait") n.stepId=n.id;   // new node needs its own data key
   n.x=src.x+40; n.y=src.y+40;
+  if(src.children){ // deep-copy sub-steps with fresh ids
+    n.children=src.children.map(cid=>{ const ck=clone(state.model.nodes.find(x=>x.id===cid));
+      ck.id=uid("t_"); ck.stepId=ck.id; ck.parentId=n.id; state.model.nodes.push(ck); return ck.id; });
+    n.expanded=false;
+  }
+  if(src.parentId){ // duplicating a sub-step adds the copy right after it in the same parent
+    const p=state.model.nodes.find(x=>x.id===src.parentId);
+    if(p && p.children){ const i=p.children.indexOf(src.id); p.children.splice(i+1,0,n.id); }
+    if(p && p.expanded) reflowFrom(p.x+CARD_W, CARD_W+SUB_GAP, [p.id]);
+  }
   state.model.nodes.push(n); selectNode(n.id); toast("Node duplicated");
+}
+
+/* ---------- sub-steps: expand/collapse + add/remove/promote ---------- */
+function toggleExpand(id){
+  const n=state.model.nodes.find(x=>x.id===id); if(!n||!hasSubs(n)) return;
+  const dx=frameWOf(n.children.length)-CARD_W;
+  if(!n.expanded){ n.expanded=true; reflowFrom(n.x+CARD_W, dx, [n.id]); }
+  else{ n.expanded=false;
+    if(state.selected && n.children.includes(state.selected.id)) state.selected={type:"node",id:n.id};
+    reflowFrom(n.x+CARD_W, -dx, [n.id]); }
+  render();
+}
+function addSubStep(pid){
+  const p=state.model.nodes.find(x=>x.id===pid); if(!p||p.type!=="touch"||p.parentId) return;
+  const oldN=(p.children||[]).length, id=uid("t_");
+  state.model.nodes.push({id, type:"touch", parentId:pid, label:"New sub-step", stepId:id, x:p.x, y:p.y,
+    touchTimeManual:null, throughputManual:null, capacityManual:null, performer:p.performer||"human"});
+  p.children=(p.children||[]).concat(id);
+  if(p.expanded) reflowFrom(p.x+CARD_W, frameWOf(oldN+1)-frameWOf(oldN), [p.id]);
+  render();
+}
+function removeSubStep(id){
+  const k=state.model.nodes.find(x=>x.id===id); if(!k||!k.parentId) return;
+  const p=state.model.nodes.find(x=>x.id===k.parentId);
+  const wasExpanded=p&&p.expanded, oldN=p?p.children.length:0;
+  deleteNode(id);
+  if(p && wasExpanded){
+    const newN=(p.children||[]).length;
+    reflowFrom(p.x+CARD_W, (newN?frameWOf(newN):CARD_W)-frameWOf(oldN), [p.id]);
+  }
+  if(p) selectNode(p.id);
+}
+function promoteSub(id){
+  const k=state.model.nodes.find(x=>x.id===id); if(!k||!k.parentId) return;
+  const p=state.model.nodes.find(x=>x.id===k.parentId);
+  if(p && p.children){ p.children=p.children.filter(c=>c!==id);
+    if(!p.children.length){ delete p.children; delete p.expanded; } }
+  delete k.parentId;
+  if(p){ k.x=snapG(p.x+40); k.y=snapG(p.y+CARD_H+60); }  // drop it just below its old parent
+  selectNode(k.id); toast("Promoted to a full step — connect it with arrows");
 }
 
 /* ---------- drag ---------- */
@@ -1596,6 +1757,7 @@ let drag=null;
 function onNodeDown(ev,n){ if(!editable()||state.linkingFrom) return;
   if(state.tool==="group"){ startGroupSel(ev); return; }
   if(state.tool==="comment"){ placeComment(ev); return; }
+  if(n.parentId){ const p=state.model.nodes.find(x=>x.id===n.parentId); if(p) n=p; }  // dragging a sub-step moves the whole frame
   ev.preventDefault();
   const svg=$("#canvas"),rect=svg.getBoundingClientRect(),z=Z();
   drag={n,dx:(ev.clientX-rect.left)/z-n.x,dy:(ev.clientY-rect.top)/z-n.y,moved:false,g:ev.currentTarget,gx0:n.x,gy0:n.y}; drag.g._dragged=false;
@@ -1663,7 +1825,7 @@ function onMarqueeUp(ev){ window.removeEventListener("mousemove",onMarqueeMove);
   if(!m||!m.moved){ if(state.tool==="select") setTool(null); return; }   // a click, not a drag — let svg.onclick clear
   const p=svgPt(ev);
   const rx0=Math.min(m.x0,p.x), ry0=Math.min(m.y0,p.y), rx1=Math.max(m.x0,p.x), ry1=Math.max(m.y0,p.y);
-  const hits=[]; (state.model.nodes||[]).forEach(n=>{ const L=_lay[n.id]; if(!L) return;
+  const hits=[]; (state.model.nodes||[]).forEach(n=>{ if(n.parentId) return; const L=_lay[n.id]; if(!L) return;
     const nx0=n.x, ny0=n.y+(L.bt||0), nx1=n.x+L.w, ny1=n.y+(L.bt||0)+L.h;   // box-intersection test
     if(nx0<rx1 && nx1>rx0 && ny0<ry1 && ny1>ry0) hits.push(n.id); });
   state.selectedIds=hits; state.selected=null;
@@ -1700,7 +1862,7 @@ function setTool(t){
 /* GROUP: drag a box; nodes inside light up live; on release a padded box is drawn around them */
 let groupSel=null;
 function groupHits(x0,y0,x1,y1){
-  const hits=[]; (state.model.nodes||[]).forEach(n=>{ const L=_lay[n.id]; if(!L) return;
+  const hits=[]; (state.model.nodes||[]).forEach(n=>{ if(n.parentId) return; const L=_lay[n.id]; if(!L) return;
     const nx0=n.x, ny0=n.y+(L.bt||0), nx1=n.x+L.w, ny1=n.y+(L.bt||0)+L.h;
     if(nx0<x1 && nx1>x0 && ny0<y1 && ny1>y0) hits.push(n); });
   return hits;
@@ -1814,21 +1976,27 @@ function autoArrange(){
   const col={}; const q=[start.id]; col[start.id]=0;
   while(q.length){ const id=q.shift(); m.edges.filter(e=>e.from===id).forEach(e=>{
     if(col[e.to]==null){ col[e.to]=col[id]+1; q.push(e.to); } }); }
-  // disconnected nodes get parked in trailing columns so nothing is lost
+  // disconnected nodes get parked in trailing columns so nothing is lost (sub-steps travel inside their parent)
   let extra=Math.max(-1,...Object.values(col));
   const {order}=flowWeights();
-  const spine=order.length?order.slice():m.nodes.slice();
-  m.nodes.forEach(n=>{ if(!spine.find(s=>s.id===n.id)) spine.push(n); });
+  const spine=(order.length?order.slice():m.nodes.slice()).filter(n=>!n.parentId);
+  m.nodes.forEach(n=>{ if(!n.parentId && !spine.find(s=>s.id===n.id)) spine.push(n); });
   spine.forEach(n=>{ if(col[n.id]==null) col[n.id]=++extra; });
-  // assign a row within each column, in spine order; short columns centre vertically
-  const COL_GAP=300, ROW_GAP=120, MARGIN_X=40, MARGIN_Y=120;
-  const rowsIn={};
-  spine.forEach(n=>{ const c=col[n.id]; rowsIn[c]=(rowsIn[c]||0)+1; });
-  const maxRows=Math.max(...Object.values(rowsIn));
-  const rowOf={}, targets=[];
-  spine.forEach(n=>{ const c=col[n.id]; const r=(rowOf[c]||0); rowOf[c]=r+1;
-    targets.push({ent:n, x:snapG(MARGIN_X+c*COL_GAP),
-                  y:snapG(MARGIN_Y+(maxRows-rowsIn[c])*ROW_GAP/2+r*ROW_GAP)}); });
+  // real card sizes drive the spacing, so wide frames / different views always get room
+  const GAPX=64, GAPY=44, MARGIN_X=40, MARGIN_Y=60;
+  const layOf=n=>{ const L=_lay[n.id]||nodeLayout(n); if(L.bt==null) L.bt=NODE_H/2-L.h/2; return L; };
+  const colNodes={};
+  spine.forEach(n=>{ const c=col[n.id]; (colNodes[c]=colNodes[c]||[]).push(n); });
+  const colXs={}; { let acc=MARGIN_X;
+    Object.keys(colNodes).map(Number).sort((a,b)=>a-b).forEach(c=>{
+      colXs[c]=acc; acc+=Math.max(...colNodes[c].map(n=>layOf(n).w))+GAPX; }); }
+  const colH={}; for(const c in colNodes) colH[c]=colNodes[c].reduce((a,n)=>a+layOf(n).h+GAPY,-GAPY);
+  const maxH=Math.max(...Object.values(colH));
+  const targets=[], yCur={};
+  spine.forEach(n=>{ const c=col[n.id], L=layOf(n);
+    if(yCur[c]==null) yCur[c]=MARGIN_Y+(maxH-colH[c])/2;   // short columns centre vertically
+    const top=yCur[c]; yCur[c]+=L.h+GAPY;
+    targets.push({ent:n, x:snapG(colXs[c]), y:snapG(top-L.bt)}); });
   // custom arrow sides survive — Tidy repositions boxes, it never re-routes connections
   animateNodes(targets, 320, ()=>{ tidyGroups(); render(); });
   toast("Layout tidied");
@@ -1859,7 +2027,9 @@ function onConnectUp(ev){
   const cs=connectState; connectState=null; if(!cs) return;
   const elUnder=document.elementFromPoint(ev.clientX, ev.clientY);
   const g=elUnder && elUnder.closest && elUnder.closest(".node");
-  const toId=g && g.dataset.id;
+  let toId=g && g.dataset.id;
+  if(toId){ const tn=state.model.nodes.find(x=>x.id===toId);   // arrows never attach to a sub-step — bump to its parent frame
+    if(tn && tn.parentId) toId=tn.parentId; }
   if(toId && toId!==cs.fromId){
     let toSide = elUnder.classList && elUnder.classList.contains("anchor") ? elUnder.getAttribute("data-side") : null;
     if(!toSide){ const tn=state.model.nodes.find(x=>x.id===toId); const c=svgPt(ev); toSide=nearestSide(tn,_lay[toId],c.x,c.y); }
@@ -1922,7 +2092,8 @@ function download(name,content,mime){ const blob=new Blob([content],{type:mime||
 function importSheetFile(){ $("#fileData").click(); }
 
 /* data-bearing nodes (the ones a data row can feed) */
-function dataNodes(){ return (state.model?state.model.nodes:[]).filter(n=>(n.type==="touch"||n.type==="wait") && n.stepId); }
+/* leaf nodes only: a meta step's numbers are derived from its sub-steps, so the sheet lists the sub-steps */
+function dataNodes(){ return (state.model?state.model.nodes:[]).filter(n=>(n.type==="touch"||n.type==="wait") && n.stepId && !hasSubs(n)); }
 function dataMatchSummary(){
   const nodes=dataNodes(); const ids=new Set(state.data.map(r=>String(r.StepID)));
   const missing=nodes.filter(n=>!ids.has(String(n.stepId)));
@@ -1931,19 +2102,21 @@ function dataMatchSummary(){
 /* ---------- stats sheet: the flow defines the fields to fill in ---------- */
 function csvCell(v){ v=(v==null?"":String(v)); return /[",\n]/.test(v) ? '"'+v.replace(/"/g,'""')+'"' : v; }
 function exportSheet(){
-  const cols=["StepID","StepName","NodeType","Segment","Period","TouchTimeAvg","WaitTimeAvg","WIP","Volume","Throughput","Capacity"];
+  const cols=["StepID","StepName","NodeType","Segment","Period","TouchTimeAvg","WaitTimeAvg","WIP","Volume","Throughput","Capacity","ParentStep"];
   const period=new Date().toISOString().slice(0,7); // YYYY-MM
   const nodes=dataNodes();
   if(!nodes.length){ toast("Add a step or queue first"); return; }
   const rows=nodes.map(n=>{
     const isWork=n.type==="touch", mt=metricFor(n);   // prefill with whatever the cards currently show
     const type=isWork?(n.performer==="bot"?"Bot":"Human"):"Queue";
+    const par=n.parentId ? (state.model.nodes.find(p=>p.id===n.parentId)||{}).label||"" : "";
     return [ n.stepId, n.label, type, "ALL", period,
       isWork && mt.touch!=null ? mt.touch : "",
       !isWork && mt.wait!=null ? mt.wait : "",
       !isWork && mt.wip!=null ? mt.wip : "", "",
       isWork && mt.throughput!=null ? mt.throughput : "",
-      isWork && mt.capacity!=null ? mt.capacity : "" ];
+      isWork && mt.capacity!=null ? mt.capacity : "",
+      par ];
   });
   const csv=[cols.join(",")].concat(rows.map(r=>r.map(csvCell).join(","))).join("\n");
   download((state.model.name||"flow").replace(/\s+/g,"-")+"-stats-sheet.csv", csv, "text/csv");
