@@ -95,6 +95,22 @@ In **Build**: add nodes from the left palette — **🧑 Human Step**, **🤖 Bo
 grows** to fit. For every work step you must set its **Customer value** and answer *"what value
 does this add to the customer?"* — unrated steps show a ⚠.
 
+**Snapping & Tidy:** dragging snaps to a **20px grid**, and dashed **alignment guides** flash when
+a box lines up with a neighbour's edge or centre (hold **Alt** to drag freely). **✨ Tidy** lays
+the flow out as neat left-to-right columns — it repositions boxes but **never re-routes your
+arrows** (custom top/bottom loop routings survive).
+
+**Sub-steps (granularity control):** a step like *"Underwrite deal"* can hold **sub-steps**
+(*Review docs → Rate risk → Refer*). Add them in the inspector's **Sub-steps** section. The
+collapsed card shows a **▸ N SUB-STEPS** chip and **rolls the numbers up** (touch = sum,
+pace/capacity = the slowest sub-step); clicking the chip **expands the card in place** into a
+dashed frame of child cards — everything downstream slides over to make room, and slides back on
+collapse. Arrows always attach to the parent, so expanding can never break the flow. (This is
+different from a **Group**, which is a visual overlay for sectioning the map.)
+
+**Undo & shortcuts:** **⌘Z / Ctrl+Z** undo · **⇧⌘Z / Ctrl+Y** redo · **⌘D** duplicate ·
+**Delete** removes the selection · **+ / −** zoom · **Esc** cancels tools/menus.
+
 **Connecting steps (Visio-style):** hover a box and **4 connection dots** appear (one per side).
 **Drag from a dot to another box** (or onto one of its dots) to draw the arrow — it remembers
 which sides it joins, so you can make **loops/rework** (e.g. drag from the *bottom* of a later
@@ -130,15 +146,30 @@ inspector:
 | **Necessary** | Required (compliance, risk) but not valued by the customer | blue |
 | **Could remove** | Adds no value — a candidate to eliminate | red |
 
+## Card views (lenses)
+
+The header **View** switcher changes what every card shows — card size and edge anchors adapt
+automatically (hit **✨ Tidy** to re-space for the active view). The active view is saved with the
+flow and is what PNG/PDF/share exports show:
+
+- **Metrics** (default) — split-column cards: pace/capacity scale + wait/touch time with each
+  node's share of the lead time.
+- **People** — owner as the headline plus the **tool** used (UiPath / Copilot / Excel / manual):
+  the handoff-and-automation conversation.
+- **Value** — the classification band, glyph and the *why is this step here?* rationale; queues
+  read "WAITING — NO VALUE ADDED": the waste-hunting view.
+- **Compact** — small icon+name pills; the whole flow fits on a slide.
+
 ## Seeing how work is distributed
 
-- **Load** is shown on each card's **tank-fill gauge** (the fuller the tank, the bigger the
-  backlog), so cards stay a uniform size. (The old "Size by load" toggle is retired.)
-- **Bottom panel: Ribbon | Timeline**
-  - **Ribbon** — one proportional bar of the whole turnaround, **coloured by type** so each band
-    lines up with its card's hue.
-  - **Timeline** — one bar per stage drawn to scale, so you can track where the time goes along
-    the flow (long waits look long; the bottleneck is red).
+- **Load** is shown on each queue card's **cell grid** (more filled cells = bigger backlog) and
+  each step's **capacity scale**, so cards stay a uniform size.
+- **Bottom panel: the time-contribution ribbon** — one proportional bar of the whole turnaround,
+  now fully **interactive**: hover a band for a tooltip (time, % of turnaround, avg passes) and
+  its card lights up on the map (and vice-versa); **click** a band to select the step and glide
+  the canvas to it. Back-to-back same-colour bands alternate brightness with hairline cuts, so
+  neighbours stay distinguishable. A **Type / Severity** toggle recolours the bands by node type
+  or by how heavy each band is (green/amber/red) — exports follow the chosen mode.
 
 ## Connecting data (and keeping it "live")
 
@@ -180,9 +211,12 @@ One row per **step × segment × period**:
 | `TouchTimeAvg` | active work time — for **Human/Bot** steps |
 | `WaitTimeAvg` | time-in-queue — for **Queue** nodes |
 | `WIP` / `Volume` | queue size / throughput |
+| `Throughput` / `Capacity` | cases/day done vs. possible — drives the capacity scale |
+| `ParentStep` | for a sub-step, its parent's name — for humans; ignored on import |
 
 Leave a cell blank where it doesn't apply. If a step has no data row, the node falls back to the
-values typed into Build mode, or shows "no data" — it never breaks.
+values typed into Build mode, or shows "no data" — it never breaks. A step **with sub-steps** is
+not listed (its numbers are derived); the sheet lists its sub-steps instead.
 
 ## Metrics (computed automatically along the main path)
 
