@@ -247,8 +247,20 @@
   #ribbonWrap .title b{color:var(--ink);font-weight:600}
   #ribbonWrap .title .rt{color:var(--faint);font-size:11px;font-weight:500}
   .cscale{display:flex;justify-content:space-between;font-size:10px;color:var(--faint);margin-top:5px;text-transform:uppercase;letter-spacing:.4px}
+  #ribbonWrap{position:relative}
+  #legendType,#legendSev{display:inline-flex;align-items:center;gap:6px 14px}
+  .rmode{display:inline-flex;border:1px solid var(--line);border-radius:7px;overflow:hidden;margin-left:10px;vertical-align:1px}
+  .rmode button{background:transparent;border:none;color:var(--faint);font-size:10px;padding:3px 9px;cursor:pointer;letter-spacing:.3px;line-height:1.2}
+  .rmode button.on{background:var(--panel2);color:var(--ink)}
   .ribbon{display:flex;height:26px;border-radius:6px;overflow:hidden;border:1px solid var(--line)}
-  .ribbon .seg-b{height:100%;display:flex;align-items:center;justify-content:flex-start;gap:5px;padding:0 7px;font-size:11px;color:#06202a;font-weight:600;white-space:nowrap;overflow:hidden}
+  .ribbon .seg-b{height:100%;display:flex;align-items:center;justify-content:flex-start;gap:5px;padding:0 7px;font-size:11px;color:#06202a;font-weight:600;white-space:nowrap;overflow:hidden;cursor:pointer;transition:filter .12s}
+  .ribbon .seg-b + .seg-b{box-shadow:inset 1px 0 0 rgba(0,0,0,.38)}
+  .ribbon .seg-b.alt{filter:brightness(.86)}
+  .ribbon .seg-b.hl{outline:2px solid var(--ink);outline-offset:-2px;filter:brightness(1.1)}
+  g.node.hl .nbox{stroke-width:3.5}
+  #ribTip{position:absolute;display:none;flex-direction:column;gap:2px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 11px;font-size:11px;color:var(--muted);pointer-events:none;z-index:30;box-shadow:0 6px 18px rgba(0,0,0,.35);min-width:150px}
+  #ribTip.show{display:flex}
+  #ribTip b{color:var(--ink);font-size:12px}
   .ribbon .seg-b .seg-ic{width:13px;height:13px;flex:0 0 auto;stroke:#06202a;fill:none;stroke-width:1.8}
   .ribbon .seg-b .seg-lbl{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .legend{display:flex;align-items:center;gap:6px 14px;flex-wrap:wrap;margin-top:8px;font-size:11px;color:var(--muted)}
@@ -492,14 +504,23 @@
   <div class="a-head">Analysis</div>
   <div class="stats" id="stats"></div>
   <div id="ribbonWrap">
-    <div class="title"><span><b>Time contribution across the stream</b></span><span class="rt" id="ribbonTotal"></span></div>
+    <div class="title"><span><b>Time contribution across the stream</b><span class="rmode" id="ribbonModeSeg" title="Colour the bands by node type or by time severity"><button data-rmode="type" class="on">Type</button><button data-rmode="severity">Severity</button></span></span><span class="rt" id="ribbonTotal"></span></div>
     <div class="ribbon" id="ribbon"></div>
+    <div id="ribTip"></div>
     <div class="cscale"><span>start</span><span>delivered</span></div>
     <div class="legend">
+      <span id="legendType">
       <span class="lgrp">Type</span>
       <span><i style="background:var(--t-queue)"></i>Queue</span>
       <span><i style="background:var(--t-human)"></i>Human</span>
       <span><i style="background:var(--t-bot)"></i>Bot</span>
+      </span>
+      <span id="legendSev" style="display:none">
+      <span class="lgrp">Severity</span>
+      <span><i style="background:var(--va)"></i>Calm &lt;15%</span>
+      <span><i style="background:var(--warn)"></i>Heavy 15–30%</span>
+      <span><i style="background:var(--nva)"></i>Hot ≥30%</span>
+      </span>
       <span class="lsep"></span><span class="lgrp">Value</span>
       <span><svg><use href="#ic-val-value"/></svg>Valued</span>
       <span><svg><use href="#ic-val-necessary"/></svg>Necessary</span>
@@ -1272,6 +1293,9 @@ function renderCanvas(r){
     }
 
     g.dataset.id=n.id;
+    { const rid=n.parentId||n.id;   // hovering a card lights its ribbon band (sub-steps light the parent's)
+      g.addEventListener("mouseenter",()=>{ const sb=document.querySelector(`.seg-b[data-nid="${rid}"]`); if(sb) sb.classList.add("hl"); });
+      g.addEventListener("mouseleave",()=>{ const sb=document.querySelector(`.seg-b[data-nid="${rid}"]`); if(sb) sb.classList.remove("hl"); }); }
     g.addEventListener("mousedown",ev=>onNodeDown(ev,n));
     g.addEventListener("click",ev=>{ ev.stopPropagation();
       if(state.linkingFrom){ completeLink(n.id); return; }
@@ -1311,24 +1335,69 @@ function renderCanvas(r){
 }
 
 
+const ribbonMode = () => (state.model&&state.model.settings&&state.model.settings.ribbonColor)||"type";
 function renderRibbon(r){
   const wrap=$("#ribbon"); wrap.innerHTML=""; const u=unit();
   $("#ribbonTotal").textContent = r.turnaround>0 ? `${fmt(r.turnaround)} ${u} total · ${r.eff!=null?Math.round(r.eff*100)+"% value-add":""}` : "no data on path";
+  // reflect the colour mode in the toggle + legend
+  const mode=ribbonMode();
+  document.querySelectorAll("[data-rmode]").forEach(b=>b.classList.toggle("on",b.dataset.rmode===mode));
+  const lt=$("#legendType"), ls=$("#legendSev");
+  if(lt) lt.style.display = mode==="type"?"":"none";
+  if(ls) ls.style.display = mode==="severity"?"":"none";
   if(r.turnaround<=0 || !r.flow) return;
-  // segments coloured by TYPE — so a band lines up with its card's hue at a glance.
+  // bands coloured by TYPE (matches the card hues) or by SEVERITY (share of turnaround).
   // weighted by expected passes (Split %), so branches/rework are reflected in the widths.
+  let prevHue=null, prevAlt=false;
   r.flow.forEach(seg=>{ const n=seg.node, pct=seg.time/r.turnaround*100;
-    const s=document.createElement("div"); s.className="seg-b"; s.style.width=pct+"%"; s.style.background=typeHue(n);
-    const passes=(seg.visits!=null && Math.abs(seg.visits-1)>0.01) ? ` · avg ${seg.visits.toFixed(2)} passes` : "";
-    s.title=`${n.label}: ${fmt(seg.time)} ${u} ${seg.kind}${passes}`;
+    const s=document.createElement("div"); s.className="seg-b"; s.style.width=pct+"%";
+    const hue = mode==="severity" ? SEVC[sevOf(pct/100)].c : typeHue(n);
+    s.style.background=hue;
+    // back-to-back same-hue bands alternate brightness so every cut stays visible
+    const alt = hue===prevHue && !prevAlt;
+    if(alt) s.classList.add("alt");
+    prevHue=hue; prevAlt=alt;
+    s.dataset.nid=n.id;
     if(pct>3){ const ic=document.createElementNS("http://www.w3.org/2000/svg","svg");
       ic.setAttribute("class","seg-ic"); ic.innerHTML=`<use href="#${ICON_FOR(n)}"/>`; s.appendChild(ic); }
     if(pct>9){ const lab=document.createElement("span"); lab.className="seg-lbl";
       lab.textContent=`${n.label} ${fmt(seg.time)}`; s.appendChild(lab); }
     else if(pct>4){ const lab=document.createElement("span"); lab.className="seg-lbl";
       lab.textContent=fmt(seg.time); s.appendChild(lab); }
+    // interactivity: tooltip + two-way canvas highlight + click to focus
+    s._tip={ label:n.label,
+      kind: seg.kind==="touch" ? (n.performer==="bot"?"Bot step":"Human step")+(hasSubs(n)?` · ${n.children.length} sub-steps`:"") : "Queue wait",
+      line2:`${fmt(seg.time)} ${u} · ${pct<1?"<1":Math.round(pct)}% of turnaround`,
+      passes:(seg.visits!=null && Math.abs(seg.visits-1)>0.01) ? `avg ${seg.visits.toFixed(2)} passes` : null };
+    s.addEventListener("mouseenter",()=>segHover(s,n.id,true));
+    s.addEventListener("mousemove",moveRibTip);
+    s.addEventListener("mouseleave",()=>segHover(s,n.id,false));
+    s.addEventListener("click",()=>focusNode(n.id));
     wrap.appendChild(s);
   });
+}
+function segHover(s,nid,on){
+  s.classList.toggle("hl",on);
+  const g=document.querySelector(`#canvas g.node[data-id="${nid}"]`); if(g) g.classList.toggle("hl",on);
+  const tip=$("#ribTip"); if(!tip) return;
+  if(on && s._tip){ const t=s._tip;
+    tip.innerHTML=`<b>${esc(t.label)}</b><span>${esc(t.kind)}</span><span>${esc(t.line2)}</span>${t.passes?`<span>${esc(t.passes)}</span>`:""}`;
+    tip.classList.add("show");
+  } else tip.classList.remove("show");
+}
+function moveRibTip(ev){
+  const tip=$("#ribTip"); if(!tip||!tip.classList.contains("show")) return;
+  const wr=$("#ribbonWrap").getBoundingClientRect();
+  tip.style.left=Math.max(0,Math.min(ev.clientX-wr.left+12, wr.width-tip.offsetWidth-6))+"px";
+  tip.style.top=(ev.clientY-wr.top-tip.offsetHeight-12)+"px";
+}
+/* select a node and glide the viewport to it (ribbon click, and anything else that wants it) */
+function focusNode(nid){
+  const n=state.model.nodes.find(x=>x.id===nid); if(!n) return;
+  selectNode(nid);
+  const st=$("#stage"), z=Z(), L=_lay[nid]||{w:CARD_W};
+  st.scrollTo({ left:(CANVAS_PAD+n.x+L.w/2)*z - st.clientWidth/2,
+                top:(CANVAS_PAD+n.y)*z - st.clientHeight/2, behavior:"smooth" });
 }
 
 
@@ -2175,9 +2244,13 @@ function buildExportSVG(){
   const ry=th+22;
   g+=`<text x="0" y="${ry-6}" font-family="Segoe UI,system-ui,sans-serif" font-size="11" fill="${C.muted}">Time contribution across the stream</text>`;
   g+=`<rect x="0" y="${ry}" width="${aw}" height="24" rx="6" fill="${C.panel2}" stroke="${C.line}"/>`;
-  if(r.turnaround>0 && r.flow){ let cx=0;
+  if(r.turnaround>0 && r.flow){ let cx=0; const sevMode=ribbonMode()==="severity";
     r.flow.forEach(seg=>{ const wpx=(seg.time/r.turnaround)*aw;
-      g+=`<rect x="${cx}" y="${ry}" width="${Math.max(1,wpx)}" height="24" fill="${typeHexResolved(seg.node,C)}"/>`; cx+=wpx; }); }
+      const sev=sevOf(seg.time/r.turnaround);
+      const col=sevMode ? (sev==="hot"?C.nva:sev==="warn"?C.warn:C.va) : typeHexResolved(seg.node,C);
+      g+=`<rect x="${cx}" y="${ry}" width="${Math.max(1,wpx)}" height="24" fill="${col}"/>`;
+      if(cx>0) g+=`<rect x="${cx}" y="${ry}" width="1" height="24" fill="rgba(0,0,0,.4)"/>`;
+      cx+=wpx; }); }
   // legend
   const ly=ry+44;
   const leg=[["Queue",C.tq],["Human",C.th],["Bot",C.tb],["Bottleneck",C.nva]];
@@ -2251,6 +2324,9 @@ function setZoom(z){ state.zoom=Math.max(0.4,Math.min(2,Math.round(z*100)/100));
 $("#zoomIn").onclick=()=>setZoom(Z()+0.1);
 $("#zoomOut").onclick=()=>setZoom(Z()-0.1);
 $("#autoArrange").onclick=autoArrange;
+document.querySelectorAll("[data-rmode]").forEach(b=>b.onclick=()=>{
+  if(!state.model) return;
+  state.model.settings=state.model.settings||{}; state.model.settings.ribbonColor=b.dataset.rmode; render(); });
 
 /* stats sheet: export a blank/prefilled sheet, import a filled one (snapshot, no live link) */
 $("#exportSheet").onclick=exportSheet;
