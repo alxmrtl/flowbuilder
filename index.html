@@ -247,6 +247,11 @@
   #ribbonWrap .title b{color:var(--ink);font-weight:600}
   #ribbonWrap .title .rt{color:var(--faint);font-size:11px;font-weight:500}
   .cscale{display:flex;justify-content:space-between;font-size:10px;color:var(--faint);margin-top:5px;text-transform:uppercase;letter-spacing:.4px}
+  .viewseg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .viewseg button{background:transparent;border:none;color:var(--faint);font-size:11px;padding:5px 10px;cursor:pointer;line-height:1.2}
+  .viewseg button:hover{color:var(--muted)}
+  .viewseg button.on{background:var(--panel2);color:var(--ink);font-weight:600}
+  body.home #viewCtl{display:none}
   #ribbonWrap{position:relative}
   #legendType,#legendSev{display:inline-flex;align-items:center;gap:6px 14px}
   .rmode{display:inline-flex;border:1px solid var(--line);border-radius:7px;overflow:hidden;margin-left:10px;vertical-align:1px}
@@ -392,6 +397,9 @@
   <button class="btn" id="flowsBtn">≣ Flows</button>
   <div class="ctl segctl"><label>Segment</label><select id="segSel"></select></div>
   <div class="ctl segctl"><label>Period</label><select id="perSel"></select></div>
+  <div class="ctl segctl" id="viewCtl"><label>View</label><span class="viewseg" id="viewSeg" title="Change what every card shows — size and spacing adapt">
+    <button data-cardview="metrics" class="on">Metrics</button><button data-cardview="people">People</button><button data-cardview="value">Value</button><button data-cardview="compact">Compact</button>
+  </span></div>
   <div class="spacer"></div>
   <button class="btn" id="exportSheet" title="Download a stats sheet (CSV) with one row per step — fill it in, then Import sheet to load the numbers.">⬇ Export sheet</button>
   <button class="btn primary" id="importSheet" title="Load a filled-out stats sheet (Excel/CSV) to populate this flow's numbers.">⬆ Import sheet</button>
@@ -867,6 +875,7 @@ function render(){
   if(state.mode==="home"){ renderHome(); return; }
   if(!state.model) return;
   applyTheme(); applyTypeColors();
+  document.querySelectorAll("[data-cardview]").forEach(b=>b.classList.toggle("on",b.dataset.cardview===view()));
   const r=rollup();
   renderStats(r); renderCanvas(r); renderRibbon(r);
   renderInspector();
@@ -954,11 +963,15 @@ const LBL_LH=16, MET_LH=14, CAP_RY=9;
 
 /* ---- design-06 visual language: type hues, severity, icons (uniform cards) ---- */
 const CARD_W=236, CARD_H=156, TITLE_X=44;
+/* ---- card views (lenses): what every card shows; size adapts, positions stay put ---- */
+const VIEW_DIMS={ metrics:{w:236,h:156}, people:{w:236,h:118}, value:{w:236,h:140}, compact:{w:170,h:56} };
+const view  = () => (state.model&&state.model.settings&&state.model.settings.cardView)||"metrics";
+const viewW = () => VIEW_DIMS[view()].w;
 /* ---- sub-steps: a touch step can hold child steps (granularity control) ----
    Children are full nodes flagged with parentId; they carry NO edges — arrows always
    attach to the parent, whose card widens into a frame when expanded. */
 const SUB_PADF=16, SUB_GAP=24, SUB_HEAD=34;
-const frameWOf = N => SUB_PADF*2 + N*CARD_W + (N-1)*SUB_GAP;
+const frameWOf = N => SUB_PADF*2 + N*viewW() + (N-1)*SUB_GAP;
 const hasSubs  = n => !!(n && n.children && n.children.length);
 const childrenOf = n => (n.children||[]).map(id=>state.model.nodes.find(x=>x.id===id)).filter(Boolean);
 const KIND      = n => n.type==="wait" ? "queue" : (n.performer==="bot" ? "bot" : "human");
@@ -1034,12 +1047,14 @@ function nodeLayout(n){
     const h=Math.max(NODE_H, 18+lines.length*LBL_LH);
     return {w:150, h, lines, kind:"pill"};
   }
-  const mt=metricFor(n);
+  const mt=metricFor(n), VD=VIEW_DIMS[view()];
   if(n.type==="touch" && hasSubs(n) && n.expanded){   // expanded meta step → wide frame holding its child cards
-    return {w:frameWOf(n.children.length), h:SUB_HEAD+CARD_H+SUB_PADF+10, mt, kind:"frame"};
+    return {w:frameWOf(n.children.length), h:SUB_HEAD+VD.h+SUB_PADF+10, mt, kind:"frame"};
   }
-  const titleLines=wrapText(n.label, CARD_W-TITLE_X-14, F_LABEL).slice(0,2);  // title clamps to 2 lines
-  return {w:CARD_W, h:CARD_H, titleLines, mt, kind:"card"};
+  const titleLines = view()==="compact"
+    ? [truncToWidth(n.label, VD.w-52, F_LABEL)]                              // compact: one truncated line
+    : wrapText(n.label, VD.w-TITLE_X-14, F_LABEL).slice(0,2);                // others: title clamps to 2 lines
+  return {w:VD.w, h:VD.h, titleLines, mt, kind:"card"};
 }
 
 /* ---- side-aware ports + routing (for Visio-style, loop-friendly connections) ---- */
@@ -1087,7 +1102,7 @@ function renderCanvas(r){
   m.nodes.forEach(n=>{ if(n.type==="touch" && n.expanded && hasSubs(n)){
     const L=lay[n.id], topY=n.y+L.bt;
     childrenOf(n).forEach((k,i)=>{ const KL=lay[k.id]; if(!KL) return;
-      k.x=n.x+SUB_PADF+i*(CARD_W+SUB_GAP); k.y=topY+SUB_HEAD-KL.bt; });
+      k.x=n.x+SUB_PADF+i*(viewW()+SUB_GAP); k.y=topY+SUB_HEAD-KL.bt; });
   }});
 
   const anno=[...(m.groups||[]),...(m.comments||[])];
@@ -1183,6 +1198,89 @@ function renderCanvas(r){
       g.appendChild(el("rect",{class:"nbox",x:0,y:bt,width:w,height:L.h,rx:Math.min(L.h,NODE_H)/2,fill:col.fill,stroke:col.stroke,"stroke-width":1.5}));
       let by=bt+L.h/2 - (L.lines.length*LBL_LH)/2 + 12;
       L.lines.forEach(ln=>{ g.appendChild(txt(w/2,by,ln,"nlabel",{"text-anchor":"middle"})); by+=LBL_LH; });
+    } else if(L.kind==="card" && view()==="compact"){ // compact lens: icon + name only
+      const isQ=n.type==="wait", hue=typeHue(n);
+      g.appendChild(el("rect",{class:"nbox",x:0,y:bt,width:w,height:L.h,rx:12,fill:col.fill,stroke:hue,"stroke-width":1.5}));
+      g.appendChild(el("rect",{x:8,y:bt+17,width:22,height:22,rx:6,fill:hue}));
+      g.appendChild(useIc(ICON_FOR(n), 11, bt+20, 16, "#0f1720"));
+      g.appendChild(txt(38,bt+32,L.titleLines[0],"nlabel"));
+      if(!isQ && hasSubs(n)){ const chip=el("g",{class:"subchip"});
+        chip.appendChild(el("rect",{x:w-34,y:bt+19,width:26,height:18,rx:6,fill:hue}));
+        chip.appendChild(txt(w-21,bt+32,`▸${n.children.length}`,"",{fill:"#0f1720","font-size":"10","font-weight":"800","text-anchor":"middle"}));
+        chip.addEventListener("mousedown",ev=>ev.stopPropagation());
+        chip.addEventListener("click",ev=>{ ev.stopPropagation(); toggleExpand(n.id); });
+        g.appendChild(chip); }
+      if(r.bottleneck && r.bottleneck.node.id===n.id){
+        g.appendChild(el("circle",{cx:w-6,cy:bt,r:10,fill:"var(--nva)"}));
+        g.appendChild(useIc("ic-flag",w-12,bt-6,12,"#2a0a04"));
+      }
+    } else if(L.kind==="card" && view()==="people"){ // people & tools lens: who does it, with what
+      const isQ=n.type==="wait", hue=typeHue(n);
+      g.appendChild(el("rect",{class:"nbox",x:0,y:bt,width:w,height:L.h,rx:14,fill:col.fill,stroke:hue,"stroke-width":1.5}));
+      const WELL=26;
+      g.appendChild(el("rect",{x:12,y:bt+12,width:WELL,height:WELL,rx:7,fill:hue}));
+      g.appendChild(useIc(ICON_FOR(n), 16, bt+16, WELL-8, "#0f1720"));
+      g.appendChild(txt(TITLE_X,bt+20,isQ?"QUEUE":(n.performer==="bot"?"BOT STEP":"HUMAN STEP"),"nowner"));
+      const ow=(n.owner||"").trim();
+      g.appendChild(txt(TITLE_X,bt+40,truncToWidth(ow||"Unassigned", w-TITLE_X-16, "700 15px 'Segoe UI',system-ui,sans-serif"),"",
+        {"font-size":"15","font-weight":"700",fill:ow?"var(--ink)":"var(--faint)"}));
+      g.appendChild(txt(TITLE_X,bt+58,truncToWidth(n.label, w-TITLE_X-16, F_META),"nmeta"));
+      g.appendChild(el("line",{x1:12,y1:bt+72,x2:w-12,y2:bt+72,stroke:"var(--line)","stroke-width":1}));
+      if(isQ){
+        g.appendChild(txt(12,bt+98, mt.wip!=null?`${fmt(mt.wip)} waiting`:"queue — no data","nmeta"));
+      } else if(n.tool && TOOL_IC[n.tool]){
+        g.appendChild(el("rect",{x:12,y:bt+80,width:26,height:26,rx:7,fill:"#ffffff",stroke:"var(--line)","stroke-width":1}));
+        g.appendChild(useIc(TOOL_IC[n.tool], 15, bt+83, 20));
+        g.appendChild(txt(46,bt+97,TOOL_NAME[n.tool],"nmeta"));
+      } else {
+        g.appendChild(txt(12,bt+98, n.performer==="bot"?"Bot — tool not set":"Manual — no tool","nmeta"));
+      }
+      if(!isQ && hasSubs(n)){ const chip=el("g",{class:"subchip"});
+        const lbl2=`▸ ${n.children.length}`, cw2=26+lbl2.length*6;
+        chip.appendChild(el("rect",{x:w-cw2-10,y:bt+82,width:cw2,height:20,rx:6,fill:hue}));
+        chip.appendChild(txt(w-cw2/2-10,bt+96,lbl2,"",{fill:"#0f1720","font-size":"10","font-weight":"800","text-anchor":"middle"}));
+        chip.addEventListener("mousedown",ev=>ev.stopPropagation());
+        chip.addEventListener("click",ev=>{ ev.stopPropagation(); toggleExpand(n.id); });
+        g.appendChild(chip); }
+      if(r.bottleneck && r.bottleneck.node.id===n.id){
+        const fw=92;
+        g.appendChild(el("rect",{x:w-fw-6,y:bt-11,width:fw,height:18,rx:6,fill:"var(--nva)"}));
+        g.appendChild(useIc("ic-flag",w-fw-2,bt-9,13,"#2a0a04"));
+        g.appendChild(txt(w-fw+15,bt+2,"BOTTLENECK","",{fill:"#2a0a04","font-size":"9.5","font-weight":"700"}));
+      }
+    } else if(L.kind==="card" && view()==="value"){ // value / Lean lens: the waste-hunting view
+      const isQ=n.type==="wait", hue=typeHue(n);
+      const CC={VA:"var(--va)",NNVA:"var(--nnva)",NVA:"var(--nva)"};
+      const bandC = isQ ? "var(--wait)" : (n.classification?CC[n.classification]:"var(--faint)");
+      g.appendChild(el("rect",{class:"nbox",x:0,y:bt,width:w,height:L.h,rx:14,fill:col.fill,stroke:hue,"stroke-width":1.5}));
+      g.appendChild(el("rect",{x:2,y:bt+10,width:4,height:L.h-20,rx:2,fill:bandC}));
+      const WELL=26;
+      g.appendChild(el("rect",{x:12,y:bt+12,width:WELL,height:WELL,rx:7,fill:hue}));
+      g.appendChild(useIc(ICON_FOR(n), 16, bt+16, WELL-8, "#0f1720"));
+      let ty=bt+25; L.titleLines.forEach(ln=>{ g.appendChild(txt(TITLE_X,ty,ln,"nlabel")); ty+=LBL_LH; });
+      if(isQ){
+        g.appendChild(txt(12,bt+82,"WAITING — NO VALUE ADDED","",{fill:"var(--wait)","font-size":"10.5","font-weight":"800","letter-spacing":".5"}));
+        g.appendChild(txt(12,bt+102, mt.wait!=null?`Items sit here ${fmt(mt.wait)} ${unit()} on average`:"No wait data yet","nmeta"));
+      } else if(n.classification){
+        g.appendChild(useIc(VAL_IC[n.classification],12,bt+70,16,bandC));
+        g.appendChild(txt(34,bt+82,T.cls[n.classification].name.toUpperCase(),"",{fill:bandC,"font-size":"11","font-weight":"800","letter-spacing":".5"}));
+        const note=(n.valueNote||"").trim();
+        const lines=note?wrapText(note, w-24, F_META).slice(0,2):[];
+        if(lines.length){ let ny=bt+100; lines.forEach(l=>{ g.appendChild(txt(12,ny,l,"nmeta")); ny+=14; }); }
+        else g.appendChild(txt(12,bt+100,"No rationale captured yet","nmeta",{"font-style":"italic"}));
+      } else {
+        g.appendChild(txt(12,bt+82,"⚠ UNRATED","",{fill:"var(--warn)","font-size":"11","font-weight":"800","letter-spacing":".5"}));
+        g.appendChild(txt(12,bt+100,"Does the customer value this step?","nmeta"));
+      }
+      const tstr = isQ ? (mt.wait!=null?`${fmt(mt.wait)} ${unit()}`:"") : (mt.touch!=null?`${fmt(mt.touch)} ${unit()}`:"");
+      if(tstr) g.appendChild(txt(w-12,bt+L.h-10,tstr,"nmeta",{"text-anchor":"end"}));
+      if(!isQ && hasSubs(n)){ const chip=el("g",{class:"subchip"});
+        const lbl3=`▸ ${n.children.length} SUB-STEPS`, cw3=30+lbl3.length*5.6;
+        chip.appendChild(el("rect",{x:8,y:bt+L.h-9,width:cw3,height:18,rx:6,fill:hue}));
+        chip.appendChild(txt(8+cw3/2,bt+L.h+4,lbl3,"",{fill:"#0f1720","font-size":"9.5","font-weight":"800","text-anchor":"middle"}));
+        chip.addEventListener("mousedown",ev=>ev.stopPropagation());
+        chip.addEventListener("click",ev=>{ ev.stopPropagation(); toggleExpand(n.id); });
+        g.appendChild(chip); }
     } else { // uniform card — V2 split columns: primary (quantity/rate) | time
       const isQ=n.type==="wait", hue=typeHue(n);
       g.appendChild(el("rect",{class:"nbox",x:0,y:bt,width:w,height:L.h,rx:14,fill:col.fill,stroke:hue,"stroke-width":1.5}));
@@ -1776,7 +1874,7 @@ function duplicateNode(id){
   if(src.parentId){ // duplicating a sub-step adds the copy right after it in the same parent
     const p=state.model.nodes.find(x=>x.id===src.parentId);
     if(p && p.children){ const i=p.children.indexOf(src.id); p.children.splice(i+1,0,n.id); }
-    if(p && p.expanded) reflowFrom(p.x+CARD_W, CARD_W+SUB_GAP, [p.id]);
+    if(p && p.expanded) reflowFrom(p.x+viewW(), viewW()+SUB_GAP, [p.id]);
   }
   state.model.nodes.push(n); selectNode(n.id); toast("Node duplicated");
 }
@@ -1784,11 +1882,11 @@ function duplicateNode(id){
 /* ---------- sub-steps: expand/collapse + add/remove/promote ---------- */
 function toggleExpand(id){
   const n=state.model.nodes.find(x=>x.id===id); if(!n||!hasSubs(n)) return;
-  const dx=frameWOf(n.children.length)-CARD_W;
-  if(!n.expanded){ n.expanded=true; reflowFrom(n.x+CARD_W, dx, [n.id]); }
+  const dx=frameWOf(n.children.length)-viewW();
+  if(!n.expanded){ n.expanded=true; reflowFrom(n.x+viewW(), dx, [n.id]); }
   else{ n.expanded=false;
     if(state.selected && n.children.includes(state.selected.id)) state.selected={type:"node",id:n.id};
-    reflowFrom(n.x+CARD_W, -dx, [n.id]); }
+    reflowFrom(n.x+viewW(), -dx, [n.id]); }
   render();
 }
 function addSubStep(pid){
@@ -1797,7 +1895,7 @@ function addSubStep(pid){
   state.model.nodes.push({id, type:"touch", parentId:pid, label:"New sub-step", stepId:id, x:p.x, y:p.y,
     touchTimeManual:null, throughputManual:null, capacityManual:null, performer:p.performer||"human"});
   p.children=(p.children||[]).concat(id);
-  if(p.expanded) reflowFrom(p.x+CARD_W, frameWOf(oldN+1)-frameWOf(oldN), [p.id]);
+  if(p.expanded) reflowFrom(p.x+viewW(), frameWOf(oldN+1)-frameWOf(oldN), [p.id]);
   render();
 }
 function removeSubStep(id){
@@ -1807,7 +1905,7 @@ function removeSubStep(id){
   deleteNode(id);
   if(p && wasExpanded){
     const newN=(p.children||[]).length;
-    reflowFrom(p.x+CARD_W, (newN?frameWOf(newN):CARD_W)-frameWOf(oldN), [p.id]);
+    reflowFrom(p.x+viewW(), (newN?frameWOf(newN):viewW())-frameWOf(oldN), [p.id]);
   }
   if(p) selectNode(p.id);
 }
@@ -2327,6 +2425,10 @@ $("#autoArrange").onclick=autoArrange;
 document.querySelectorAll("[data-rmode]").forEach(b=>b.onclick=()=>{
   if(!state.model) return;
   state.model.settings=state.model.settings||{}; state.model.settings.ribbonColor=b.dataset.rmode; render(); });
+document.querySelectorAll("[data-cardview]").forEach(b=>b.onclick=()=>{
+  if(!state.model || view()===b.dataset.cardview) return;
+  state.model.settings=state.model.settings||{}; state.model.settings.cardView=b.dataset.cardview; render();
+  if(b.dataset.cardview==="compact") toast("Tip: hit ✨ Tidy to tighten the layout for this view"); });
 
 /* stats sheet: export a blank/prefilled sheet, import a filled one (snapshot, no live link) */
 $("#exportSheet").onclick=exportSheet;
