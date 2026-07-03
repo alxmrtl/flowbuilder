@@ -271,6 +271,7 @@
   .node.selected .nbox{stroke:var(--accent);stroke-width:2.5}
   .node.multi .nbox{stroke:var(--accent);stroke-width:2}
   .marquee{fill:var(--accent);fill-opacity:.08;stroke:var(--accent);stroke-width:1;stroke-dasharray:4 3;pointer-events:none}
+  .guide{stroke:var(--accent);stroke-width:1;stroke-dasharray:4 4;opacity:.85;pointer-events:none}
   /* ---- annotation tools (group / comment) ---- */
   body.tool-group #stage, body.tool-comment #stage{cursor:crosshair}
   body.tool-group .node, body.tool-comment .node{opacity:.5;transition:opacity .08s}
@@ -460,7 +461,7 @@
   <button data-tool="select" title="Selection box — drag to select several steps, then move them together"><svg class="t-ic"><use href="#ic-select"/></svg>Select</button>
   <button data-tool="pan" title="Hand — drag to move the canvas around"><svg class="t-ic"><use href="#ic-hand"/></svg>Pan</button>
   <span class="pb-hint">Drag boxes to arrange · drag empty space to select several · hover a box and drag a dot to connect (loops &amp; branches OK).</span>
-  <button id="autoArrange" title="Tidy the layout into a left-to-right flow grid">Auto-arrange</button>
+  <button id="autoArrange" title="Snap boxes into neat columns — never touches your arrows">✨ Tidy</button>
   <div class="pb-zoom">
     <button id="zoomOut" title="Zoom out">−</button>
     <span id="zoomLevel">100%</span>
@@ -535,6 +536,7 @@
 
 const NS = "http://www.w3.org/2000/svg";
 const NODE_W = 172, NODE_H = 64, QUEUE_W = 156;
+const GRID = 20, SNAP_TOL = 6;   // layout grid unit + alignment-snap tolerance (logical px); Alt-drag bypasses
 const LIB_KEY = "flowbuilder.library";
 
 /* ---- Nomenclature (edit here to re-label everywhere) ---- */
@@ -1603,15 +1605,44 @@ function onNodeDown(ev,n){ if(!editable()||state.linkingFrom) return;
       .map(node=>({node,x0:node.x,y0:node.y}));
   } else { state.selectedIds=[]; }
   window.addEventListener("mousemove",onDragMove); window.addEventListener("mouseup",onDragUp); }
+/* ----- snapping: prefer aligning with a neighbour (guides), else fall to the grid ----- */
+const snapG = v => Math.round(v/GRID)*GRID;
+function snapDrag(n, px, py, exclude){
+  // every node's visual centre is y + NODE_H/2 (y is a centre-line anchor), so centres align when y's match
+  const L=_lay[n.id], w=(L&&L.w)||NODE_W, guides=[];
+  let sx=null, sy=null;
+  (state.model.nodes||[]).forEach(o=>{ if(o.id===n.id||(exclude&&exclude.has(o.id))||o.parentId) return;
+    const OL=_lay[o.id]; if(!OL) return;
+    if(sx==null){ // left↔left, centre↔centre, right↔right
+      for(const [tx,off] of [[o.x,0],[o.x+OL.w/2,w/2],[o.x+OL.w,w]]){
+        if(Math.abs(px-(tx-off))<=SNAP_TOL){ sx=tx-off; guides.push({v:true, at:tx}); break; } } }
+    if(sy==null && Math.abs(py-o.y)<=SNAP_TOL){ sy=o.y; guides.push({v:false, at:o.y+NODE_H/2}); }
+  });
+  return { x: sx!=null?sx:snapG(px), y: sy!=null?sy:snapG(py), guides };
+}
+function drawGuides(guides){ if(!guides||!guides.length) return; const svg=$("#canvas");
+  const vb=(svg.getAttribute("viewBox")||"0 0 800 480").split(/\s+/).map(Number);
+  guides.forEach(gd=>svg.appendChild(el("line", gd.v
+    ? {class:"guide", x1:gd.at, y1:vb[1], x2:gd.at, y2:vb[1]+vb[3]}
+    : {class:"guide", x1:vb[0], y1:gd.at, x2:vb[0]+vb[2], y2:gd.at})));
+}
 function onDragMove(ev){ if(!drag) return; const svg=$("#canvas"),rect=svg.getBoundingClientRect(),z=Z();
   const px=(ev.clientX-rect.left)/z-drag.dx, py=(ev.clientY-rect.top)/z-drag.dy;
+  const snapping = !ev.altKey && (!state.model.settings || state.model.settings.snap!==false);
+  let guides=[];
   if(drag.group){ // rigid group move: shift all members by one delta, clamped so none crosses 0
-    let ddx=px-drag.gx0, ddy=py-drag.gy0;
+    let tx=px, ty=py;
+    if(snapping){ const s=snapDrag(drag.n, px, py, new Set(state.selectedIds)); tx=s.x; ty=s.y; guides=s.guides; }
+    let ddx=tx-drag.gx0, ddy=ty-drag.gy0;
     ddx=Math.max(ddx, -Math.min(...drag.group.map(it=>it.x0)));
     ddy=Math.max(ddy, -Math.min(...drag.group.map(it=>it.y0)));
     drag.group.forEach(it=>{ it.node.x=it.x0+ddx; it.node.y=it.y0+ddy; });
-  } else { drag.n.x=Math.max(0,px); drag.n.y=Math.max(0,py); }
-  drag.moved=true; drag.g._dragged=true; render(); }
+  } else {
+    let tx=px, ty=py;
+    if(snapping){ const s=snapDrag(drag.n, px, py); tx=s.x; ty=s.y; guides=s.guides; }
+    drag.n.x=Math.max(0,tx); drag.n.y=Math.max(0,ty);
+  }
+  drag.moved=true; drag.g._dragged=true; render(); drawGuides(guides); }
 function onDragUp(){ window.removeEventListener("mousemove",onDragMove); window.removeEventListener("mouseup",onDragUp);
   const g=drag&&drag.g; drag=null; setTimeout(()=>{ if(g)g._dragged=false; },0); }
 
@@ -1735,7 +1766,46 @@ function editGroupLabel(grp){ const svg=$("#canvas");
   inp.addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); inp.blur(); }
     else if(e.key==="Escape"){ inp.value=grp.label||""; inp.blur(); } }); }
 
-/* ---------- auto-arrange: lay nodes out as a left-to-right flow grid ---------- */
+/* ---------- animated layout moves: rAF tween of model coords (nodes, groups, comments) ---------- */
+let _anim=null;
+function animateNodes(targets, ms=280, done){
+  if(_anim){ cancelAnimationFrame(_anim.raf); _anim=null; }
+  const items=targets.map(t=>({ent:t.ent, x0:t.ent.x, y0:t.ent.y, x1:t.x!=null?t.x:t.ent.x, y1:t.y!=null?t.y:t.ent.y}))
+    .filter(it=>it.x0!==it.x1 || it.y0!==it.y1);
+  if(!items.length){ render(); if(done)done(); return; }
+  const t0=performance.now(), anim={};
+  const ease=t=>1-Math.pow(1-t,3);
+  const step=now=>{ if(_anim!==anim) return;
+    const k=ease(Math.min(1,(now-t0)/ms));
+    items.forEach(it=>{ it.ent.x=lerp(it.x0,it.x1,k); it.ent.y=lerp(it.y0,it.y1,k); });
+    render();
+    if(k<1){ anim.raf=requestAnimationFrame(step); } else { _anim=null; if(done)done(); } };
+  _anim=anim; anim.raf=requestAnimationFrame(step);
+}
+/* shift everything at/right of x0 by dx (nodes + annotations) — makes room when a step expands */
+function reflowFrom(x0, dx, exceptIds){
+  if(!dx) return; const m=state.model, skip=new Set(exceptIds||[]), t=[];
+  (m.nodes||[]).forEach(n=>{ if(!skip.has(n.id) && !n.parentId && n.x>=x0) t.push({ent:n, x:Math.max(0,n.x+dx)}); });
+  (m.groups||[]).forEach(g=>{ if(g.x>=x0) t.push({ent:g, x:Math.max(0,g.x+dx)}); });
+  (m.comments||[]).forEach(c=>{ if(c.x>=x0) t.push({ent:c, x:Math.max(0,c.x+dx)}); });
+  animateNodes(t);
+}
+/* refit each group rect around its members' current bounds (same padding as creation) */
+function tidyGroups(){
+  const m=state.model; if(!m.groups||!m.groups.length) return;
+  const PAD=22, TOP=PAD+16;
+  m.groups.forEach(g=>{
+    const members=(g.members||[]).map(id=>m.nodes.find(n=>n.id===id)).filter(Boolean);
+    if(!members.length) return;
+    let bx0=Infinity,by0=Infinity,bx1=-Infinity,by1=-Infinity;
+    members.forEach(n=>{ const L=_lay[n.id]; if(!L) return; const ny0=n.y+(L.bt||0);
+      bx0=Math.min(bx0,n.x); by0=Math.min(by0,ny0); bx1=Math.max(bx1,n.x+L.w); by1=Math.max(by1,ny0+L.h); });
+    if(bx0===Infinity) return;
+    g.x=Math.max(0,bx0-PAD); g.y=Math.max(0,by0-TOP); g.w=(bx1+PAD)-g.x; g.h=(by1+PAD)-g.y;
+  });
+}
+
+/* ---------- Tidy: lay nodes out as a left-to-right flow grid ---------- */
 function autoArrange(){
   if(!editable()||!state.model||!state.model.nodes.length) return;
   const m=state.model;
@@ -1750,13 +1820,17 @@ function autoArrange(){
   const spine=order.length?order.slice():m.nodes.slice();
   m.nodes.forEach(n=>{ if(!spine.find(s=>s.id===n.id)) spine.push(n); });
   spine.forEach(n=>{ if(col[n.id]==null) col[n.id]=++extra; });
-  // assign a row within each column, in spine order
+  // assign a row within each column, in spine order; short columns centre vertically
   const COL_GAP=300, ROW_GAP=120, MARGIN_X=40, MARGIN_Y=120;
-  const rowOf={};
+  const rowsIn={};
+  spine.forEach(n=>{ const c=col[n.id]; rowsIn[c]=(rowsIn[c]||0)+1; });
+  const maxRows=Math.max(...Object.values(rowsIn));
+  const rowOf={}, targets=[];
   spine.forEach(n=>{ const c=col[n.id]; const r=(rowOf[c]||0); rowOf[c]=r+1;
-    n.x=MARGIN_X+c*COL_GAP; n.y=MARGIN_Y+r*ROW_GAP; });
-  m.edges.forEach(e=>{ delete e.fromSide; delete e.toSide; });   // clean default right→left routing
-  render();
+    targets.push({ent:n, x:snapG(MARGIN_X+c*COL_GAP),
+                  y:snapG(MARGIN_Y+(maxRows-rowsIn[c])*ROW_GAP/2+r*ROW_GAP)}); });
+  // custom arrow sides survive — Tidy repositions boxes, it never re-routes connections
+  animateNodes(targets, 320, ()=>{ tidyGroups(); render(); });
   toast("Layout tidied");
 }
 
@@ -1945,7 +2019,7 @@ function buildExportSVG(){
     .nlabel{font-weight:600;font-size:13px}.nmeta{fill:var(--muted);font-size:11px}.elabel{fill:var(--muted);font-size:11px}
     .nowner{fill:var(--faint);font-size:9px;letter-spacing:.6px;font-weight:700}
     .edge{fill:none;stroke:var(--faint);stroke-width:2}.edge.hot{stroke:var(--nva)}
-    .anchor,.edge-hit,.temp-edge,.del-handle{display:none}`;
+    .anchor,.edge-hit,.temp-edge,.del-handle,.guide{display:none}`;
   const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="${styleVars}">
     <style>${css}</style><defs>${symbols}</defs>
     <rect x="0" y="0" width="${W}" height="${H}" fill="${C.bg}"/>${g}</svg>`;
