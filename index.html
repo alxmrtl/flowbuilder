@@ -485,6 +485,8 @@
   .del-handle line{stroke:#fff;stroke-width:1.8;stroke-linecap:round}
   .temp-edge{fill:none;stroke:var(--accent);stroke-width:2;stroke-dasharray:5 4;pointer-events:none}
   .elabel{fill:var(--muted);font-size:11px;font-family:var(--font)}
+  /* case-flow labels on arrows — halo keeps them legible over crossings */
+  .eflow{font-size:10.5px;font-weight:700;font-family:var(--font);paint-order:stroke;stroke:var(--bg);stroke-width:3px;stroke-linejoin:round}
   .badge-warn{fill:var(--warn);font-size:11px;font-weight:700}
 
   /* ---- minimalist theme-aware scrollbars ---- */
@@ -566,7 +568,7 @@
   <div class="ctl segctl"><label>Segment</label><select id="segSel"></select></div>
   <div class="ctl segctl"><label>Period</label><select id="perSel"></select></div>
   <div class="ctl segctl" id="viewCtl"><label>View</label><span class="viewseg" id="viewSeg" title="Change what every card shows — size and spacing adapt">
-    <button data-cardview="metrics" class="on">Metrics</button><button data-cardview="people">People</button><button data-cardview="value">Value</button><button data-cardview="compact">Compact</button>
+    <button data-cardview="metrics" class="on">Metrics</button><button data-cardview="gaps">Gaps</button><button data-cardview="people">People</button><button data-cardview="value">Value</button><button data-cardview="compact">Compact</button>
   </span></div>
   <div class="spacer"></div>
   <button class="btn" id="exportSheet" title="Download a stats sheet (CSV) with one row per step — fill it in, then Import sheet to load the numbers.">⬇ Export sheet</button>
@@ -677,6 +679,7 @@
   <button data-tool="pan" title="Hand — drag to move the canvas around"><svg class="t-ic"><use href="#ic-hand"/></svg>Pan</button>
   <span class="pb-hint">Drag boxes to arrange · drag empty space to select several · hover a box and drag a dot to connect (loops &amp; branches OK).</span>
   <button id="autoArrange" title="Snap boxes into neat columns — never touches your arrows">✨ Tidy</button>
+  <button id="flowToggle" title="Show case volume and branch splits on the arrows — line thickness follows the flow">→ Case flow</button>
   <div class="pb-zoom">
     <button id="zoomOut" title="Zoom out">−</button>
     <span id="zoomLevel">100%</span>
@@ -1099,9 +1102,10 @@ function mainPath(){
    through each node — driven by edge Split %. Forward branches cap at the branch odds;
    rework loops produce >1 via a converging series. Linear flows give every node 1.0. */
 function flowWeights(){
-  const m=state.model; if(!m||!m.nodes.length) return {visits:{}, order:[]};
-  const start=m.nodes.find(n=>n.type==="start")||m.nodes[0]; if(!start) return {visits:{}, order:[]};
+  const m=state.model; if(!m||!m.nodes.length) return {visits:{}, order:[], edgeFlow:{}, edgeShare:{}};
+  const start=m.nodes.find(n=>n.type==="start")||m.nodes[0]; if(!start) return {visits:{}, order:[], edgeFlow:{}, edgeShare:{}};
   const byId=Object.fromEntries(m.nodes.map(n=>[n.id,n]));
+  const edgeFlow={}, edgeShare={};   // per-case traversals + normalized outgoing share, per edge id
   // normalized outgoing weights for a source node — blank Split % shares the leftover up to 100
   const wOut=id=>{
     const es=m.edges.filter(e=>e.from===id); if(!es.length) return [];
@@ -1111,7 +1115,8 @@ function flowWeights(){
     const per=M>0?Math.max(0,100-E)/M:0;
     const raw=es.map(e=>e.splitPct!=null?(+e.splitPct||0):per);
     const tot=raw.reduce((a,b)=>a+b,0);
-    return es.map((e,i)=>({to:e.to, w: tot>0?raw[i]/tot : 1/es.length}));
+    return es.map((e,i)=>{ const w= tot>0?raw[i]/tot : 1/es.length;
+      edgeShare[e.id]=w; return {id:e.id, to:e.to, w}; });
   };
   const visits={}; m.nodes.forEach(n=>visits[n.id]=0);
   const order=[]; const ordered=new Set();
@@ -1121,20 +1126,21 @@ function flowWeights(){
     let live=0; const next={};
     for(const id in frontier){ const f=frontier[id]; if(f<=0) continue;
       visits[id]+=f; live+=f; see(id);
-      for(const o of wOut(id)){ const add=f*o.w; if(add>0) next[o.to]=(next[o.to]||0)+add; } }
+      for(const o of wOut(id)){ const add=f*o.w; if(add>0){ next[o.to]=(next[o.to]||0)+add;
+        edgeFlow[o.id]=(edgeFlow[o.id]||0)+add; } } }
     const rem=Object.values(next).reduce((a,b)=>a+b,0);
     if(live<EPS) break;
     frontier=next;
     if(rem<EPS){ for(const id in next){ visits[id]+=next[id]; see(id); } break; }
   }
-  return {visits, order:order.map(id=>byId[id]).filter(Boolean)};
+  return {visits, order:order.map(id=>byId[id]).filter(Boolean), edgeFlow, edgeShare};
 }
 function rollup(){
   const path=mainPath();
-  const {visits, order}=flowWeights();
+  const {visits, order, edgeFlow, edgeShare}=flowWeights();
   const S=state.model.settings||{};
   const demand = S.demand!=null && S.demand!=="" ? +S.demand : null;
-  let touch=0, wait=0, unclassified=0; const waits=[]; const flow=[]; const dw={};
+  let touch=0, wait=0, unclassified=0; const waits=[]; const flow=[]; const dw={}; const qOut={};
   state.model.nodes.forEach(n=>{ if(n.type==="touch" && !n.classification) unclassified++; });
   /* capacity web — per on-path touch step: demand at the step, load vs effective capacity, pace.
      Loads use each step's own demand (incoming × visits), so rework loop-backs raise the load. */
@@ -1161,9 +1167,14 @@ function rollup(){
       flow.push({node:n, kind:"touch", time:tc, visits:v, base:mt.touch}); }
     if(n.type==="wait"){
       let base=mt.wait, derived=false;
+      const t=downTouch(n.id), dpace=t&&per[t.id]?per[t.id].pace:null;   // downstream clearing pace
+      /* queue clearing CAPACITY (for the Gaps verdict): only real numbers count — effective capacity
+         or measured throughput; a demand-derived pace would compare the queue against itself */
+      if(t){ const dm=metricFor(t);
+        const dcap=dm.effCapacity!=null?dm.effCapacity:(dm.throughput!=null?dm.throughput:null);
+        if(dcap!=null) qOut[n.id]=dcap; }
       if(base==null && mt.wip!=null && mt.wip>0){   // time to clear the queue at today's pace
-        const t=downTouch(n.id); const pace=t&&per[t.id]?per[t.id].pace:null;
-        if(pace!=null && pace>0){ base=(mt.wip/pace)*CAL_PER_UNIT[unit()]; derived=true; dw[n.id]=base; } }
+        if(dpace!=null && dpace>0){ base=(mt.wip/dpace)*CAL_PER_UNIT[unit()]; derived=true; dw[n.id]=base; } }
       if(base!=null && base>0){ const wt=v*base; wait+=wt;
         flow.push({node:n, kind:"wait", time:wt, visits:v, base, derived});
         waits.push({node:n, wait:wt, wip:mt.wip, visits:v, derived}); } } });
@@ -1196,7 +1207,8 @@ function rollup(){
   const cap={demand, flowCap, busiest, byOwner, per, lostToRework:lost>0?lost:null,
              any: demand!=null || flowCap!=null || byOwner.length>0};
   const qual={rft: rcount?rft:null, count:rcount, worst};
-  return {path, flow, touch, wait, turnaround, eff, waits, bottleneck, flag, unclassified, cap, qual, dw};
+  return {path, flow, touch, wait, turnaround, eff, waits, bottleneck, flag, unclassified, cap, qual, dw,
+          visits, edgeFlow, edgeShare, qOut};
 }
 /* flow-weighted Turnaround / Touch / Wait totals for a group's member boxes only */
 function groupRollup(grp){
@@ -1229,6 +1241,7 @@ function render(){
   if(!state.model) return;
   applyTheme(); applyTypeColors();
   document.querySelectorAll("[data-cardview]").forEach(b=>b.classList.toggle("on",b.dataset.cardview===view()));
+  { const ft=$("#flowToggle"); if(ft) ft.classList.toggle("tool-on",(state.model.settings&&state.model.settings.showFlow)!==false); }
   const r=rollup();
   renderStats(r); renderCanvas(r); renderRibbon(r);
   renderInspector();
@@ -1664,7 +1677,7 @@ const LBL_LH=16, MET_LH=14, CAP_RY=9;
 /* ---- design-06 visual language: type hues, severity, icons (uniform cards) ---- */
 const CARD_W=236, CARD_H=156, TITLE_X=44;
 /* ---- card views (lenses): what every card shows; size adapts, positions stay put ---- */
-const VIEW_DIMS={ metrics:{w:236,h:156}, people:{w:236,h:118}, value:{w:236,h:140}, compact:{w:170,h:56} };
+const VIEW_DIMS={ metrics:{w:236,h:156}, gaps:{w:236,h:156}, people:{w:236,h:118}, value:{w:236,h:140}, compact:{w:170,h:56} };
 const view  = () => (state.model&&state.model.settings&&state.model.settings.cardView)||"metrics";
 const viewW = () => VIEW_DIMS[view()].w;
 /* ---- sub-steps: a touch step can hold child steps (granularity control) ----
@@ -1856,17 +1869,51 @@ function renderCanvas(r){
 
   const byId=Object.fromEntries(m.nodes.map(n=>[n.id,n]));
   const hotPath=new Set(r.path.map(n=>n.id));
+  /* case flow on the arrows: volume + branch splits; ASSUMED splits (no Split % on a branch)
+     show in amber with ≈ — the engine divides those evenly, which multiplies demand through loops */
+  const showFlow=(m.settings&&m.settings.showFlow)!==false;
+  const eFlow=r.edgeFlow||{}, eShare=r.edgeShare||{}, demandV=r.cap?r.cap.demand:null;
+  const maxEF=Math.max(1e-9,...m.edges.map(e=>eFlow[e.id]||0));
+  const outCount={}; m.edges.forEach(e=>outCount[e.from]=(outCount[e.from]||0)+1);
   m.edges.forEach(e=>{
     const a=byId[e.from], b=byId[e.to]; if(!a||!b) return;
     const p1=portGeo(a,lay[a.id],e.fromSide||"right"), p2=portGeo(b,lay[b.id],e.toSide||"left");
     const d=edgePath(p1,p2);
     const onPath=hotPath.has(a.id)&&hotPath.has(b.id);
     const hot=onPath && (isBottleneck(a,r)||isBottleneck(b,r));
-    svg.appendChild(el("path",{d,class:"edge"+(hot?" hot":""),"marker-end":`url(#${hot?'arrowHot':'arrow'})`}));
+    const ef=eFlow[e.id]||0;
+    const ep=el("path",{d,class:"edge"+(hot?" hot":""),"marker-end":`url(#${hot?'arrowHot':'arrow'})`});
+    if(showFlow) ep.style.strokeWidth=Math.max(1.5,Math.min(5,1.5+3.5*ef/maxEF))+"px";  // thick = busy (inline style beats the .edge CSS rule)
+    svg.appendChild(ep);
     if(editable()){ const hit=el("path",{d,class:"edge-hit"});
       hit.addEventListener("click",ev=>{ev.stopPropagation(); selectEdge(e.id);}); svg.appendChild(hit); }
-    if(e.splitPct){ const mx=(p1.x+p2.x)/2,my=(p1.y+p2.y)/2-6;
-      const tl=el("text",{x:mx,y:my,class:"elabel","text-anchor":"middle"}); tl.textContent=e.splitPct+"%"; svg.appendChild(tl); }
+    const mx=(p1.x+p2.x)/2, my=(p1.y+p2.y)/2-6;
+    if(e.label){ const nl=el("text",{x:mx,y:my-12,class:"elabel","text-anchor":"middle"}); nl.textContent=e.label; svg.appendChild(nl); }
+    if(showFlow){
+      const branch=(outCount[e.from]||0)>1;
+      const assumed=branch && e.splitPct==null;
+      const share=eShare[e.id];
+      const flowStr=demandV!=null?`${fmt(ef*demandV)}/day`:null;
+      let str=null, fill="var(--muted)";
+      if(branch && share!=null){
+        str=`${assumed?"≈":""}${Math.round(share*100)}%`+(flowStr?` · ${flowStr}`:"");
+        fill=assumed?"var(--warn)":(share<=0?"var(--faint)":"var(--muted)");
+      } else if(flowStr){ str=flowStr; if(ef<=0) fill="var(--faint)"; }
+      if(str){
+        const tl=el("text",{x:mx,y:my,class:"eflow","text-anchor":"middle",fill});
+        tl.textContent=str;
+        const tip=el("title");
+        tip.textContent=assumed?"Assumed even split — no Split % set on this branch. Click to set the real share."
+          : branch?"Share of cases down this path":"Cases flowing along this arrow per day";
+        tl.appendChild(tip);
+        if(editable()){ tl.style.pointerEvents="all"; tl.style.cursor="pointer";
+          tl.addEventListener("mousedown",ev=>ev.stopPropagation());
+          tl.addEventListener("click",ev=>{ev.stopPropagation(); selectEdge(e.id);}); }
+        svg.appendChild(tl);
+      }
+    } else if(e.splitPct!=null){   // flow display off — keep the plain split label
+      const tl=el("text",{x:mx,y:my,class:"elabel","text-anchor":"middle"}); tl.textContent=e.splitPct+"%"; svg.appendChild(tl);
+    }
   });
 
   const txt=(x,y,str,cls,extra)=>{ const t=el("text",Object.assign({x,y,class:cls},extra||{})); t.textContent=str; return t; };
@@ -1985,6 +2032,102 @@ function renderCanvas(r){
         chip.addEventListener("mousedown",ev=>ev.stopPropagation());
         chip.addEventListener("click",ev=>{ ev.stopPropagation(); toggleExpand(n.id); });
         g.appendChild(chip); }
+    } else if(L.kind==="card" && view()==="gaps"){ // gaps lens: required vs available, in raw numbers
+      const isQ=n.type==="wait", hue=typeHue(n), isBot=n.performer==="bot";
+      g.appendChild(el("rect",{class:"nbox",x:0,y:bt,width:w,height:L.h,rx:14,fill:col.fill,stroke:hue,"stroke-width":1.5}));
+      const WELL=26;
+      g.appendChild(el("rect",{x:12,y:bt+12,width:WELL,height:WELL,rx:7,fill:hue}));
+      g.appendChild(useIc(ICON_FOR(n), 16, bt+16, WELL-8, "#0f1720"));
+      if(!isQ && n.tool && TOOL_IC[n.tool]){
+        const TW=26, tx2=w-12-TW, ty2=bt+12;
+        g.appendChild(el("rect",{x:tx2,y:ty2,width:TW,height:TW,rx:7,fill:"#ffffff",stroke:"var(--line)","stroke-width":1}));
+        g.appendChild(useIc(TOOL_IC[n.tool], tx2+3, ty2+3, TW-6));
+      }
+      const ownerStr=(n.owner||"").trim();
+      if(ownerStr){ const ot=truncToWidth(ownerStr.toUpperCase(), w-TITLE_X-30, F_META);
+        g.appendChild(txt(TITLE_X,bt+20,ot,"nowner")); }
+      let ty=ownerStr?bt+34:bt+25;
+      L.titleLines.forEach(ln=>{ g.appendChild(txt(TITLE_X,ty,ln,"nlabel")); ty+=LBL_LH; });
+
+      const NUMF=`800 21px ${FONT_STACK}`;
+      const padL=12, midX=Math.round(w/2), colTop=bt+84, rx=midX+12;
+      const vv=(r.visits&&r.visits[n.id])||0;
+      const pc=(r.cap&&r.cap.per&&r.cap.per[n.id])||null;
+      const mtL=mt;
+      // visits pill between title and columns — the demand-multiplication cue
+      if(!isQ && !isBot && vv>1.15){
+        const pl=`↺ ×${fmt(vv)} PER CASE`, pw=measure(pl,`800 9px ${FONT_STACK}`)+16;
+        g.appendChild(el("rect",{x:TITLE_X,y:bt+52,width:pw,height:15,rx:7.5,fill:SEVC.warn.bg}));
+        const vm=txt(TITLE_X+pw/2,bt+63,pl,"",{fill:SEVC.warn.c,"font-size":"9","font-weight":"800","text-anchor":"middle"});
+        const vt=el("title"); vt.textContent=`Each case passes through here ≈${fmt(vv)}× — loop-backs multiply this step's demand`;
+        vm.appendChild(vt); g.appendChild(vm);
+      }
+      g.appendChild(el("line",{x1:midX,y1:colTop-2,x2:midX,y2:bt+L.h-10,stroke:"var(--line)","stroke-width":1}));
+      const drawNum=(x,label,numStr,unitStr,numColor,cat)=>{
+        let lx=x;
+        if(cat){ g.appendChild(useIc(METRICS_SPEC.categories[cat].icon, x, colTop-4.5, 9, `var(--cat-${cat})`)); lx=x+13; }
+        g.appendChild(txt(lx,colTop+4,truncToWidth(label,midX-padL-(cat?28:14),F_META),"nowner"));
+        g.appendChild(txt(x,colTop+26,numStr,"",{"font-size":"21","font-weight":"800",fill:numColor||"var(--ink)"}));
+        if(unitStr){ const nw=measure(numStr,NUMF);
+          g.appendChild(txt(x+nw+5,colTop+26,unitStr,"nmeta",{"font-size":"10"})); }
+      };
+      const subline=(x,str,faint)=>g.appendChild(txt(x,colTop+40,truncToWidth(str,midX-padL-10,`9.5px ${FONT_STACK}`),"nmeta",{"font-size":"9.5",fill:faint?"var(--faint)":"var(--muted)"}));
+      const pill=(x,label,sev)=>{ const c=SEVC[sev], pw=measure(label,`800 9.5px ${FONT_STACK}`)+14;
+        g.appendChild(el("rect",{x,y:colTop+46,width:pw,height:16,rx:8,fill:c.bg}));
+        g.appendChild(txt(x+pw/2,colTop+57.5,label,"",{fill:c.c,"font-size":"9.5","font-weight":"800","text-anchor":"middle"})); };
+      const gapPill=(x,have,needV,unitWord)=>{ const d=have-needV;
+        if(Math.abs(d)<0.05*Math.max(needV,1e-9)) pill(x,"AT THE LIMIT","warn");
+        else if(d>0) pill(x,`+${fmt(d)}${unitWord} ${unitWord==="/day"?"headroom":"spare"}`,"calm");
+        else pill(x,`−${fmt(-d)}${unitWord} short`,"hot"); };
+
+      if(isQ){ // queue: arriving vs clearing | queue size + wait
+        const arriving=(r.cap&&r.cap.demand!=null&&vv>0)?r.cap.demand*vv:null;
+        const clears=(r.qOut&&r.qOut[n.id]!=null)?r.qOut[n.id]:null;
+        drawNum(padL,"ARRIVING", arriving!=null?fmt(arriving):"—","/day", arriving!=null?null:"var(--faint)","capacity");
+        if(clears!=null) subline(padL,`clears ${fmt(clears)}/day`);
+        else subline(padL, arriving==null?"set demand on Start":"size the next step", true);
+        if(arriving!=null&&clears!=null){ const d=clears-arriving;
+          if(Math.abs(d)<0.05*Math.max(arriving,1e-9)) pill(padL,"AT THE LIMIT","warn");
+          else if(d>0) pill(padL,"KEEPING UP","calm");
+          else pill(padL,`GROWING +${fmt(-d)}/day`,"hot"); }
+        const dwv=r.dw?r.dw[n.id]:null, time=mtL.wait!=null?mtL.wait:dwv, approx=mtL.wait==null&&dwv!=null;
+        drawNum(rx, ML("wip").toUpperCase(), mtL.wip!=null?fmt(mtL.wip):"—","cases", mtL.wip!=null?null:"var(--faint)","capacity");
+        if(time!=null) subline(rx,`${approx?"≈":""}${fmt(time)} ${unit()} wait`);
+      } else { // step: need vs can | people (or bot run time)
+        const need=pc?pc.demand:null;
+        const capV=mtL.effCapacity!=null?mtL.effCapacity:mtL.capacity;
+        drawNum(padL,"NEED VS CAN", need!=null?fmt(need):"—","/day", need!=null?null:"var(--faint)","capacity");
+        if(capV!=null) subline(padL,`can ${fmt(capV)}/day`);
+        else subline(padL, n.parentId?"see parent step":(need==null?"set demand on Start":"set people on step"), true);
+        if(need!=null&&capV!=null) gapPill(padL,capV,need,"/day");
+        const th=touchHours(mtL.touch), hrs=n.hoursPerDay!=null?n.hoursPerDay:AVAIL_HRS;
+        if(isBot){
+          const run=(need!=null&&th!=null)?need*th:null;
+          drawNum(rx,"RUN TIME", run!=null?fmt(run):"—","hrs/day", run!=null?null:"var(--faint)","speed");
+          if(vv>1.15) subline(rx,`×${fmt(vv)} runs per case`);
+        } else {
+          const needPpl=(need!=null&&th!=null&&hrs>0)?need*th/hrs:null;
+          drawNum(rx,"PEOPLE", n.people!=null?fmt(n.people):"—","ppl", n.people!=null?null:"var(--faint)","capacity");
+          if(needPpl!=null) subline(rx,`need ≈${fmt(needPpl)} ppl`);
+          else if(n.people==null) subline(rx,"set people on step",true);
+          if(n.people!=null&&needPpl!=null) gapPill(rx,n.people,needPpl," ppl");
+        }
+      }
+      if(r.flag && r.flag.node.id===n.id){
+        const fw=92;
+        g.appendChild(el("rect",{x:w-fw-6,y:bt-11,width:fw,height:18,rx:6,fill:"var(--nva)"}));
+        g.appendChild(useIc("ic-flag",w-fw-2,bt-9,13,"#2a0a04"));
+        g.appendChild(txt(w-fw+15,bt+2,"BOTTLENECK","",{fill:"#2a0a04","font-size":"9.5","font-weight":"700"}));
+      }
+      if(!isQ && hasSubs(n)){
+        const label=`▸ ${n.children.length} SUB-STEPS`, cw=30+label.length*5.6;
+        const chip=el("g",{class:"subchip"});
+        chip.appendChild(el("rect",{x:8,y:bt+L.h-9,width:cw,height:18,rx:6,fill:hue}));
+        chip.appendChild(txt(8+cw/2,bt+L.h+4,label,"",{fill:"#0f1720","font-size":"9.5","font-weight":"800","text-anchor":"middle"}));
+        chip.addEventListener("mousedown",ev=>ev.stopPropagation());
+        chip.addEventListener("click",ev=>{ ev.stopPropagation(); toggleExpand(n.id); });
+        g.appendChild(chip);
+      }
     } else { // uniform card — V2 split columns: primary (quantity/rate) | time
       const isQ=n.type==="wait", hue=typeHue(n);
       g.appendChild(el("rect",{class:"nbox",x:0,y:bt,width:w,height:L.h,rx:14,fill:col.fill,stroke:hue,"stroke-width":1.5}));
@@ -2039,6 +2182,13 @@ function renderCanvas(r){
         const load=pc&&pc.load!=null?Math.max(0,pc.load):((tp!=null&&capV!=null&&capV>0)?Math.max(0,tp/capV):null);
         const lc=load==null?"var(--faint)":SEVC[load>=0.8?"hot":load>=0.6?"warn":"calm"].c;
         drawNum(padL, ML("pace").toUpperCase(), tp!=null?fmt(tp):"—","/day", tp!=null?null:"var(--faint)","capacity");
+        // loops & branch-backs multiply demand — flag when a case passes through more than once
+        const vv=(r.visits&&r.visits[n.id])||0;
+        if(vv>1.15){
+          const vm=txt(midX-14,colTop+4,`×${fmt(vv)}/case`,"",{"text-anchor":"end","font-size":"9","font-weight":"800",fill:"var(--warn)"});
+          const vt=el("title"); vt.textContent=`Each case passes through here ≈${fmt(vv)}× — loop-backs multiply this step's demand`;
+          vm.appendChild(vt); g.appendChild(vm);
+        }
         // capacity scale: idle (left) → at capacity (right), red danger zone at the top end
         const sX=padL, sW=midX-padL-14, tY=vizY+14, tH=10, dz=0.85;
         g.appendChild(el("rect",{x:sX,y:tY,width:sW,height:tH,rx:5,fill:"#0f1825",stroke:"var(--line)","stroke-width":1}));
@@ -2050,8 +2200,15 @@ function renderCanvas(r){
           g.appendChild(txt(Math.min(Math.max(mx,sX+13),sX+sW-13),tY-5,Math.round(load*100)+"%","",
             {"text-anchor":"middle","font-size":"10.5","font-weight":"800",fill:lc}));
         } else g.appendChild(txt(sX+sW/2,tY-5,"no data","nmeta",{"text-anchor":"middle","font-size":"9"}));
-        g.appendChild(txt(sX,tY+tH+11,"IDLE","",{"font-size":"7.5","font-weight":"700",fill:"var(--faint)","letter-spacing":"0.4"}));
-        g.appendChild(txt(sX+sW,tY+tH+11,load!=null&&load>1?"OVERLOADED":"AT CAPACITY","",{"text-anchor":"end","font-size":"7.5","font-weight":"700",fill:load!=null&&load>1?"var(--nva)":"var(--faint)","letter-spacing":"0.4"}));
+        // raw numbers beat a bare %: when the web modeled this step, show need vs can under the bar
+        if(pc&&pc.demand!=null&&capV!=null){
+          const over=load!=null&&load>1;
+          g.appendChild(txt(sX,tY+tH+11,`NEED ${fmt(pc.demand)}/D`,"",{"font-size":"7.5","font-weight":"700",fill:lc,"letter-spacing":"0.3"}));
+          g.appendChild(txt(sX+sW,tY+tH+11, over?`OVER BY ${fmt(pc.demand-capV)}/D`:`CAN ${fmt(capV)}/D`,"",{"text-anchor":"end","font-size":"7.5","font-weight":"700",fill:over?"var(--nva)":"var(--faint)","letter-spacing":"0.3"}));
+        } else {
+          g.appendChild(txt(sX,tY+tH+11,"IDLE","",{"font-size":"7.5","font-weight":"700",fill:"var(--faint)","letter-spacing":"0.4"}));
+          g.appendChild(txt(sX+sW,tY+tH+11,load!=null&&load>1?"OVERLOADED":"AT CAPACITY","",{"text-anchor":"end","font-size":"7.5","font-weight":"700",fill:load!=null&&load>1?"var(--nva)":"var(--faint)","letter-spacing":"0.4"}));
+        }
       }
 
       // RIGHT = time (positioned segment with % to the left); queues fall back to the ≈ estimated wait
@@ -2262,8 +2419,15 @@ function renderInspector(){
     const kids=childrenOf(n);
     const mt=metricFor(n), pcap=(r.cap&&r.cap.per&&r.cap.per[n.id])||null;
     const canDo=mt.effCapacity!=null?mt.effCapacity:mt.capacity;
+    let needsClause="";
+    if(n.performer!=="bot" && pcap && pcap.demand!=null){
+      const thD=touchHours(mt.touch), hrsD=n.hoursPerDay!=null?n.hoursPerDay:AVAIL_HRS;
+      if(thD!=null && hrsD>0){ const needP=pcap.demand*thD/hrsD;
+        needsClause=` · needs ≈ <b>${fmt(needP)}</b> people for today's work`;
+        if(n.people!=null&&n.people>0){ const dP=n.people-needP;
+          needsClause+=` (${fmt(n.people)} staffed — ${fmt(Math.abs(dP))} ${dP>=0?"spare":"short"})`; } } }
     const derivedLine=(canDo!=null||(pcap&&pcap.load!=null))
-      ? `<div class="sub" style="margin:2px 0 6px">→ can do <b>${fmt(canDo)}</b> cases/day${pcap&&pcap.load!=null?` · load <b>${Math.round(pcap.load*100)}%</b>`:""}</div>` : "";
+      ? `<div class="sub" style="margin:2px 0 6px">→ can do <b>${fmt(canDo)}</b> cases/day${pcap&&pcap.load!=null?` · load <b>${Math.round(pcap.load*100)}%</b>`:""}${needsClause}</div>` : "";
     const observed=`<details class="insp-adv"><summary>Observed numbers <span class="h4note">· override the estimate</span></summary>
         ${field(`${ML("pace")} (cases/day)`,"throughputManual",n.throughputManual==null?"":n.throughputManual,"number","Cases actually completed per day — overrides the modelled pace")}
         ${field(`${ML("capacity")} (cases/day)`,"capacityManual",n.capacityManual==null?"":n.capacityManual,"number","Measured max per day — overrides people × hours ÷ touch time")}
@@ -3123,6 +3287,7 @@ function buildExportSVG(){
   const styleVars=`--bg:${C.bg};--panel:${C.panel};--panel2:${C.panel2};--line:${C.line};--ink:${C.ink};--muted:${C.muted};--faint:${C.faint};--accent:${C.accent};--grid:${C.grid};--va:${C.va};--nva:${C.nva};--warn:${C.warn};--t-queue:${C.tq};--t-human:${C.th};--t-bot:${C.tb};--term:${C.term};--term-line:${C.termLine}`;
   const css=`text{font-family:${FONT_STACK};fill:var(--ink);font-variant-numeric:tabular-nums}
     .nlabel{font-weight:600;font-size:13px}.nmeta{fill:var(--muted);font-size:11px}.elabel{fill:var(--muted);font-size:11px}
+    .eflow{font-size:10.5px;font-weight:700;paint-order:stroke;stroke:var(--bg);stroke-width:3px;stroke-linejoin:round}
     .nowner{fill:var(--faint);font-size:9px;letter-spacing:.6px;font-weight:700}
     .edge{fill:none;stroke:var(--faint);stroke-width:2}.edge.hot{stroke:var(--nva)}
     .anchor,.edge-hit,.temp-edge,.del-handle,.guide,.canvas-hint{display:none}
@@ -3185,6 +3350,9 @@ function setZoom(z){ state.zoom=Math.max(0.4,Math.min(2,Math.round(z*100)/100));
 $("#zoomIn").onclick=()=>setZoom(Z()+0.1);
 $("#zoomOut").onclick=()=>setZoom(Z()-0.1);
 $("#autoArrange").onclick=autoArrange;
+$("#flowToggle").onclick=()=>{ if(!state.model) return;
+  state.model.settings=state.model.settings||{};
+  state.model.settings.showFlow=(state.model.settings.showFlow!==false)?false:true; render(); };
 document.querySelectorAll("[data-rmode]").forEach(b=>b.onclick=()=>{
   if(!state.model) return;
   state.model.settings=state.model.settings||{}; state.model.settings.ribbonColor=b.dataset.rmode; render(); });
