@@ -15,6 +15,9 @@
     --font:-apple-system,'SF Pro Text','Segoe UI Variable Text','Segoe UI',Roboto,system-ui,Arial,sans-serif;
     /* node type hues (queue / human / bot) — tuned for the dark canvas */
     --t-queue:#6e8bff; --t-human:#2dd4bf; --t-bot:#b08cff;
+    /* metric-category accents (Speed / Capacity / Quality) — fixed identity, not themed:
+       deliberately absent from THEMES so applyTheme/resetThemeRoot never touch them */
+    --cat-speed:#b08cff; --cat-capacity:#34c38f; --cat-quality:#5a8dee;
     /* start / end terminal pills */
     --term:#2a3543; --term-line:#cdd9e6;
   }
@@ -92,6 +95,48 @@
   .modal .small{font-size:12px}
   .modal code{background:var(--panel2);border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-size:12px}
   .modal .steps{margin-top:14px}
+  .modal.wide{width:min(900px,94vw)}
+  /* ---- "Metrics explained" overlay (rendered from METRICS_SPEC) ---- */
+  .mx-intro{color:var(--muted);font-size:13.5px;line-height:1.55;margin:8px 0 16px}
+  .mx-cats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:18px}
+  .mx-cat{background:var(--panel2);border:1px solid var(--line);border-top:2px solid var(--cat);border-radius:10px;padding:12px 14px;min-width:0}
+  .mx-cat h4{margin:0;display:flex;align-items:center;gap:7px;font-size:13px;color:var(--ink)}
+  .mx-cat h4 svg{width:15px;height:15px;flex:0 0 auto;stroke:var(--cat);color:var(--cat);fill:none}
+  .mx-cat .tag{color:var(--muted);font-size:11.5px;margin:2px 0 9px}
+  .mx-m{margin:7px 0;font-size:12px;line-height:1.4}
+  .mx-m b{color:var(--ink);font-weight:650}
+  .mx-m .u{font-family:ui-monospace,Menlo,monospace;font-size:9.5px;color:var(--faint);background:var(--bg);
+    border:1px solid var(--line);border-radius:4px;padding:0 4px;margin-left:4px}
+  .mx-m .d{color:var(--muted)}
+  .mx-h{color:var(--faint);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;margin:18px 0 10px}
+  .mx-web{position:relative;display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 64px;background:var(--panel2);
+    border:1px solid var(--line);border-radius:10px;padding:14px 16px 16px}
+  .mx-web svg.wires{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}
+  .mx-web svg.wires path{fill:none;stroke-width:1.5;opacity:.5;transition:opacity .15s,stroke-width .15s}
+  .mx-web svg.wires .head{stroke:none;opacity:.6;transition:opacity .15s}
+  .mx-web.focus svg.wires path{opacity:.08}.mx-web.focus svg.wires .head{opacity:.08}
+  .mx-web.focus svg.wires path.on{opacity:.95;stroke-width:2}.mx-web.focus svg.wires .head.on{opacity:.95}
+  .mx-col{display:flex;flex-direction:column;justify-content:center;gap:8px;position:relative;z-index:1;min-width:0}
+  .mx-colt{color:var(--faint);font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;text-align:center;
+    padding-bottom:5px;border-bottom:1px solid var(--line);margin-bottom:4px}
+  .mx-node{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--cat,var(--faint));border-radius:7px;
+    padding:4px 9px;font-size:11.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:border-color .15s}
+  .mx-node.input{border-left-style:dotted;background:transparent}
+  .mx-node.rel{border-color:color-mix(in srgb,var(--cat,var(--faint)) 55%,var(--line))}
+  .mx-rules{display:grid;grid-template-columns:1fr 1fr;gap:7px 12px}
+  .mx-rule{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:7px 10px;font-size:11.5px;line-height:1.45}
+  .mx-rule b{color:var(--cat);font-weight:650}
+  .mx-rule .eq{font-family:ui-monospace,Menlo,monospace;font-size:10.5px}
+  .mx-rule .d{color:var(--muted);display:block}
+  .mx-prec{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .mx-strip{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+  .mx-strip h5{margin:0 0 8px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+  .mx-strip .chips{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+  .mx-strip .pc{background:var(--panel);border:1px solid var(--line);border-radius:99px;padding:2px 9px;font-size:11px;font-weight:600}
+  .mx-strip .pc:first-of-type{border-color:var(--accent);color:var(--accent)}
+  .mx-strip .beats{color:var(--faint);font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em}
+  .mx-strip .d{color:var(--muted);font-size:11px;margin-top:7px;line-height:1.45}
+  @media (max-width:760px){.mx-cats,.mx-rules,.mx-prec{grid-template-columns:1fr}}
 
   /* ---- Palette bar (add boxes) — top of the build area ---- */
   #paletteBar{flex:0 0 auto;display:flex;align-items:center;gap:8px;padding:9px 16px;background:var(--panel);
@@ -118,7 +163,14 @@
   .stats{display:flex;gap:16px;align-items:stretch;margin-bottom:12px;overflow-x:auto}
   .pillar{min-width:0;flex:0 1 auto}
   .pillar+.pillar{border-left:1px solid var(--line);padding-left:16px}
-  .p-label{color:var(--faint);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;margin-bottom:6px}
+  .p-label{color:var(--faint);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;margin-bottom:6px;
+    display:flex;align-items:center;gap:6px}
+  .p-label .p-ic{width:13px;height:13px;flex:0 0 auto;stroke:var(--cat,var(--faint));color:var(--cat,var(--faint));fill:none}
+  .p-label .p-tag{color:var(--faint);font-weight:500;text-transform:none;letter-spacing:.2px;font-size:10.5px;opacity:.85;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #analysis .a-head .a-help{background:transparent;border:1px solid transparent;color:var(--faint);font-size:11px;
+    border-radius:6px;padding:2px 8px;margin-left:8px;letter-spacing:.3px;cursor:pointer}
+  #analysis .a-head .a-help:hover{color:var(--accent);border-color:var(--line)}
   .p-cards{display:flex;gap:10px;flex-wrap:wrap;align-items:stretch}
   .p-empty{color:var(--faint);font-size:12px;align-self:center;max-width:200px;line-height:1.45;padding:6px 4px}
   .stat.roles{min-width:215px}
@@ -204,6 +256,12 @@
   .insp-sec>h4{margin:0 0 10px;font-size:10px;letter-spacing:.5px;text-transform:uppercase;color:var(--faint);font-weight:700;
     display:flex;align-items:baseline;gap:6px}
   .insp-sec>h4 .h4note{text-transform:none;letter-spacing:0;font-weight:500;font-size:11px}
+  /* metric-category sub-headings inside Setup (Speed / Capacity / Quality) */
+  .insp-cath{display:flex;align-items:center;gap:6px;color:var(--cat,var(--faint));font-size:9.5px;font-weight:700;
+    text-transform:uppercase;letter-spacing:.09em;margin:14px 0 7px}
+  .insp-cath:first-child{margin-top:0}
+  .insp-cath svg{width:11px;height:11px;flex:0 0 auto;stroke:var(--cat);color:var(--cat);fill:none}
+  .insp-cath::after{content:"";flex:1;height:1px;background:var(--line);opacity:.6}
   .insp-adv{border-top:1px solid var(--line);padding-top:12px}
   .insp-adv>summary{font-size:10px;letter-spacing:.5px;text-transform:uppercase;color:var(--faint);font-weight:700;cursor:pointer;list-style:none}
   .insp-adv>summary::-webkit-details-marker{display:none}
@@ -262,6 +320,7 @@
   /* time-contribution bar (in the analysis area) */
   #ribbonWrap .title{color:var(--muted);font-size:12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:baseline}
   #ribbonWrap .title b{color:var(--ink);font-weight:600}
+  #ribbonWrap .title .rib-ic{width:12px;height:12px;stroke:var(--cat-speed);color:var(--cat-speed);fill:none;vertical-align:-2px;margin-right:5px}
   #ribbonWrap .title .rt{color:var(--faint);font-size:11px;font-weight:500}
   .cscale{display:flex;justify-content:space-between;font-size:10px;color:var(--faint);margin-top:5px;text-transform:uppercase;letter-spacing:.4px}
   .viewseg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
@@ -407,6 +466,17 @@
   <symbol id="ic-clock" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
     <circle cx="12" cy="12" r="8.4"/><path d="M12 7.6V12l3 1.8"/>
   </symbol>
+  <!-- metric-category glyphs (Speed / Capacity / Quality) — chosen in the metrics workbench -->
+  <symbol id="ic-cat-speed" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M13 2.5 5.5 13H11l-1.5 8.5L17 11h-5.5l1.5-8.5z"/>
+  </symbol>
+  <symbol id="ic-cat-capacity" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="9" cy="8" r="3.2"/><path d="M3.5 19.5a5.5 5.5 0 0 1 11 0"/>
+    <circle cx="17.2" cy="9.2" r="2.5"/><path d="M15 19.5a4.6 4.6 0 0 1 5.5-4.4"/>
+  </symbol>
+  <symbol id="ic-cat-quality" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 3l7 2.8v5.4c0 4.4-3 7.4-7 9-4-1.6-7-4.6-7-9V5.8L12 3z"/><path d="M9 11.6l2.1 2.1 4-4.2"/>
+  </symbol>
   <!-- value-classification glyphs -->
   <symbol id="ic-val-value" viewBox="0 0 24 24" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
     <path d="M12 3.2l2.5 5.1 5.6.8-4.05 3.95.96 5.6L12 16.0l-5 2.65.96-5.6L3.9 9.1l5.6-.8L12 3.2Z"/>
@@ -481,7 +551,7 @@
         inspector as "Data key").</li>
       <li><b>⬇ Export sheet</b> — downloads a CSV with the exact columns this flow needs and
         <b>one row per step</b> (its StepID + name). This file <i>is</i> the spec.</li>
-      <li>You (or a teammate) <b>fill in the numbers</b> — hands-on time, wait time, queue sizes per step.</li>
+      <li>You (or a teammate) <b>fill in the numbers</b> — touch time, wait time, queue sizes per step.</li>
       <li><b>⬆ Import sheet</b> — load that file back in. The numbers populate the cards and the
         analysis, and are <b>saved with the flow</b> (and travel into a shared copy). Re-import any
         time to refresh; the toast shows <b>“N/N matched”</b> so you know the file lines up.</li>
@@ -499,6 +569,14 @@
   <div class="modal">
     <div class="modal-h"><h3>Flow efficiency explained</h3><button class="x" id="effClose">✕</button></div>
     <div id="effBody"></div>
+  </div>
+</div>
+
+<!-- Metrics-system explainer (rendered from METRICS_SPEC) -->
+<div class="overlay" id="metricsOverlay">
+  <div class="modal wide">
+    <div class="modal-h"><h3 id="metricsTitle">Metrics explained</h3><button class="x" id="metricsClose">✕</button></div>
+    <div id="metricsBody"></div>
   </div>
 </div>
 
@@ -546,10 +624,10 @@
 </main>
 
 <section id="analysis">
-  <div class="a-head">Analysis</div>
+  <div class="a-head">Analysis<button class="a-help" id="metricsHelp" title="What each metric means and how they connect">ⓘ Metrics explained</button></div>
   <div class="stats" id="stats"></div>
   <div id="ribbonWrap">
-    <div class="title"><span><b>Time contribution across the stream</b><span class="rmode" id="ribbonModeSeg" title="Colour the bands by node type or by time severity"><button data-rmode="type" class="on">Type</button><button data-rmode="severity">Severity</button></span></span><span class="rt" id="ribbonTotal"></span></div>
+    <div class="title"><span><b><svg class="rib-ic"><use href="#ic-cat-speed"/></svg>Time contribution across the stream</b><span class="rmode" id="ribbonModeSeg" title="Colour the bands by node type or by time severity"><button data-rmode="type" class="on">Type</button><button data-rmode="severity">Severity</button></span></span><span class="rt" id="ribbonTotal"></span></div>
     <div class="ribbon" id="ribbon"></div>
     <div id="ribTip"></div>
     <div class="cscale"><span>start</span><span>delivered</span></div>
@@ -623,10 +701,69 @@ const T = {
   cls:{ VA:{name:"Valued",        def:"Customers would pay for this."},
         NNVA:{name:"Necessary",   def:"Required — compliance or risk — but not valued directly."},
         NVA:{name:"Could remove", def:"Adds no value; a candidate to cut."} },
-  pillars:{ speed:"Speed", capacity:"Capacity", quality:"Quality" },
   capEmpty:"Set incoming work on the Start step and people on your steps to see capacity.",
   qualEmpty:"No rework data yet — add a Rework % in a step's Setup panel."
 };
+/* ---- Metrics system spec (Speed / Capacity / Quality) ----
+   Baked from mockups/metrics-spec.json, authored in the Metrics System Workbench.
+   Category accents live in :root as --cat-speed/--cat-capacity/--cat-quality.
+   Metric ids match the engine's field names (metricFor / rollup outputs). */
+const METRICS_SPEC = {
+  order:["speed","capacity","quality"],
+  categories:{
+    speed:   {label:"Speed",    tagline:"How fast work moves",             icon:"ic-cat-speed"},
+    capacity:{label:"Capacity", tagline:"Can the team keep up?",           icon:"ic-cat-capacity"},
+    quality: {label:"Quality",  tagline:"How often it’s right first time", icon:"ic-cat-quality"}
+  },
+  metrics:{
+    turnaround:  {l:"Turnaround time",   c:"speed",    u:"time",    d:"Start to delivered — touch time plus waiting."},
+    touch:       {l:"Touch time",        c:"speed",    u:"time",    d:"Time a person or bot actively works one item."},
+    wait:        {l:"Wait time",         c:"speed",    u:"time",    d:"Time an item sits in queues between steps."},
+    eff:         {l:"Flow efficiency",   c:"speed",    u:"%",       d:"Touch time ÷ turnaround — how much of the journey is real work."},
+    derivedWait: {l:"Estimated wait",    c:"speed",    u:"time",    d:"Queue size ÷ the next step’s pace (Little’s Law). Shown with ≈."},
+    demand:      {l:"Incoming work",     c:"capacity", u:"/day",    d:"Cases arriving each day — set on the Start step."},
+    wip:         {l:"In queue",          c:"capacity", u:"cases",   d:"Items sitting in a queue right now."},
+    capacity:    {l:"Capacity",          c:"capacity", u:"/day",    d:"The most a step could complete in a day."},
+    effCapacity: {l:"Effective capacity",c:"capacity", u:"/day",    d:"Capacity after rework takes its bite."},
+    pace:        {l:"Pace",              c:"capacity", u:"/day",    d:"Cases a step actually completes per day."},
+    load:        {l:"Load",              c:"capacity", u:"%",       d:"Demand on a step ÷ its effective capacity."},
+    flowCap:     {l:"Can deliver",       c:"capacity", u:"/day",    d:"The whole flow’s ceiling — the slowest step sets it."},
+    ownerLoad:   {l:"Load by role",      c:"capacity", u:"%",       d:"Hours of work each role faces vs hours they’re staffed."},
+    bottleneck:  {l:"Biggest bottleneck",c:"capacity", u:"",        d:"The one step holding the whole flow back."},
+    rework:      {l:"Rework %",          c:"quality",  u:"%",       d:"Share of cases that come back to a step to be redone."},
+    rft:         {l:"Right first time",  c:"quality",  u:"%",       d:"Chance a case sails through with no rework anywhere."},
+    worstRework: {l:"Most rework",       c:"quality",  u:"%",       d:"The step where the most work bounces back."},
+    lostToRework:{l:"Lost to rework",    c:"quality",  u:"hrs/day", d:"Touch-time hours spent redoing work each day."}
+  },
+  inputs:{ people:{l:"People"}, hoursPerDay:{l:"Hours per day"} },
+  rels:[
+    {f:["people","hoursPerDay","touch"],t:"capacity",   eq:"people × hours/day ÷ touch time",        d:"When nothing is measured, staffing models what a step could do."},
+    {f:["capacity","rework"],           t:"effCapacity",eq:"capacity × (1 − rework %)",              d:"Rework eats capacity — redone work isn’t new work."},
+    {f:["demand","effCapacity"],        t:"load",       eq:"step demand ÷ effective capacity",       d:"Over 80% runs hot; over 100% means falling behind."},
+    {f:["effCapacity"],                 t:"flowCap",    eq:"min effective capacity across steps",    d:"The slowest step caps the whole flow."},
+    {f:["wip","pace"],                  t:"derivedWait",eq:"in queue ÷ next step’s pace",            d:"How long today’s pile takes to clear at today’s pace."},
+    {f:["touch","wait"],                t:"turnaround", eq:"touch time + wait",                      d:"Most turnaround is usually waiting, not working."},
+    {f:["turnaround"],                  t:"eff",        eq:"touch time ÷ turnaround",                d:"Low is normal — 15% is respectable for most flows."},
+    {f:["rework"],                      t:"rft",        eq:"product of (1 − rework) across steps",   d:"Small rework rates compound fast across a flow."},
+    {f:["rework","touch"],              t:"lostToRework",eq:"rework × touch time × daily cases",     d:"The invisible payroll cost of redoing work."}
+  ],
+  prec:{
+    dataSource:{ title:"Where a number comes from",
+      chips:["Measured — imported sheet","Observed — typed override","Modelled — people × hours"],
+      d:"When more than one source exists for the same number, the more real one wins." },
+    bottleneckFlag:{ title:"Who gets the bottleneck flag",
+      chips:["A step running at ≥ 80% load","The longest queue","The busiest step"],
+      d:"One flag across the whole tool — a genuinely hot step beats a long queue." }
+  },
+  explainer:{
+    title:"Metrics explained",
+    intro:"Every number in Flow Builder answers one of three questions: how fast does work move (Speed), can the team keep up (Capacity), and how often is it right first time (Quality). The three are woven together — rework quietly drains capacity, capacity shapes waiting, and the slowest step sets everyone’s pace."
+  }
+};
+const ML = id => METRICS_SPEC.metrics[id].l;                       // display label for a metric
+const CAT_OF = id => (METRICS_SPEC.metrics[id]||{}).c || null;     // metric id → category (inputs → null)
+/* small inline category icon (HTML surfaces; canvas cards go through useIc) */
+const catIcHtml = (c,cls) => `<svg class="${cls}" style="--cat:var(--cat-${c})"><use href="#${METRICS_SPEC.categories[c].icon}"/></svg>`;
 const state = {
   mode: "home",       // home | build
   library: {flows:{}, lastOpenedId:null},
@@ -1065,11 +1202,11 @@ function renderStats(r){
   const days=(u==="hrs" && r.turnaround!=null) ? ` <small>(${fmt(r.turnaround/24)} days)</small>` : "";
   /* SPEED — how fast work moves */
   const speed=[
-    {cls:"",k:"Turnaround time",v:`${fmt(r.turnaround)} <small>${u}</small>${days}`},
-    {cls:"",k:"Hands-on time",v:`${fmt(r.touch)} <small>${u}</small>`},
-    {cls:"",k:"Wait time",v:`${fmt(r.wait)} <small>${u}</small>`},
-    {cls:"eff clickable",k:`Flow efficiency <span class="info">ⓘ</span>`,v:r.eff==null?"—":`${Math.round(r.eff*100)}<small>%</small>`,
-      title:`Hands-on ${fmt(r.touch)} ÷ Turnaround ${fmt(r.turnaround)} ${u} — click for the full breakdown`},
+    {cls:"",k:ML("turnaround"),v:`${fmt(r.turnaround)} <small>${u}</small>${days}`},
+    {cls:"",k:ML("touch"),v:`${fmt(r.touch)} <small>${u}</small>`},
+    {cls:"",k:ML("wait"),v:`${fmt(r.wait)} <small>${u}</small>`},
+    {cls:"eff clickable",k:`${ML("eff")} <span class="info">ⓘ</span>`,v:r.eff==null?"—":`${Math.round(r.eff*100)}<small>%</small>`,
+      title:`${ML("touch")} ${fmt(r.touch)} ÷ ${ML("turnaround")} ${fmt(r.turnaround)} ${u} — click for the full breakdown`},
   ].map(card).join("");
   /* CAPACITY — can the team keep up? */
   let capCards="";
@@ -1080,20 +1217,20 @@ function renderStats(r){
            :`⚠ Short ${fmt(short)}/day <small>${fmt(cap.demand)} in · ${fmt(cap.flowCap)}/day possible</small>`,
       title:"Incoming work vs what the flow can deliver per day — the slowest step sets the ceiling"});
   } else if(cap.demand!=null){
-    capCards+=card({k:"Incoming work",v:`${fmt(cap.demand)} <small>/day</small>`,
-      title:"Add people + hands-on time on your steps to see whether the flow keeps up"});
+    capCards+=card({k:ML("demand"),v:`${fmt(cap.demand)} <small>/day</small>`,
+      title:"Add people + touch time on your steps to see whether the flow keeps up"});
   } else if(cap.flowCap!=null){
-    capCards+=card({k:"Can deliver",v:`${fmt(cap.flowCap)} <small>/day</small>`,
+    capCards+=card({k:ML("flowCap"),v:`${fmt(cap.flowCap)} <small>/day</small>`,
       title:"Set incoming work on the Start step to see whether the flow keeps up"});
   }
   if(r.flag){
-    capCards+=card({cls:"bottleneck",k:"Biggest bottleneck",
+    capCards+=card({cls:"bottleneck",k:ML("bottleneck"),
       v: r.flag.kind==="load" ? `${esc(r.flag.node.label)} · ${Math.round(r.flag.load*100)}% <small>load</small>`
                               : `${r.flag.derived?"≈ ":""}${esc(r.flag.node.label)} · ${fmt(r.flag.wait)} ${u}`,
       title: r.flag.kind==="load" ? "The most loaded step — it sets the pace of the whole flow"
                                   : "The queue holding items the longest"});
   } else {
-    capCards+=card({cls:"bottleneck",k:"Biggest bottleneck",v:"none"});
+    capCards+=card({cls:"bottleneck",k:ML("bottleneck"),v:"none"});
   }
   if(cap.byOwner && cap.byOwner.length){
     const lc=l=>l==null?"":l>=0.8?"hot":l>=0.6?"warn":"calm";
@@ -1103,29 +1240,32 @@ function renderStats(r){
         <span class="rb-track"><i style="width:${o.load!=null?Math.min(100,Math.round(o.load*100)):0}%"></i></span>
         <span class="rb-pct">${o.load!=null?Math.round(o.load*100)+"%":"—"}</span>
       </div>`).join("");
-    capCards+=`<div class="stat roles"><div class="k">Load by owner</div><div class="rolebars">${rows}</div></div>`;
+    capCards+=`<div class="stat roles"><div class="k">${ML("ownerLoad")}</div><div class="rolebars">${rows}</div></div>`;
   }
   const capBody=(cap.demand!=null||cap.flowCap!=null||cap.busiest||(cap.byOwner&&cap.byOwner.length))
     ? capCards : capCards+`<div class="p-empty">${T.capEmpty}</div>`;
   /* QUALITY — how often it's right first time */
   let qualCards="";
   if(q.count){
-    qualCards+=card({cls:"eff",k:"Right first time",v:`${Math.round(q.rft*100)}<small>%</small>`,
+    qualCards+=card({cls:"eff",k:ML("rft"),v:`${Math.round(q.rft*100)}<small>%</small>`,
       title:`Chance a case sails through with no rework — across ${q.count} rated step${q.count>1?"s":""}`});
-    if(q.worst) qualCards+=card({cls:"namecard"+(q.worst.rework>=30?" warnflag":""),k:"Most rework",
+    if(q.worst) qualCards+=card({cls:"namecard"+(q.worst.rework>=30?" warnflag":""),k:ML("worstRework"),
       v:`${esc(q.worst.node.label)} · ${fmt(q.worst.rework)}<small>%</small>`,
       title:"Share of cases that come back to this step"});
-    if(cap.lostToRework!=null) qualCards+=card({cls:"warnflag",k:"Lost to rework",
+    if(cap.lostToRework!=null) qualCards+=card({cls:"warnflag",k:ML("lostToRework"),
       v:`${fmt(cap.lostToRework)} <small>hrs/day</small>`,
-      title:"Hands-on hours spent redoing work each day"});
+      title:"Touch-time hours spent redoing work each day"});
   } else {
     qualCards+=`<div class="p-empty">${T.qualEmpty}</div>`;
   }
   if(r.unclassified>0) qualCards+=card({cls:"warnflag",k:"Unrated steps",v:`⚠ ${r.unclassified} need a value rating`});
+  // pillar headers carry the category identity: icon + name + tagline (per the metrics spec)
+  const pHead=c=>{ const C=METRICS_SPEC.categories[c];
+    return `<div class="p-label" style="--cat:var(--cat-${c})"><svg class="p-ic"><use href="#${C.icon}"/></svg><span>${C.label}</span><span class="p-tag">· ${esc(C.tagline)}</span></div>`; };
   $("#stats").innerHTML=`
-    <div class="pillar"><div class="p-label">${T.pillars.speed}</div><div class="p-cards">${speed}</div></div>
-    <div class="pillar"><div class="p-label">${T.pillars.capacity}</div><div class="p-cards">${capBody}</div></div>
-    <div class="pillar"><div class="p-label">${T.pillars.quality}</div><div class="p-cards">${qualCards}</div></div>`;
+    <div class="pillar">${pHead("speed")}<div class="p-cards">${speed}</div></div>
+    <div class="pillar">${pHead("capacity")}<div class="p-cards">${capBody}</div></div>
+    <div class="pillar">${pHead("quality")}<div class="p-cards">${qualCards}</div></div>`;
   const effCard=$("#stats .stat.eff.clickable"); if(effCard) effCard.onclick=()=>showEffModal(r);
 }
 
@@ -1139,12 +1279,12 @@ function showEffModal(r){
     <p><b>Flow efficiency</b> is the share of an item's total time in the stream that it spends
        <b>actually being worked on</b> — rather than sitting in a queue waiting.</p>
     <div class="effformula">
-      Flow efficiency = Hands-on time ÷ Turnaround time<br>
+      ${ML("eff")} = ${ML("touch")} ÷ ${ML("turnaround")}<br>
       = ${touch} ÷ ${turn} ${u} = <b>${pct}</b>
     </div>
     <p class="mut">It's measured by walking the main path of the flow and adding up:</p>
     <ul>
-      <li><b>Hands-on time</b> — ${touch} ${u}: time a person or bot is actively working the item (the work steps).</li>
+      <li><b>${ML("touch")}</b> — ${touch} ${u}: time a person or bot is actively working the item (the work steps).</li>
       <li><b>Wait time</b> — ${wait} ${u}: time the item just sits in queues (${waitShare} of the total here).</li>
       <li><b>Turnaround time</b> — ${turn} ${u}: the two added together — total time from start to delivered.</li>
     </ul>
@@ -1152,6 +1292,96 @@ function showEffModal(r){
        Cutting queue/wait time usually raises this number far more than making the work itself faster.</p>`;
   $("#effOverlay").classList.add("show");
 }
+
+/* ============================================================
+   "Metrics explained" — the whole Speed/Capacity/Quality system,
+   rendered from METRICS_SPEC (categories → derivation web → rules → precedence)
+   ============================================================ */
+const MX_COLS=[
+  {t:"You provide",        ids:["demand","people","hoursPerDay","touch","wait","wip","rework"]},
+  {t:"Derived per step",   ids:["capacity","effCapacity","load","pace","derivedWait"]},
+  {t:"Whole-flow rollups", ids:["flowCap","bottleneck","turnaround","eff","rft","lostToRework"]}
+];
+const MX_FLAG_EDGES=[["load","bottleneck"],["derivedWait","bottleneck"]];   // dashed: what raises the flag
+function showMetricsModal(){
+  const S=METRICS_SPEC;
+  const catBlock=c=>{ const C=S.categories[c];
+    const rows=Object.keys(S.metrics).filter(id=>S.metrics[id].c===c).map(id=>{ const m=S.metrics[id];
+      return `<div class="mx-m"><b>${esc(m.l)}</b>${m.u?`<span class="u">${esc(m.u)}</span>`:""} <span class="d">— ${esc(m.d)}</span></div>`; }).join("");
+    return `<div class="mx-cat" style="--cat:var(--cat-${c})"><h4><svg><use href="#${C.icon}"/></svg>${esc(C.label)}</h4><div class="tag">${esc(C.tagline)}</div>${rows}</div>`; };
+  const nodeHtml=id=>{ const m=S.metrics[id];
+    return `<div class="mx-node${m?"":" input"}" data-mxn="${id}"${m?` style="--cat:var(--cat-${m.c})"`:""} title="${esc(m?m.d:"")}">${esc(m?m.l:S.inputs[id].l)}</div>`; };
+  const web=`<div class="mx-web" id="mxWeb"><svg class="wires"></svg>${MX_COLS.map(col=>
+    `<div class="mx-col"><div class="mx-colt">${col.t}</div>${col.ids.map(nodeHtml).join("")}</div>`).join("")}</div>`;
+  const rules=S.rels.map((r,i)=>`<div class="mx-rule" data-mxr="${i}" style="--cat:var(--cat-${CAT_OF(r.t)})">
+      <b>${esc(ML(r.t))}</b> <span class="eq">= ${esc(r.eq)}</span><span class="d">${esc(r.d)}</span></div>`).join("");
+  const strip=k=>{ const p=S.prec[k];
+    return `<div class="mx-strip"><h5>${esc(p.title)}</h5><div class="chips">${p.chips.map((c,i)=>
+      `<span class="pc">${esc(c)}</span>${i<p.chips.length-1?'<span class="beats">beats</span>':""}`).join("")}</div><div class="d">${esc(p.d)}</div></div>`; };
+  $("#metricsTitle").textContent=S.explainer.title;
+  $("#metricsBody").innerHTML=`
+    <p class="mx-intro">${esc(S.explainer.intro)}</p>
+    <div class="mx-cats">${S.order.map(catBlock).join("")}</div>
+    <div class="mx-h">How the numbers connect · hover to trace · dashed = raises the bottleneck flag</div>
+    ${web}
+    <div class="mx-h">The rules, in plain words</div>
+    <div class="mx-rules">${rules}</div>
+    <div class="mx-h">When numbers compete</div>
+    <div class="mx-prec">${strip("dataSource")}${strip("bottleneckFlag")}</div>`;
+  $("#metricsOverlay").classList.add("show");
+  requestAnimationFrame(drawMxWires);   // arrow geometry needs the modal laid out first
+  wireMxHover();
+}
+function drawMxWires(){
+  const wrap=$("#mxWeb"); if(!wrap) return;
+  const svg=wrap.querySelector("svg.wires"), wr=wrap.getBoundingClientRect();
+  if(!wr.width) return;
+  svg.setAttribute("viewBox",`0 0 ${wr.width} ${wr.height}`);
+  const colIdx={}; MX_COLS.forEach((c,i)=>c.ids.forEach(id=>colIdx[id]=i));
+  const pos=id=>{ const n=wrap.querySelector(`[data-mxn="${id}"]`); if(!n) return null;
+    const r=n.getBoundingClientRect(); return {x:r.left-wr.left,y:r.top-wr.top,w:r.width,h:r.height,col:colIdx[id]}; };
+  // gaps of the middle column, so col1→col3 arrows fly between its nodes
+  const midR=MX_COLS[1].ids.map(pos).filter(Boolean).sort((a,b)=>a.y-b.y), gaps=[];
+  if(midR.length){ gaps.push(midR[0].y-16);
+    for(let i=0;i<midR.length-1;i++) gaps.push((midR[i].y+midR[i].h+midR[i+1].y)/2);
+    gaps.push(midR[midR.length-1].y+midR[midR.length-1].h+16); }
+  let out="";
+  const edge=(s,t,rel,dashed)=>{
+    const a=pos(s),b=pos(t); if(!a||!b) return;
+    const color=dashed?"var(--nva)":`var(--cat-${CAT_OF(t)})`;
+    let d,ex,ey,c2x,c2y;
+    if(a.col===b.col){ const sx=a.x+a.w*0.5,sy=a.y+a.h; ex=b.x+b.w*0.5; ey=b.y; c2x=ex; c2y=ey-10;
+      d=`M ${sx} ${sy} C ${sx} ${sy+10}, ${c2x} ${c2y}, ${ex} ${ey}`;
+    } else { const sx=a.x+a.w, sy=a.y+a.h*0.5; ex=b.x; ey=b.y+b.h*0.5;
+      if(b.col-a.col===1){ const dx=(ex-sx)*0.45; c2x=ex-dx; c2y=ey; d=`M ${sx} ${sy} C ${sx+dx} ${sy}, ${c2x} ${c2y}, ${ex} ${ey}`; }
+      else { const want=(sy+ey)/2, gy=gaps.length?gaps.reduce((g,v)=>Math.abs(v-want)<Math.abs(g-want)?v:g):want;
+        const dx=(ex-sx)*0.30; c2x=ex-dx; c2y=gy; d=`M ${sx} ${sy} C ${sx+dx} ${gy}, ${c2x} ${c2y}, ${ex} ${ey}`; } }
+    let vx=ex-c2x, vy=ey-c2y; const vl=Math.hypot(vx,vy)||1; vx/=vl; vy/=vl;
+    const bx=ex-vx*6.5, by=ey-vy*6.5, px=-vy*2.9, py=vx*2.9;
+    out+=`<path d="${d}" stroke="${color}"${dashed?' stroke-dasharray="4 4"':""} data-from="${s}" data-to="${t}" data-rel="${rel}"/>`;
+    out+=`<polygon class="head" points="${ex},${ey} ${bx+px},${by+py} ${bx-px},${by-py}" fill="${color}" data-from="${s}" data-to="${t}" data-rel="${rel}"/>`;
+  };
+  METRICS_SPEC.rels.forEach((r,i)=>r.f.forEach(s=>edge(s,r.t,i,false)));
+  MX_FLAG_EDGES.forEach(([s,t])=>edge(s,t,"flag",true));
+  svg.innerHTML=out;
+}
+function wireMxHover(){
+  const body=$("#metricsBody"), web=$("#mxWeb"); if(!web) return;
+  const mark=match=>{ const rel=new Set(); web.classList.add("focus");
+    web.querySelectorAll("[data-from]").forEach(p=>{ const on=match(p);
+      p.classList.toggle("on",on); if(on){ rel.add(p.dataset.from); rel.add(p.dataset.to); } });
+    web.querySelectorAll(".mx-node").forEach(n=>n.classList.toggle("rel",rel.has(n.dataset.mxn))); };
+  const clear=()=>{ web.classList.remove("focus");
+    web.querySelectorAll(".on").forEach(p=>p.classList.remove("on"));
+    web.querySelectorAll(".mx-node.rel").forEach(n=>n.classList.remove("rel")); };
+  body.addEventListener("mouseover",e=>{
+    const n=e.target.closest(".mx-node"), r=e.target.closest(".mx-rule");
+    if(n) mark(p=>p.dataset.from===n.dataset.mxn||p.dataset.to===n.dataset.mxn);
+    else if(r) mark(p=>p.dataset.rel===r.dataset.mxr); });
+  body.addEventListener("mouseout",e=>{
+    if(e.target.closest(".mx-node")||e.target.closest(".mx-rule")) clear(); });
+}
+window.addEventListener("resize",()=>{ if($("#metricsOverlay").classList.contains("show")) drawMxWires(); });
 
 function nodeColors(n){
   if(n.type==="start"||n.type==="end") return {fill:"var(--term)",stroke:"var(--term-line)"};
@@ -1514,8 +1744,11 @@ function renderCanvas(r){
       const padL=12, midX=Math.round(w/2), colTop=bt+72, vizY=colTop+38;
       g.appendChild(el("line",{x1:midX,y1:colTop-2,x2:midX,y2:bt+L.h-12,stroke:"var(--line)","stroke-width":1}));
       // label + big number (+ unit) at a column's x; both columns use the same 21px number (balance)
-      const drawNum=(x,label,numStr,unitStr,numColor)=>{
-        g.appendChild(txt(x,colTop+4,label,"nowner"));
+      // cat: metric category id — draws the tiny Speed/Capacity/Quality glyph before the eyebrow
+      const drawNum=(x,label,numStr,unitStr,numColor,cat)=>{
+        let lx=x;
+        if(cat){ g.appendChild(useIc(METRICS_SPEC.categories[cat].icon, x, colTop-4.5, 9, `var(--cat-${cat})`)); lx=x+13; }
+        g.appendChild(txt(lx,colTop+4,truncToWidth(label,midX-padL-(cat?28:14),F_META),"nowner"));
         g.appendChild(txt(x,colTop+26,numStr,"",{"font-size":"21","font-weight":"800",fill:numColor||"var(--ink)"}));
         if(unitStr){ const nw=measure(numStr,NUMF);
           g.appendChild(txt(x+nw+5,colTop+26,unitStr,"nmeta",{"font-size":"10"})); }
@@ -1523,7 +1756,7 @@ function renderCanvas(r){
 
       // LEFT = primary
       if(isQ){
-        drawNum(padL,"IN QUEUE", mt.wip!=null?fmt(mt.wip):"—","cases", mt.wip!=null?null:"var(--faint)");
+        drawNum(padL,ML("wip").toUpperCase(), mt.wip!=null?fmt(mt.wip):"—","cases", mt.wip!=null?null:"var(--faint)","capacity");
         const cw=midX-padL-14, cols=10, rows=2, gap=3, cellH=8;
         const cellW=(cw-gap*(cols-1))/cols;
         const frac=mt.wip!=null?Math.max(0,Math.min(1,mt.wip/mwQ)):0;
@@ -1538,7 +1771,7 @@ function renderCanvas(r){
         const capV=mt.effCapacity!=null?mt.effCapacity:mt.capacity;
         const load=pc&&pc.load!=null?Math.max(0,pc.load):((tp!=null&&capV!=null&&capV>0)?Math.max(0,tp/capV):null);
         const lc=load==null?"var(--faint)":SEVC[load>=0.8?"hot":load>=0.6?"warn":"calm"].c;
-        drawNum(padL, n.performer==="bot"?"THROUGHPUT":"PACE", tp!=null?fmt(tp):"—","/day", tp!=null?null:"var(--faint)");
+        drawNum(padL, ML("pace").toUpperCase(), tp!=null?fmt(tp):"—","/day", tp!=null?null:"var(--faint)","capacity");
         // capacity scale: idle (left) → at capacity (right), red danger zone at the top end
         const sX=padL, sW=midX-padL-14, tY=vizY+14, tH=10, dz=0.85;
         g.appendChild(el("rect",{x:sX,y:tY,width:sW,height:tH,rx:5,fill:"#0f1825",stroke:"var(--line)","stroke-width":1}));
@@ -1560,7 +1793,7 @@ function renderCanvas(r){
       const approx=isQ&&mt.wait==null&&dwv!=null;
       const info=tl[n.id]||{start:0,pct:0}, pct = time!=null ? info.pct : null;
       const sc=SEVC[sevOf((pct||0)/100)];
-      drawNum(rx, isQ?"WAIT":"HANDS-ON", time!=null?(approx?"≈"+fmt(time):fmt(time)):"—", unit(), time!=null?null:"var(--faint)");
+      drawNum(rx, (isQ?ML("wait"):ML("touch")).toUpperCase(), time!=null?(approx?"≈"+fmt(time):fmt(time)):"—", unit(), time!=null?null:"var(--faint)","speed");
       { const trackX=rx+30, trackW=w-12-trackX, trackY=vizY+8, trackH=11;
         g.appendChild(txt(rx,trackY+9, pct!=null?(pct<1?"<1%":Math.round(pct)+"%"):"—","",
           {"font-size":"11","font-weight":"800",fill:pct!=null?sc.c:"var(--faint)"}));
@@ -1765,24 +1998,31 @@ function renderInspector(){
     const derivedLine=(canDo!=null||(pcap&&pcap.load!=null))
       ? `<div class="sub" style="margin:2px 0 6px">→ can do <b>${fmt(canDo)}</b> cases/day${pcap&&pcap.load!=null?` · load <b>${Math.round(pcap.load*100)}%</b>`:""}</div>` : "";
     const observed=`<details class="insp-adv"><summary>Observed numbers <span class="h4note">· override the estimate</span></summary>
-        ${field("Pace (cases/day)","throughputManual",n.throughputManual==null?"":n.throughputManual,"number","Cases actually completed per day — overrides the modelled pace")}
-        ${field("Capacity (cases/day)","capacityManual",n.capacityManual==null?"":n.capacityManual,"number","Measured max per day — overrides people × hours ÷ hands-on time")}
+        ${field(`${ML("pace")} (cases/day)`,"throughputManual",n.throughputManual==null?"":n.throughputManual,"number","Cases actually completed per day — overrides the modelled pace")}
+        ${field(`${ML("capacity")} (cases/day)`,"capacityManual",n.capacityManual==null?"":n.capacityManual,"number","Measured max per day — overrides people × hours ÷ touch time")}
       </details>`;
+    /* metric fields grouped under their Speed/Capacity/Quality identity (per the metrics spec) */
     const metricFields = kids.length
       ? `<div class="field"><label>Times &amp; pace <span class="h4note">· rolled up</span></label>
-           <div class="sub">Hands-on <b>${fmt(mt.touch)} ${u}</b> = the sum of ${kids.length} sub-steps; pace/capacity follow the slowest one.${mt.rework!=null?` Rework <b>${fmt(mt.rework)}%</b> combined.`:""} Edit the sub-steps to change these.</div></div>`
+           <div class="sub">${ML("touch")} <b>${fmt(mt.touch)} ${u}</b> = the sum of ${kids.length} sub-steps; pace/capacity follow the slowest one.${mt.rework!=null?` Rework <b>${fmt(mt.rework)}%</b> combined.`:""} Edit the sub-steps to change these.</div></div>`
       : (n.performer==="bot"
-        ? field(`Hands-on time (${u})`,"touchTimeManual",n.touchTimeManual==null?"":n.touchTimeManual,"number","Run time per case")
-          +field("Pace (cases/day)","throughputManual",n.throughputManual==null?"":n.throughputManual,"number","Cases this bot completes per day")
-          +field("Capacity (cases/day)","capacityManual",n.capacityManual==null?"":n.capacityManual,"number","Most it could run per day")
-          +field("Rework % (optional)","reworkPct",n.reworkPct==null?"":n.reworkPct,"number","Share of cases that come back (0–100)")
+        ? cathead("speed")
+          +field(`${ML("touch")} (${u})`,"touchTimeManual",n.touchTimeManual==null?"":n.touchTimeManual,"number","Run time per case")
+          +cathead("capacity")
+          +field(`${ML("pace")} (cases/day)`,"throughputManual",n.throughputManual==null?"":n.throughputManual,"number","Cases this bot completes per day")
+          +field(`${ML("capacity")} (cases/day)`,"capacityManual",n.capacityManual==null?"":n.capacityManual,"number","Most it could run per day")
           +derivedLine
-        : field(`Hands-on time (${u})`,"touchTimeManual",n.touchTimeManual==null?"":n.touchTimeManual,"number","Working time per case")
+          +cathead("quality")
+          +field(`${ML("rework")} (optional)`,"reworkPct",n.reworkPct==null?"":n.reworkPct,"number","Share of cases that come back (0–100)")
+        : cathead("speed")
+          +field(`${ML("touch")} (${u})`,"touchTimeManual",n.touchTimeManual==null?"":n.touchTimeManual,"number","Working time per case")
+          +cathead("capacity")
           +field("People on this step","people",n.people==null?"":n.people,"number","How many people work this step (0.5 = half a person)")
           +field("Hours/day each","hoursPerDay",n.hoursPerDay==null?"":n.hoursPerDay,"number",`Realistic hours per person per day on this work — blank = ${AVAIL_HRS}`)
-          +field("Rework % (optional)","reworkPct",n.reworkPct==null?"":n.reworkPct,"number","Share of cases that come back (0–100)")
           +derivedLine
-          +observed);
+          +observed
+          +cathead("quality")
+          +field(`${ML("rework")} (optional)`,"reworkPct",n.reworkPct==null?"":n.reworkPct,"number","Share of cases that come back (0–100)"));
     body+=`<div class="insp-sec"><h4>Setup</h4>
       ${toolSeg}
       ${field(n.performer==="bot"?"Bot name":"Owner / role","owner",n.owner||"","text")}
@@ -1820,8 +2060,10 @@ function renderInspector(){
   } else if(n.type==="wait"){
     body+=`<div class="insp-sec">
       ${field("Owner","owner",n.owner||"","text")}
-      ${field("In queue","wip",n.wip==null?"":n.wip,"number","Items sitting here right now")}
-      ${field(`Avg wait time (${u})`,"waitTimeManual",n.waitTimeManual==null?"":n.waitTimeManual,"number","Leave blank to estimate it from the queue ÷ the next step's pace")}
+      ${cathead("capacity")}
+      ${field(ML("wip"),"wip",n.wip==null?"":n.wip,"number","Items sitting here right now")}
+      ${cathead("speed")}
+      ${field(`Avg ${ML("wait").toLowerCase()} (${u})`,"waitTimeManual",n.waitTimeManual==null?"":n.waitTimeManual,"number","Leave blank to estimate it from the queue ÷ the next step's pace")}
       ${r.dw&&r.dw[n.id]!=null?`<div class="sub" style="margin:2px 0 6px">→ waiting ≈ <b>${fmt(r.dw[n.id])} ${u}</b> — time to clear the queue at today's pace</div>`:""}
     </div>`;
     body+=advanced(n,true);
@@ -1829,7 +2071,8 @@ function renderInspector(){
     body+=`<div class="insp-sec"><h4>Flow settings</h4>
       <div class="field"><label>Flow name</label>
         <input type="text" data-modelbind="name" value="${esc(state.model.name||"")}" /></div>
-      <div class="field"><label>Incoming work (cases/day)</label>
+      ${cathead("capacity")}
+      <div class="field"><label>${ML("demand")} (cases/day)</label>
         <input type="number" data-setbind="demand" value="${(state.model.settings&&state.model.settings.demand)!=null?esc(state.model.settings.demand):""}" />
         <div class="sub" style="margin:4px 0 0">What arrives each day — powers the Capacity pillar and every step's load.</div></div>
       ${settingsSelect("Time unit","timeUnit",u,["hrs","days","min"])}
@@ -1936,6 +2179,10 @@ function field(label,bind,val,type,hint){
     <input type="${type}" data-bind="${bind}" value="${val===null||val===undefined?"":esc(val)}" />
     ${hint?`<div class="sub" style="margin:4px 0 0">${hint}</div>`:""}</div>`;
 }
+/* Speed/Capacity/Quality sub-heading for grouping metric fields in the drawer */
+function cathead(c){ const C=METRICS_SPEC.categories[c];
+  return `<div class="insp-cath" style="--cat:var(--cat-${c})"><svg><use href="#${C.icon}"/></svg>${C.label}</div>`;
+}
 function wireInspector(n){
   const insp=$("#inspector");
   insp.querySelectorAll("[data-bind]").forEach(inp=>{
@@ -2009,7 +2256,7 @@ function groupMetricsEl(grp){
   fo.style.pointerEvents="none";
   const wrap=document.createElement("div");
   wrap.style.cssText="display:flex;justify-content:flex-end;width:100%";
-  wrap.innerHTML=`<table class="gmetrics"><thead><tr><th>TAT (${u})</th><th>Hands-on</th><th>Wait</th></tr></thead>
+  wrap.innerHTML=`<table class="gmetrics"><thead><tr><th>TAT (${u})</th><th>Touch</th><th>Wait</th></tr></thead>
     <tbody><tr><td>${fmt(gr.turnaround)}</td><td>${fmt(gr.touch)}</td><td>${fmt(gr.wait)}</td></tr></tbody></table>`;
   fo.appendChild(wrap); return fo;
 }
@@ -2046,7 +2293,7 @@ function renderGroupInspector(){
       </div>
       <div class="insp-sec"><h4>Totals <span class="h4note">· members, flow-weighted</span></h4>
         <table class="gmetrics" style="width:100%">
-          <thead><tr><th>TAT (${u})</th><th>Hands-on</th><th>Wait</th></tr></thead>
+          <thead><tr><th>TAT (${u})</th><th>Touch</th><th>Wait</th></tr></thead>
           <tbody><tr><td>${fmt(gr.turnaround)}</td><td>${fmt(gr.touch)}</td><td>${fmt(gr.wait)}</td></tr></tbody></table>
       </div>
       <div class="insp-sec"><h4>Boxes in this group</h4>
@@ -2573,7 +2820,7 @@ function buildExportSVG(){
   // stat tiles
   const tiles=[
     ["Turnaround", fmt(r.turnaround)+" "+u, C.ink],
-    ["Hands-on time", fmt(r.touch)+" "+u, C.ink],
+    ["Touch time", fmt(r.touch)+" "+u, C.ink],
     ["Wait time", fmt(r.wait)+" "+u, C.ink],
     ["Flow efficiency", r.eff==null?"—":Math.round(r.eff*100)+"%", C.va],
     ["Bottleneck", r.flag?esc(r.flag.node.label)+(r.flag.kind==="load"?" · "+Math.round(r.flag.load*100)+"%":""):"none", C.nva],
@@ -2692,6 +2939,9 @@ $("#howClose").onclick=()=>$("#howOverlay").classList.remove("show");
 $("#howOverlay").onclick=e=>{ if(e.target.id==="howOverlay") $("#howOverlay").classList.remove("show"); };
 $("#effClose").onclick=()=>$("#effOverlay").classList.remove("show");
 $("#effOverlay").onclick=e=>{ if(e.target.id==="effOverlay") $("#effOverlay").classList.remove("show"); };
+$("#metricsHelp").onclick=()=>showMetricsModal();
+$("#metricsClose").onclick=()=>$("#metricsOverlay").classList.remove("show");
+$("#metricsOverlay").onclick=e=>{ if(e.target.id==="metricsOverlay") $("#metricsOverlay").classList.remove("show"); };
 
 /* Appearance + Export popovers (only one open at a time) */
 function closeMenus(){ toggleThemePop(false); const ep=$("#exportPop"); if(ep) ep.classList.remove("show"); }
