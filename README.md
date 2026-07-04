@@ -1,9 +1,10 @@
 # Flow Builder — Lean Value-Stream Visualizer
 
 A single self-contained HTML tool for building and visualizing the **flow of value** to the
-customer: touch time (value-add work), wait time (backlogs), turnaround time, and **flow
-efficiency** — fed from Excel/CSV, with a built-in prompt that forces the *"is this step
-value-add?"* conversation on every step. Holds **many flows** in one place.
+customer, analysed through three pillars — **Speed** (hands-on time, waiting, turnaround, flow
+efficiency), **Capacity** (people × hours vs incoming work) and **Quality** (rework, right first
+time) — fed from a few plain-language inputs and/or Excel/CSV, with a **Value** rating on every
+step. Holds **many flows** in one place.
 
 ## Two versions
 
@@ -49,11 +50,11 @@ Make sure `vendor/` is committed.
 
 1. **⬇ Export sheet** — downloads a CSV with one row per step (its `StepID` + name, prefilled with
    whatever the cards currently show).
-2. Fill in the numbers (touch time, wait time, WIP).
+2. Fill in the numbers (hands-on time, wait time, queue sizes).
 3. **⬆ Import sheet** — load it back. The numbers populate the cards/analysis and are **saved with
    the flow** (and travel into a shared copy). Re-import any time to refresh.
 
-If no sheet is imported, cards fall back to the touch/wait/WIP values typed into the inspector, so a
+If no sheet is imported, cards fall back to the values typed into the inspector, so a
 flow analyses fine before any import.
 
 **Export a picture:** **🖼 Export ▾ → PNG / PDF** renders the title + map + full analysis (stats +
@@ -92,8 +93,8 @@ Flows are saved automatically in the browser (localStorage) as you edit. `Save d
 
 In **Build**: add nodes from the left palette — **🧑 Human Step**, **🤖 Bot Step**,
 **Queue**, **Start**, **End** — and **drag** to arrange them. Node labels **wrap and the box
-grows** to fit. For every work step you must set its **Customer value** and answer *"what value
-does this add to the customer?"* — unrated steps show a ⚠.
+grows** to fit. Every work step carries a **Value** section — a short *Details* description plus a
+*Value to customer* rating — and unrated steps show a ⚠.
 
 **Snapping & Tidy:** dragging snaps to a **20px grid**, and dashed **alignment guides** flash when
 a box lines up with a neighbour's edge or centre (hold **Alt** to drag freely). **✨ Tidy** lays
@@ -135,16 +136,16 @@ The legend under the map decodes them. The single biggest backlog gets a **BOTTL
 - **📤 Share with team** — produces a standalone, read-only HTML with this flow baked in; that's
   the file you hand to the team.
 
-## Customer value (the forcing function)
+## Value
 
-Every work step must be rated. The three choices and their definitions are shown right in the
-inspector:
+Every work step has a **Details** free-text (what happens in this step) and a **Value to
+customer** rating. The three choices and their definitions are shown right in the inspector:
 
 | Choice | Meaning | Color |
 |---|---|---|
-| **Valued** | The customer values it / would pay for it | green |
-| **Necessary** | Required (compliance, risk) but not valued by the customer | blue |
-| **Could remove** | Adds no value — a candidate to eliminate | red |
+| **Valued** | Customers would pay for this | green |
+| **Necessary** | Required — compliance or risk — but not valued directly | blue |
+| **Could remove** | Adds no value; a candidate to cut | red |
 
 ## Card views (lenses)
 
@@ -152,11 +153,12 @@ The header **View** switcher changes what every card shows — card size and edg
 automatically (hit **✨ Tidy** to re-space for the active view). The active view is saved with the
 flow and is what PNG/PDF/share exports show:
 
-- **Metrics** (default) — split-column cards: pace/capacity scale + wait/touch time with each
-  node's share of the lead time.
-- **People** — owner as the headline plus the **tool** used (UiPath / Copilot / Excel / manual):
-  the handoff-and-automation conversation.
-- **Value** — the classification band, glyph and the *why is this step here?* rationale; queues
+- **Metrics** (default) — split-column cards: pace + load scale (derived from people × hours when
+  set) and wait/hands-on time with each node's share of the lead time; estimated queue waits show
+  with a ≈.
+- **People** — owner as the headline plus the **tool** used (UiPath / Copilot / Excel / manual)
+  and the step's staffing (N ppl × H h): the handoff-and-automation conversation.
+- **Value** — the classification band, glyph and the step's details; queues
   read "WAITING — NO VALUE ADDED": the waste-hunting view.
 - **Compact** — small icon+name pills; the whole flow fits on a slide.
 
@@ -211,20 +213,39 @@ One row per **step × segment × period**:
 | `TouchTimeAvg` | active work time — for **Human/Bot** steps |
 | `WaitTimeAvg` | time-in-queue — for **Queue** nodes |
 | `WIP` / `Volume` | queue size / throughput |
-| `Throughput` / `Capacity` | cases/day done vs. possible — drives the capacity scale |
+| `Throughput` / `Capacity` | cases/day done vs. possible — overrides the modelled numbers |
+| `People` / `HoursPerDay` | staffing on the step — exported for context |
+| `ReworkPct` | share of cases that come back — feeds the Quality pillar |
 | `ParentStep` | for a sub-step, its parent's name — for humans; ignored on import |
 
 Leave a cell blank where it doesn't apply. If a step has no data row, the node falls back to the
 values typed into Build mode, or shows "no data" — it never breaks. A step **with sub-steps** is
 not listed (its numbers are derived); the sheet lists its sub-steps instead.
 
-## Metrics (computed automatically along the main path)
+## The metric web (Speed · Capacity · Quality)
 
-- **Touch time** = Σ active work on touch steps
-- **Wait time** = Σ time in backlogs
-- **Turnaround time** = touch + wait (start → delivered)
-- **Flow efficiency** = touch ÷ turnaround (the headline Lean number)
-- **Bottleneck** = the largest backlog on the path, or any backlog over its WIP limit
+The analysis strip groups its stats under three pillars, all fed by a handful of plain-language
+inputs — **incoming work** (cases/day, on the Start step), each step's **hands-on time**,
+**people** and **hours/day**, an optional **rework %**, and each queue's **in-queue** count.
+Everything else is derived, and the derivations link the pillars:
+
+- **Capacity** = people × hours/day ÷ hands-on time — the most a step can do per day
+  (availability dictates potential pace). Rework **eats** capacity: effective = capacity × (1 −
+  rework %). Observed pace/capacity (inspector "Observed numbers" or a data sheet) override the
+  model: *measured > observed > modelled*.
+- **Load** = the step's demand (incoming × passes) ÷ effective capacity — the card's load scale;
+  over 100 % reads OVERLOADED.
+- **Keeping up?** = incoming work vs what the whole flow can deliver per day (the most loaded
+  step sets the ceiling). **Load by owner** compares each owner's demand-hours to their staffed
+  hours.
+- **Queue wait** (when not typed) ≈ in-queue ÷ the next step's pace — "time to clear at today's
+  pace" (Little's Law), shown with a ≈.
+- **Speed**: hands-on = Σ active work · wait = Σ time in backlogs · turnaround = the two added ·
+  **flow efficiency** = hands-on ÷ turnaround (the headline Lean number).
+- **Quality**: **right first time** = the chance a case sails through with no rework ·
+  **lost to rework** = hands-on hours spent redoing work each day.
+- **Bottleneck** = a genuinely hot step (load ≥ 80 %) if there is one, else the longest queue —
+  one flag, consistent across the map, the stats and exports.
 
 ## Roadmap (not yet built)
 
