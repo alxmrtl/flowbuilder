@@ -137,6 +137,65 @@
   .mx-strip .beats{color:var(--faint);font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em}
   .mx-strip .d{color:var(--muted);font-size:11px;margin-top:7px;line-height:1.45}
   @media (max-width:760px){.mx-cats,.mx-rules,.mx-prec{grid-template-columns:1fr}}
+  /* ---- Flow-insights dashboard (full-page overlay, derived from rollup) ---- */
+  .overlay.page{background:var(--bg)}
+  .overlay.page.show{display:block;overflow:auto}
+  .dash-wrap{max-width:1060px;margin:0 auto;padding:26px 28px 60px}
+  .dash-hh{display:flex;align-items:center;gap:10px;margin-bottom:20px}
+  .dash-hh h2{margin:0;font-size:20px;font-weight:700}
+  .dash-flow{color:var(--faint);font-weight:500;font-size:15px}
+  .dash-hh .x{margin-left:auto;background:var(--panel2);border:1px solid var(--line);color:var(--muted);
+    border-radius:8px;padding:6px 12px;font-size:14px}
+  .dash-hh .x:hover{color:var(--ink);border-color:var(--faint)}
+  .dash-hero{display:grid;grid-template-columns:auto 1fr;gap:14px;margin-bottom:12px}
+  .dh-verdict{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 22px;min-width:270px}
+  .dh-verdict .dhv-big{font-size:27px;font-weight:800;letter-spacing:-.01em}
+  .dh-verdict.hot .dhv-big{color:var(--nva)}
+  .dh-verdict.ok .dhv-big{color:var(--va)}
+  .dh-verdict.warn .dhv-big{color:var(--warn)}
+  .dh-verdict.na .dhv-big{color:var(--faint);font-size:15px;font-weight:600;line-height:1.4}
+  .dhv-sub{color:var(--muted);font-size:13px;margin-top:4px;line-height:1.5;max-width:340px}
+  .dh-top{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 20px;min-width:0}
+  .dht-eyebrow{color:var(--faint);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;margin-bottom:5px}
+  .dht-head{font-size:19px;font-weight:750;color:var(--cat,var(--ink))}
+  .dht-head small{font-size:12px;color:var(--muted);font-weight:500}
+  .dht-line{color:var(--muted);font-size:12.5px;margin-top:4px;line-height:1.5}
+  .dash-stats{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:6px}
+  .dash-stat{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 14px;min-width:118px}
+  .dash-stat .k{color:var(--faint);font-size:10.5px;text-transform:uppercase;letter-spacing:.5px}
+  .dash-stat .v{font-size:18px;font-weight:700;margin-top:2px;font-variant-numeric:tabular-nums}
+  .dash-stat .v small{font-size:11px;color:var(--muted);font-weight:500}
+  .dash-h{color:var(--faint);font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.13em;margin:24px 0 10px}
+  .dash-hnote{text-transform:none;letter-spacing:.2px;font-weight:500}
+  .dash-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .dash-card{background:var(--panel);border:1px solid var(--line);border-top:2px solid var(--cat);border-radius:12px;
+    padding:13px 16px;min-width:0;display:flex;flex-direction:column}
+  .dc-top{display:flex;align-items:center;gap:6px;margin-bottom:7px}
+  .dc-ic{width:13px;height:13px;stroke:var(--cat);color:var(--cat);fill:none;flex:0 0 auto}
+  .dc-cat{color:var(--faint);font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.1em}
+  .dc-sev{margin-left:auto;width:8px;height:8px;border-radius:50%;flex:0 0 auto}
+  .dc-sev.hot{background:var(--nva)} .dc-sev.warn{background:var(--warn)} .dc-sev.calm{background:var(--va)}
+  .dc-head{font-size:20px;font-weight:800;letter-spacing:-.01em}
+  .dc-head small{font-size:11.5px;color:var(--muted);font-weight:500}
+  .dc-line{color:var(--muted);font-size:12.5px;line-height:1.55;margin:5px 0 10px;flex:1}
+  .dc-foot{display:flex;align-items:center;gap:10px;min-width:0}
+  .dc-why{font-family:ui-monospace,Menlo,monospace;font-size:10px;color:var(--faint);background:var(--panel2);
+    border:1px solid var(--line);border-radius:5px;padding:2px 7px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .dc-go{margin-left:auto;background:transparent;border:1px solid var(--line);color:var(--muted);border-radius:7px;
+    padding:4px 10px;font-size:11.5px;font-weight:600;flex:0 0 auto;white-space:nowrap}
+  .dc-go:hover{color:var(--accent);border-color:var(--accent)}
+  .dash-need{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:6px 16px}
+  .dash-need-row{display:flex;align-items:baseline;gap:14px;padding:9px 0;border-bottom:1px solid var(--line);font-size:12.5px}
+  .dash-need-row:last-child{border-bottom:0}
+  .dash-need-row .nr-name{flex:0 0 190px;font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .dash-need-row .nr-need{font-weight:700;font-variant-numeric:tabular-nums}
+  .dash-need-row.short .nr-need{color:var(--warn)}
+  .dash-need-row .nr-vs{color:var(--muted)}
+  .dash-need-row .nr-ppl{margin-left:auto;color:var(--faint);font-size:11.5px;text-align:right}
+  .dash-empty{color:var(--faint);font-size:12.5px;padding:12px 2px;line-height:1.5}
+  .dash-story{color:var(--muted);font-size:12.5px;line-height:1.75;margin-top:22px;border-top:1px solid var(--line);padding-top:14px}
+  .dash-story b{color:var(--ink)}
+  @media (max-width:820px){.dash-grid{grid-template-columns:1fr}.dash-hero{grid-template-columns:1fr}}
 
   /* ---- Palette bar (add boxes) — top of the build area ---- */
   #paletteBar{flex:0 0 auto;display:flex;align-items:center;gap:8px;padding:9px 16px;background:var(--panel);
@@ -171,6 +230,8 @@
   #analysis .a-head .a-help{background:transparent;border:1px solid transparent;color:var(--faint);font-size:11px;
     border-radius:6px;padding:2px 8px;margin-left:8px;letter-spacing:.3px;cursor:pointer}
   #analysis .a-head .a-help:hover{color:var(--accent);border-color:var(--line)}
+  #analysis .a-head .a-help.accent{color:var(--accent);border-color:var(--line);font-weight:600}
+  #analysis .a-head .a-help.accent:hover{border-color:var(--accent)}
   .p-cards{display:flex;gap:10px;flex-wrap:wrap;align-items:stretch}
   .p-empty{color:var(--faint);font-size:12px;align-self:center;max-width:200px;line-height:1.45;padding:6px 4px}
   .stat.roles{min-width:215px}
@@ -580,6 +641,14 @@
   </div>
 </div>
 
+<!-- Flow insights — full-page dashboard: biggest opportunities derived from the numbers (no AI) -->
+<div class="overlay page" id="dashOverlay">
+  <div class="dash-wrap">
+    <div class="dash-hh"><h2 id="dashTitle">Flow insights</h2><button class="x" id="dashClose">✕ Close</button></div>
+    <div id="dashBody"></div>
+  </div>
+</div>
+
 <!-- Home / flow library -->
 <section id="home">
   <div class="home-bar">
@@ -624,7 +693,7 @@
 </main>
 
 <section id="analysis">
-  <div class="a-head">Analysis<button class="a-help" id="metricsHelp" title="What each metric means and how they connect">ⓘ Metrics explained</button></div>
+  <div class="a-head">Analysis<button class="a-help accent" id="insightsBtn" title="The biggest opportunities in this flow, derived from your numbers">✦ Insights</button><button class="a-help" id="metricsHelp" title="What each metric means and how they connect">ⓘ Metrics explained</button></div>
   <div class="stats" id="stats"></div>
   <div id="ribbonWrap">
     <div class="title"><span><b><svg class="rib-ic"><use href="#ic-cat-speed"/></svg>Time contribution across the stream</b><span class="rmode" id="ribbonModeSeg" title="Colour the bands by node type or by time severity"><button data-rmode="type" class="on">Type</button><button data-rmode="severity">Severity</button></span></span><span class="rt" id="ribbonTotal"></span></div>
@@ -711,9 +780,9 @@ const T = {
 const METRICS_SPEC = {
   order:["speed","capacity","quality"],
   categories:{
-    speed:   {label:"Speed",    tagline:"How fast work moves",             icon:"ic-cat-speed"},
-    capacity:{label:"Capacity", tagline:"Can the team keep up?",           icon:"ic-cat-capacity"},
-    quality: {label:"Quality",  tagline:"How often it’s right first time", icon:"ic-cat-quality"}
+    speed:   {label:"Speed",    tagline:"How fast does the work move?",       icon:"ic-cat-speed"},
+    capacity:{label:"Capacity", tagline:"Can the team keep up?",              icon:"ic-cat-capacity"},
+    quality: {label:"Quality",  tagline:"Do we get it right the first time?", icon:"ic-cat-quality"}
   },
   metrics:{
     turnaround:  {l:"Turnaround time",   c:"speed",    u:"time",    d:"Start to delivered — touch time plus waiting."},
@@ -1212,10 +1281,10 @@ function renderStats(r){
   let capCards="";
   if(cap.demand!=null && cap.flowCap!=null){
     const short=cap.demand-cap.flowCap, ok=short<=0;
-    capCards+=card({cls:ok?"eff":"warnflag",k:"Keeping up?",
+    capCards+=card({cls:(ok?"eff":"warnflag")+" clickable dash-open",k:"Keeping up?",
       v: ok?`✓ Yes <small>${fmt(cap.demand)} in · ${fmt(cap.flowCap)}/day possible</small>`
            :`⚠ Short ${fmt(short)}/day <small>${fmt(cap.demand)} in · ${fmt(cap.flowCap)}/day possible</small>`,
-      title:"Incoming work vs what the flow can deliver per day — the slowest step sets the ceiling"});
+      title:"Incoming work vs what the flow can deliver per day — click for the full insights"});
   } else if(cap.demand!=null){
     capCards+=card({k:ML("demand"),v:`${fmt(cap.demand)} <small>/day</small>`,
       title:"Add people + touch time on your steps to see whether the flow keeps up"});
@@ -1266,7 +1335,8 @@ function renderStats(r){
     <div class="pillar">${pHead("speed")}<div class="p-cards">${speed}</div></div>
     <div class="pillar">${pHead("capacity")}<div class="p-cards">${capBody}</div></div>
     <div class="pillar">${pHead("quality")}<div class="p-cards">${qualCards}</div></div>`;
-  const effCard=$("#stats .stat.eff.clickable"); if(effCard) effCard.onclick=()=>showEffModal(r);
+  const effCard=$("#stats .stat.eff.clickable:not(.dash-open)"); if(effCard) effCard.onclick=()=>showEffModal(r);
+  const kuCard=$("#stats .stat.dash-open"); if(kuCard) kuCard.onclick=()=>showDashboard();
 }
 
 /* plain-language breakdown of how flow efficiency is calculated, with this flow's live numbers */
@@ -1382,6 +1452,203 @@ function wireMxHover(){
     if(e.target.closest(".mx-node")||e.target.closest(".mx-rule")) clear(); });
 }
 window.addEventListener("resize",()=>{ if($("#metricsOverlay").classList.contains("show")) drawMxWires(); });
+
+/* ============================================================
+   FLOW INSIGHTS — full-page dashboard: the biggest opportunities,
+   ranked and costed from rollup() alone (no AI). Map/pillars stay
+   current-state; the "To keep up" strip carries the required lens.
+   ============================================================ */
+/* ranked cards: {id, cat, tier, sev, score, headline, line, why, nodeId?}
+   tier 1 = costed in hrs/day of waste/shortfall · tier 2 = proportional */
+function deriveInsights(r){
+  const u=unit(), cap=r.cap||{}, q=r.qual||{}, out=[];
+  const perCaseHrs=touchHours(r.touch);                       // touch hrs per case → cases/day to hrs/day
+  const caseHrs=v=>(v!=null&&perCaseHrs!=null)?v*perCaseHrs:null;
+  const {visits}=flowWeights();
+
+  if(cap.demand!=null && cap.flowCap!=null){                  // keeping up? (also feeds the hero verdict)
+    const short=cap.demand-cap.flowCap;
+    if(short>0.05) out.push({id:"keepup",cat:"capacity",tier:1,sev:"hot",score:caseHrs(short)||short,
+      headline:`Short ${fmt(short)} <small>cases/day</small>`,
+      line:`${fmt(cap.demand)} arrive daily but the flow can deliver ${fmt(cap.flowCap)} — the backlog grows by ${fmt(short)} cases every working day.`,
+      why:`${ML("demand").toLowerCase()} − ${ML("flowCap").toLowerCase()}`,
+      nodeId:r.flag?r.flag.node.id:null});
+    else out.push({id:"keepup",cat:"capacity",tier:1,sev:cap.demand>cap.flowCap*0.9?"warn":"calm",score:0.01,
+      headline:`✓ Keeping up`,
+      line:`${fmt(cap.demand)} in · ${fmt(cap.flowCap)}/day possible${cap.demand>cap.flowCap*0.9?" — but headroom is thin; any dip in staffing tips it over.":" — comfortable headroom today."}`,
+      why:`${ML("demand").toLowerCase()} vs ${ML("flowCap").toLowerCase()}`});
+  }
+
+  if(r.flag){                                                 // the bottleneck: what fixing it buys
+    const n=r.flag.node;
+    if(r.flag.kind==="load"){
+      const pc=cap.per[n.id]||{}, mt=metricFor(n);
+      let gapTxt="";
+      if(!hasSubs(n) && n.performer!=="bot" && pc.demand!=null && n.people>0){
+        const hrs=n.hoursPerDay!=null?n.hoursPerDay:AVAIL_HRS, th=touchHours(mt.touch),
+              rw=mt.rework!=null?Math.min(mt.rework,99)/100:0;
+        if(th>0 && hrs>0){ const need=pc.demand/(hrs/th*(1-rw));
+          if(need>n.people+0.04) gapTxt=` Adding ${fmt(need-n.people)} ${need-n.people<1.05?"person":"people"} (to ${fmt(need)}) covers today's demand.`; }
+      }
+      let nextDel=null;                                       // next binding ceiling once this step is fixed
+      for(const id in cap.per){ if(id===n.id) continue; const p=cap.per[id];
+        if(p.effCap!=null){ const del=p.effCap/(visits[id]||1); nextDel=nextDel==null?del:Math.min(nextDel,del); } }
+      const buys=nextDel!=null?` Fix it and the next ceiling is ${fmt(cap.demand!=null?Math.min(nextDel,cap.demand):nextDel)}/day.`:"";
+      const load=pc.load!=null?pc.load:r.flag.load;
+      out.push({id:"bottleneck",cat:"capacity",tier:1,sev:load>=1?"hot":"warn",
+        score:(pc.demand!=null&&pc.effCap!=null?caseHrs(Math.max(0,pc.demand-pc.effCap)):null)||1,
+        headline:`${esc(n.label)} <small>at</small> ${Math.round(load*100)}%`,
+        line:`The most loaded step sets everyone's pace.${gapTxt}${buys}`,
+        why:`step ${ML("demand").toLowerCase()} ÷ ${ML("effCapacity").toLowerCase()}`, nodeId:n.id});
+    } else out.push({id:"bottleneck",cat:"capacity",tier:1,sev:"warn",score:1,
+      headline:`${esc(n.label)} <small>·</small> ${r.flag.derived?"≈":""}${fmt(r.flag.wait)} <small>${u}</small>`,
+      line:`The longest queue in the flow — items sit here longer than anywhere else. Raising the downstream pace clears it fastest.`,
+      why:`longest queue ${ML("wait").toLowerCase()}`, nodeId:n.id});
+  }
+
+  if(r.turnaround>0 && r.wait>0){                             // how much of the journey is waiting
+    const share=r.wait/r.turnaround;
+    const bigQ=r.flow.filter(f=>f.kind==="wait").sort((a,b)=>b.time-a.time)[0];
+    out.push({id:"waitshare",cat:"speed",tier:2,sev:share>=0.85?"hot":share>=0.6?"warn":"calm",score:share*100,
+      headline:`${Math.round(share*100)}% <small>waiting</small>`,
+      line:`Of the ${fmt(r.turnaround)} ${u} journey, only ${fmt(r.touch)} ${u} is work.${bigQ?` ${esc(bigQ.node.label)} holds items longest (${bigQ.derived?"≈":""}${fmt(bigQ.time)} ${u}) — shrink its queue and the wait falls with it.`:""}`,
+      why:`${ML("wait").toLowerCase()} ÷ ${ML("turnaround").toLowerCase()}`, nodeId:bigQ?bigQ.node.id:null});
+  }
+
+  if(cap.lostToRework!=null){                                 // the rework tax
+    const ppl=cap.lostToRework/AVAIL_HRS;
+    out.push({id:"rework",cat:"quality",tier:1,sev:ppl>=1?"hot":"warn",score:cap.lostToRework,
+      headline:`${fmt(cap.lostToRework)} <small>hrs/day</small> redone`,
+      line:`≈ ${fmt(ppl)} ${ppl<1.05?"person":"people"} spent redoing work${q.worst?` — ${esc(q.worst.node.label)} bounces ${fmt(q.worst.rework)}% of its cases back`:""}${q.rft!=null?`. Only ${Math.round(q.rft*100)}% of cases sail through right first time.`:"."}`,
+      why:`${ML("rework").toLowerCase()} × ${ML("touch").toLowerCase()} × daily cases`,
+      nodeId:q.worst?q.worst.node.id:null});
+  }
+
+  if(cap.byOwner && cap.byOwner.length){                      // role overload / spare capacity
+    const worst=cap.byOwner.find(o=>o.load!=null && o.load>0.9);
+    if(worst){ const shortH=worst.demandHrs-worst.staffedHrs;
+      out.push({id:"roles",cat:"capacity",tier:1,sev:worst.load>=1?"hot":"warn",score:Math.max(shortH,0.5),
+        headline:`${esc(worst.owner)} <small>at</small> ${Math.round(worst.load*100)}%`,
+        line: shortH>0
+          ? `This role faces ${fmt(worst.demandHrs)} hrs of work a day but is staffed for ${fmt(worst.staffedHrs)} — ${fmt(shortH)} hrs/day (≈ ${fmt(shortH/AVAIL_HRS)} people) short.`
+          : `This role runs right at its ${fmt(worst.staffedHrs)} staffed hrs/day — no headroom for a bad day.`,
+        why:`hours of work ÷ hours staffed`});
+    } else if(cap.byOwner.some(o=>o.load!=null) && cap.byOwner.every(o=>o.load==null||o.load<0.6)){
+      const most=cap.byOwner.filter(o=>o.load!=null).sort((a,b)=>(b.staffedHrs-b.demandHrs)-(a.staffedHrs-a.demandHrs))[0];
+      if(most) out.push({id:"roles",cat:"capacity",tier:2,sev:"calm",score:5,
+        headline:`Spare capacity`,
+        line:`Every role is under 60% load — ${esc(most.owner)} has the most headroom (${fmt(most.staffedHrs-most.demandHrs)} hrs/day free).`,
+        why:`hours of work ÷ hours staffed`});
+    }
+  }
+
+  { let nvaH=0, biggest=null;                                 // effort on "could remove" work
+    state.model.nodes.forEach(n=>{ if(n.type!=="touch"||hasSubs(n)||n.classification!=="NVA") return;
+      const mt=metricFor(n);
+      const v=n.parentId?(visits[n.parentId]||0):(visits[n.id]||0);
+      const vol=cap.demand!=null&&v>0?cap.demand*v:mt.throughput;
+      const th=touchHours(mt.touch);
+      if(th!=null&&vol!=null){ const h=th*vol; nvaH+=h; if(!biggest||h>biggest.h) biggest={node:n,h}; } });
+    if(nvaH>0) out.push({id:"nva",cat:"quality",tier:1,sev:"warn",score:nvaH,
+      headline:`${fmt(nvaH)} <small>hrs/day</small> on “${T.cls.NVA.name}” work`,
+      line:`Steps rated “${T.cls.NVA.name}” still consume real effort${biggest?` — ${esc(biggest.node.label)} alone takes ${fmt(biggest.h)} hrs/day`:""}. Cutting them is pure gain.`,
+      why:`${ML("touch").toLowerCase()} × daily cases on “${T.cls.NVA.name}” steps`,
+      nodeId:biggest?biggest.node.id:null});
+  }
+
+  if(r.eff!=null) out.push({id:"eff",cat:"speed",tier:2,sev:r.eff<0.05?"hot":r.eff<0.15?"warn":"calm",score:(1-r.eff)*100-1,
+    headline:`${Math.round(r.eff*100)}% <small>${ML("eff").toLowerCase()}</small>`,
+    line:`${r.eff<0.15?"Low, and normal — 15% is respectable for most flows.":"Respectable — most flows sit well under 15%."} Cutting queues moves this far more than working faster.`,
+    why:`${ML("touch").toLowerCase()} ÷ ${ML("turnaround").toLowerCase()}`});
+
+  // biggest first, but crises outrank savings: tier, then severity, then hrs/day
+  const sevRank={hot:0,warn:1,calm:2};
+  out.sort((a,b)=> a.tier-b.tier || sevRank[a.sev]-sevRank[b.sev] || b.score-a.score);
+  return out;
+}
+/* the explicit required lens: what today's incoming work demands of each role + the bottleneck */
+function dashNeed(r){
+  const cap=r.cap||{}; if(cap.demand==null) return `<div class="dash-empty">${T.capEmpty}</div>`;
+  const rows=[];
+  (cap.byOwner||[]).forEach(o=>{ if(!o.hasDemand) return;
+    rows.push(`<div class="dash-need-row${o.hasStaff&&o.demandHrs>o.staffedHrs+0.05?" short":""}">
+      <span class="nr-name">${esc(o.owner)}</span>
+      <span class="nr-need">${fmt(o.demandHrs)} hrs/day</span>
+      <span class="nr-vs">${o.hasStaff?`staffed ${fmt(o.staffedHrs)}`:"staffing not set"}</span>
+      <span class="nr-ppl">≈ ${fmt(o.demandHrs/AVAIL_HRS)} people at ${AVAIL_HRS}h</span></div>`); });
+  let bl="";
+  if(r.flag && r.flag.kind==="load"){ const n=r.flag.node, pc=cap.per[n.id]||{}, mt=metricFor(n);
+    if(!hasSubs(n) && n.performer!=="bot" && pc.demand!=null){
+      const hrs=n.hoursPerDay!=null?n.hoursPerDay:AVAIL_HRS, th=touchHours(mt.touch),
+            rw=mt.rework!=null?Math.min(mt.rework,99)/100:0;
+      if(th>0 && hrs>0){ const need=pc.demand/(hrs/th*(1-rw));
+        bl=`<div class="dash-need-row${n.people!=null&&need>n.people+0.04?" short":""}">
+          <span class="nr-name">${esc(n.label)}</span>
+          <span class="nr-need">≈ ${fmt(need)} people</span>
+          <span class="nr-vs">${n.people!=null?`has ${fmt(n.people)}`:"people not set"}</span>
+          <span class="nr-ppl">to meet ${fmt(pc.demand)} cases/day</span></div>`; } } }
+  return rows.length||bl ? rows.join("")+bl : `<div class="dash-empty">${T.capEmpty}</div>`;
+}
+/* prose footer: flow shape + how firm the numbers are */
+function dashStory(r){
+  const nodes=state.model.nodes, u=unit();
+  const steps=nodes.filter(n=>n.type==="touch"&&!n.parentId);
+  const humans=steps.filter(n=>n.performer!=="bot").length, bots=steps.length-humans;
+  const queues=nodes.filter(n=>n.type==="wait").length;
+  const days=(u==="hrs"&&r.turnaround>0)?` (${fmt(r.turnaround/24)} days)`:"";
+  let s=`Work passes through <b>${steps.length} step${steps.length!==1?"s":""}</b>${steps.length?` (${humans} human · ${bots} bot)`:""} and <b>${queues} queue${queues!==1?"s":""}</b>.`;
+  if(r.turnaround>0) s+=` A typical case takes <b>${fmt(r.turnaround)} ${u}</b>${days}${r.wait>0?`, ${Math.round(r.wait/r.turnaround*100)}% of it waiting`:""}.`;
+  let modelled=0, measured=0; const derivedW=Object.keys(r.dw||{}).length;
+  nodes.forEach(n=>{ if(n.type!=="touch"||hasSubs(n)) return; const mt=metricFor(n);
+    if(mt.hasData) measured++; else if(mt.derivedCap) modelled++; });
+  const bits=[];
+  if(modelled) bits.push(`capacity on ${modelled} step${modelled>1?"s":""} is modelled from people × hours`);
+  if(derivedW) bits.push(`${derivedW} queue wait${derivedW>1?"s are":" is"} estimated with ≈ (Little’s Law)`);
+  if(measured) bits.push(`${measured} step${measured>1?"s carry":" carries"} imported numbers`);
+  if(bits.length) s+=`<br>Confidence: ${bits.join("; ")}.${measured?"":" Import a sheet to firm the estimates up."}`;
+  return s;
+}
+function showDashboard(){
+  const r=rollup(), cap=r.cap||{}, q=r.qual||{}, u=unit();
+  const ins=deriveInsights(r);
+  const keep=ins.find(i=>i.id==="keepup");
+  const cards=ins.filter(i=>i.id!=="keepup");
+  let verdict,vcls,vsub;
+  if(keep){ const short=cap.demand-cap.flowCap;
+    if(short>0.05){ verdict=`⚠ Short ${fmt(short)}/day`; vcls="hot"; }
+    else { verdict="✓ Keeping up"; vcls=keep.sev==="warn"?"warn":"ok"; }
+    vsub=keep.line;
+  } else { verdict="Not enough data to judge capacity"; vcls="na"; vsub=T.capEmpty; }
+  const top=cards[0];
+  const stat=(k,v)=>`<div class="dash-stat"><div class="k">${k}</div><div class="v">${v}</div></div>`;
+  const days=(u==="hrs"&&r.turnaround>0)?` <small>(${fmt(r.turnaround/24)} d)</small>`:"";
+  const statRow=[
+    r.turnaround>0?stat(ML("turnaround"),`${fmt(r.turnaround)} <small>${u}</small>${days}`):"",
+    r.eff!=null?stat(ML("eff"),`${Math.round(r.eff*100)}<small>%</small>`):"",
+    q.rft!=null?stat(ML("rft"),`${Math.round(q.rft*100)}<small>%</small>`):"",
+    cap.flowCap!=null?stat(ML("flowCap"),`${fmt(cap.flowCap)} <small>/day</small>`):""].join("");
+  const cardHtml=cards.map(i=>`
+    <div class="dash-card" style="--cat:var(--cat-${i.cat})">
+      <div class="dc-top">${catIcHtml(i.cat,"dc-ic")}<span class="dc-cat">${METRICS_SPEC.categories[i.cat].label}</span><span class="dc-sev ${i.sev}"></span></div>
+      <div class="dc-head">${i.headline}</div>
+      <div class="dc-line">${i.line}</div>
+      <div class="dc-foot"><span class="dc-why" title="How this is worked out">${esc(i.why)}</span>${i.nodeId?`<button class="dc-go" data-focus="${i.nodeId}">Show me →</button>`:""}</div>
+    </div>`).join("");
+  $("#dashTitle").innerHTML=`Flow insights <span class="dash-flow">· ${esc(state.model.name||"Untitled flow")}</span>`;
+  $("#dashBody").innerHTML=`
+    <div class="dash-hero">
+      <div class="dh-verdict ${vcls}"><div class="dhv-big">${verdict}</div><div class="dhv-sub">${vsub}</div></div>
+      ${top?`<div class="dh-top"><div class="dht-eyebrow">Biggest opportunity</div>
+        <div class="dht-head" style="--cat:var(--cat-${top.cat})">${top.headline}</div>
+        <div class="dht-line">${top.line}</div></div>`:""}
+    </div>
+    ${statRow?`<div class="dash-stats">${statRow}</div>`:""}
+    ${cards.length?`<div class="dash-h">Opportunities <span class="dash-hnote">· biggest first</span></div><div class="dash-grid">${cardHtml}</div>`:""}
+    <div class="dash-h">To keep up, you’d need <span class="dash-hnote">· at today’s incoming work</span></div>
+    <div class="dash-need">${dashNeed(r)}</div>
+    <div class="dash-story">${dashStory(r)}</div>`;
+  $("#dashOverlay").classList.add("show");
+}
 
 function nodeColors(n){
   if(n.type==="start"||n.type==="end") return {fill:"var(--term)",stroke:"var(--term-line)"};
@@ -2942,6 +3209,10 @@ $("#effOverlay").onclick=e=>{ if(e.target.id==="effOverlay") $("#effOverlay").cl
 $("#metricsHelp").onclick=()=>showMetricsModal();
 $("#metricsClose").onclick=()=>$("#metricsOverlay").classList.remove("show");
 $("#metricsOverlay").onclick=e=>{ if(e.target.id==="metricsOverlay") $("#metricsOverlay").classList.remove("show"); };
+$("#insightsBtn").onclick=()=>showDashboard();
+$("#dashClose").onclick=()=>$("#dashOverlay").classList.remove("show");
+$("#dashBody").addEventListener("click",e=>{ const b=e.target.closest("[data-focus]"); if(!b) return;
+  $("#dashOverlay").classList.remove("show"); focusNode(b.dataset.focus); });
 
 /* Appearance + Export popovers (only one open at a time) */
 function closeMenus(){ toggleThemePop(false); const ep=$("#exportPop"); if(ep) ep.classList.remove("show"); }
@@ -2961,7 +3232,8 @@ function deleteSelection(){
     n.parentId ? removeSubStep(n.id) : deleteNode(n.id); }
 }
 document.addEventListener("keydown",e=>{
-  if(e.key==="Escape"){ closeMenus(); if(state.tool) setTool(null); return; }
+  if(e.key==="Escape"){ closeMenus(); if(state.tool) setTool(null);
+    const ov=document.querySelector(".overlay.show"); if(ov) ov.classList.remove("show"); return; }
   const t=e.target;
   const typing = t && (t.tagName==="INPUT"||t.tagName==="TEXTAREA"||t.tagName==="SELECT"||t.isContentEditable);
   if(typing || !editable()) return;
