@@ -451,8 +451,16 @@
   .group .gbox{fill:var(--accent);fill-opacity:.05;stroke:var(--accent);stroke-opacity:.55;stroke-width:1.5;stroke-dasharray:6 4;rx:14}
   .build .group .gbox{pointer-events:all;cursor:grab}
   .group.selected .gbox{stroke-opacity:1;stroke-width:2;stroke-dasharray:none;fill-opacity:.09}
-  .group .glabel{font-family:var(--font);fill:var(--accent);font-size:13px;font-weight:700;pointer-events:none}
-  /* per-group metrics table (top-right of the group frame) */
+  /* on-canvas group header card — title + roll-up stats, top-left of the frame */
+  .ghead{display:inline-flex;flex-direction:column;gap:7px;background:var(--panel);border:1px solid var(--line);
+    border-left:3px solid var(--accent);border-radius:9px;padding:8px 13px 9px;box-shadow:0 2px 9px rgba(0,0,0,.24);width:max-content}
+  .ghead-title{font-family:var(--font);font-size:13.5px;font-weight:700;color:var(--accent);line-height:1.15;max-width:360px}
+  .ghead-stats{display:flex;gap:18px}
+  .ghead-stats .gstat{display:flex;flex-direction:column;gap:1px}
+  .ghead-stats .gk{font-size:9.5px;text-transform:uppercase;letter-spacing:.4px;color:var(--faint);font-weight:600;white-space:nowrap}
+  .ghead-stats .gv{font-size:15px;font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums;line-height:1.1;white-space:nowrap}
+  .ghead-stats .gv small{font-size:10px;color:var(--muted);font-weight:500}
+  /* per-group metrics table (inspector totals) */
   .gmetrics{border-collapse:collapse;font-family:var(--font);background:var(--panel);border:1px solid var(--line);
     border-radius:7px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.18);width:max-content}
   .gmetrics th,.gmetrics td{padding:3px 9px;text-align:right;font-size:11px;line-height:1.2;white-space:nowrap}
@@ -1238,13 +1246,17 @@ function rollup(){
 }
 /* flow-weighted Turnaround / Touch / Wait totals for a group's member boxes only */
 function groupRollup(grp){
-  const {visits}=flowWeights();
+  // mirror rollup()'s precedence so group totals match the flow's real numbers:
+  // touch = visits × hands-on; wait = visits × (manual wait, else derived Little's-Law dw)
+  const r=rollup(); const visits=r.visits||{}, dw=r.dw||{};
   const mem=new Set(grp.members||[]);
   let touch=0, wait=0;
   state.model.nodes.forEach(n=>{ if(!mem.has(n.id)||n.excludeStats) return;
     const v=visits[n.id]||0; if(v<=0) return; const mt=metricFor(n);
     if(n.type==="touch" && mt.touch!=null && mt.touch>0) touch += v*mt.touch;
-    if(n.type==="wait"  && mt.wait!=null  && mt.wait>0)  wait  += v*mt.wait; });
+    if(n.type==="wait"){
+      const base = mt.wait!=null ? mt.wait : (dw[n.id]!=null ? dw[n.id] : null);
+      if(base!=null && base>0) wait += v*base; } });
   return {touch, wait, turnaround:touch+wait};
 }
 function isBottleneck(node, r){
@@ -1894,15 +1906,7 @@ function renderCanvas(r){
     g.appendChild(box);
     const showInfo=grp.showInfo!==false;
     if(showInfo){
-      const lbl=el("text",{class:"glabel",x:grp.x+12,y:grp.y+20}); lbl.textContent=grp.label||"Group";
-      if(grp.color) lbl.style.fill=grp.color;
-      g.appendChild(lbl);
-      if(editable()){
-        lbl.style.pointerEvents="all"; lbl.style.cursor="text";
-        lbl.addEventListener("mousedown",ev=>ev.stopPropagation());
-        lbl.addEventListener("dblclick",ev=>{ ev.stopPropagation(); editGroupLabel(grp); });
-      }
-      g.appendChild(groupMetricsEl(grp));
+      g.appendChild(groupHeadEl(grp));
     }
     if(editable()){
       box.addEventListener("mousedown",ev=>startAnnoMove(ev,grp));
@@ -2790,15 +2794,31 @@ function renderEdgeInspector(){
 }
 
 /* on-canvas metrics table to the right of a group's title (flow-weighted member totals) */
-function groupMetricsEl(grp){
+function groupHeadEl(grp){
   const u=unit(), gr=groupRollup(grp);
-  const fo=el("foreignObject",{x:grp.x+12,y:grp.y+8,width:Math.max(80,grp.w-24),height:56});
-  fo.style.pointerEvents="none";
-  const wrap=document.createElement("div");
-  wrap.style.cssText="display:flex;justify-content:flex-end;width:100%";
-  wrap.innerHTML=`<table class="gmetrics"><thead><tr><th>TAT (${u})</th><th>Touch</th><th>Wait</th></tr></thead>
-    <tbody><tr><td>${fmt(gr.turnaround)}</td><td>${fmt(gr.touch)}</td><td>${fmt(gr.wait)}</td></tr></tbody></table>`;
-  fo.appendChild(wrap); return fo;
+  // header card lives top-left; sized generously and clipped-free so the max-content card shows in full
+  const fo=el("foreignObject",{x:grp.x+10,y:grp.y+10,width:Math.max(200,grp.w-20),height:84});
+  fo.style.overflow="visible"; fo.style.pointerEvents="none";
+  const card=document.createElement("div");
+  card.className="ghead";
+  if(grp.color) card.style.borderLeftColor=grp.color;
+  const title=document.createElement("div");
+  title.className="ghead-title"; title.textContent=grp.label||"Group";
+  if(grp.color) title.style.color=grp.color;
+  card.appendChild(title);
+  const stats=document.createElement("div");
+  stats.className="ghead-stats";
+  stats.innerHTML=`<div class="gstat"><div class="gk">Turnaround</div><div class="gv">${fmt(gr.turnaround)} <small>${u}</small></div></div>
+    <div class="gstat"><div class="gk">Touch</div><div class="gv">${fmt(gr.touch)}</div></div>
+    <div class="gstat"><div class="gk">Wait</div><div class="gv">${fmt(gr.wait)}</div></div>`;
+  card.appendChild(stats);
+  fo.appendChild(card);
+  if(editable()){          // only the title is interactive — the rest stays click-through so the frame can be grabbed
+    title.style.pointerEvents="all"; title.style.cursor="text";
+    title.addEventListener("mousedown",ev=>ev.stopPropagation());
+    title.addEventListener("dblclick",ev=>{ ev.stopPropagation(); editGroupLabel(grp); });
+  }
+  return fo;
 }
 function renderGroupInspector(){
   const insp=$("#inspector");
@@ -2833,7 +2853,7 @@ function renderGroupInspector(){
       </div>
       <div class="insp-sec"><h4>Totals <span class="h4note">· members, flow-weighted</span></h4>
         <table class="gmetrics" style="width:100%">
-          <thead><tr><th>TAT (${u})</th><th>Touch</th><th>Wait</th></tr></thead>
+          <thead><tr><th>Turnaround (${u})</th><th>Touch</th><th>Wait</th></tr></thead>
           <tbody><tr><td>${fmt(gr.turnaround)}</td><td>${fmt(gr.touch)}</td><td>${fmt(gr.wait)}</td></tr></tbody></table>
       </div>
       <div class="insp-sec"><h4>Boxes in this group</h4>
@@ -2848,7 +2868,7 @@ function wireGroupInspector(grp){
   const lab=insp.querySelector("[data-glabel]");
   if(lab){
     lab.addEventListener("input",()=>{ grp.label=lab.value;
-      const t=$("#canvas").querySelector(`g.group[data-gid="${grp.id}"] .glabel`); if(t) t.textContent=grp.label||"Group"; });
+      const t=$("#canvas").querySelector(`g.group[data-gid="${grp.id}"] .ghead-title`); if(t) t.textContent=grp.label||"Group"; });
     lab.addEventListener("change",()=>{ grp.label=lab.value.trim()||"Group"; render(); });
   }
   const gc=insp.querySelector("[data-gcolor]"); if(gc) gc.addEventListener("change",()=>{ grp.color=gc.value; render(); });
@@ -3116,7 +3136,7 @@ function annoDelHandle(cx,cy,onDel){ const dh=el("g",{class:"del-handle"});
   dh.addEventListener("mousedown",ev=>ev.stopPropagation());
   dh.addEventListener("click",ev=>{ ev.stopPropagation(); onDel(); }); return dh; }
 function editGroupLabel(grp){ const svg=$("#canvas");
-  const fo=el("foreignObject",{x:grp.x+8,y:grp.y+4,width:Math.max(120,grp.w-16),height:26});
+  const fo=el("foreignObject",{x:grp.x+13,y:grp.y+16,width:Math.min(340,Math.max(160,grp.w-26)),height:26});
   const inp=document.createElement("input"); inp.type="text"; inp.value=grp.label||""; inp.className="glabel-edit";
   fo.appendChild(inp); svg.appendChild(fo); inp.focus(); inp.select();
   const commit=()=>{ grp.label=inp.value.trim()||"Group"; render(); };
@@ -3181,10 +3201,12 @@ function reflowFrom(x0, dx, exceptIds){
   (m.comments||[]).forEach(c=>{ if(c.x>=x0) t.push({ent:c, x:Math.max(0,c.x+dx)}); });
   animateNodes(t);
 }
-/* refit each group rect around its members' current bounds (same padding as creation) */
+/* refit each group rect to encapsulate its member boxes: room up top for the header
+   card (title + stats), a comfortable margin on the sides and underneath, and a min
+   width so the header always fits. Groups with the header hidden hug their boxes tighter. */
 function tidyGroups(){
   const m=state.model; if(!m.groups||!m.groups.length) return;
-  const PAD=22, TOP=PAD+16;
+  const PAD=24, HEAD=98, MINW=250;
   m.groups.forEach(g=>{
     const members=(g.members||[]).map(id=>m.nodes.find(n=>n.id===id)).filter(Boolean);
     if(!members.length) return;
@@ -3192,7 +3214,9 @@ function tidyGroups(){
     members.forEach(n=>{ const L=_lay[n.id]; if(!L) return; const ny0=n.y+(L.bt||0);
       bx0=Math.min(bx0,n.x); by0=Math.min(by0,ny0); bx1=Math.max(bx1,n.x+L.w); by1=Math.max(by1,ny0+L.h); });
     if(bx0===Infinity) return;
-    g.x=Math.max(0,bx0-PAD); g.y=Math.max(0,by0-TOP); g.w=(bx1+PAD)-g.x; g.h=(by1+PAD)-g.y;
+    const top = g.showInfo!==false ? HEAD : PAD;   // header needs vertical room; hidden = tight
+    g.x=Math.max(0,bx0-PAD); g.y=Math.max(0,by0-top);
+    g.w=Math.max((bx1+PAD)-g.x, g.showInfo!==false?MINW:0); g.h=(by1+PAD)-g.y;
   });
 }
 
@@ -3226,6 +3250,16 @@ function autoArrange(){
     if(yCur[c]==null) yCur[c]=MARGIN_Y+(maxH-colH[c])/2;   // short columns centre vertically
     const top=yCur[c]; yCur[c]+=L.h+GAPY;
     targets.push({ent:n, x:snapG(colXs[c]), y:snapG(top-L.bt)}); });
+  // reserve clearance above grouped boxes so each group's header card (title + stats)
+  // fits without overlapping the first row — tidyGroups needs ~HEAD px above its members
+  const HEAD_ROOM=104;
+  const visMembers=new Set();
+  (m.groups||[]).forEach(g=>{ if(g.showInfo!==false) (g.members||[]).forEach(id=>visMembers.add(id)); });
+  if(visMembers.size){
+    const tops=targets.filter(t=>visMembers.has(t.ent.id)).map(t=>t.y+layOf(t.ent).bt);
+    const minTop=Math.min(...tops);
+    if(minTop<HEAD_ROOM){ const dy=snapG(HEAD_ROOM-minTop); targets.forEach(t=>t.y+=dy); }
+  }
   // custom arrow sides survive — Tidy repositions boxes, it never re-routes connections
   animateNodes(targets, 320, ()=>{ tidyGroups(); render(); });
   toast("Layout tidied");
