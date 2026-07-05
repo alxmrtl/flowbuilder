@@ -485,8 +485,28 @@
   .del-handle line{stroke:#fff;stroke-width:1.8;stroke-linecap:round}
   .temp-edge{fill:none;stroke:var(--accent);stroke-width:2;stroke-dasharray:5 4;pointer-events:none}
   .elabel{fill:var(--muted);font-size:11px;font-family:var(--font)}
-  /* case-flow labels on arrows — halo keeps them legible over crossings */
-  .eflow{font-size:10.5px;font-weight:700;font-family:var(--font);paint-order:stroke;stroke:var(--bg);stroke-width:3px;stroke-linejoin:round}
+  /* case-flow labels on arrows — quiet tier for single-out volumes; pills carry their own attrs */
+  .eflow-min{font-size:9px;font-weight:600;font-family:var(--font);paint-order:stroke;stroke:var(--bg);stroke-width:3px;stroke-linejoin:round}
+  /* ---- Simulate-a-day ---- */
+  #simHud{position:fixed;left:50%;transform:translateX(-50%);z-index:60;display:flex;align-items:center;gap:10px;
+    background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:8px 12px;flex-wrap:wrap;max-width:min(880px,92vw)}
+  #simHud button{background:var(--panel2);border:1px solid var(--line);color:var(--ink);border-radius:7px;padding:5px 10px;font-weight:700;font-size:12px}
+  #simHud button:hover{border-color:var(--accent)}
+  #simHud .shseg{display:flex;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:2px}
+  #simHud .shseg button{background:transparent;border:0;color:var(--muted);padding:4px 9px;font-size:11px;border-radius:6px}
+  #simHud .shseg button.on{background:var(--accent);color:#06202a}
+  #simHud #simClock{font-weight:800;font-variant-numeric:tabular-nums;font-size:12.5px;min-width:92px;text-align:center}
+  #simHud #simStats{color:var(--muted);font-size:11.5px;font-variant-numeric:tabular-nums}
+  #simHud #simStop{color:var(--nva)}
+  #simHud .shnote{flex-basis:100%;color:var(--faint);font-size:10px;margin-top:2px}
+  .sim-dot{stroke:rgba(0,0,0,.35);stroke-width:.6}
+  .sim-rim.pulse{animation:simPulse 1.1s ease-in-out infinite}
+  @keyframes simPulse{0%,100%{opacity:.3}50%{opacity:.9}}
+  body.simming #edgeLabels{opacity:.35}
+  #simViewerBtn{display:none;position:absolute;top:12px;right:12px;z-index:25;background:var(--accent);border:none;color:#06202a;
+    border-radius:9px;padding:8px 14px;font-weight:700;font-size:13px;box-shadow:var(--shadow);cursor:pointer}
+  body.viewer #simViewerBtn{display:block}
+  body.simming #simViewerBtn{display:none}
   .badge-warn{fill:var(--warn);font-size:11px;font-weight:700}
 
   /* ---- minimalist theme-aware scrollbars ---- */
@@ -680,6 +700,7 @@
   <span class="pb-hint">Drag boxes to arrange · drag empty space to select several · hover a box and drag a dot to connect (loops &amp; branches OK).</span>
   <button id="autoArrange" title="Snap boxes into neat columns — never touches your arrows">✨ Tidy</button>
   <button id="flowToggle" title="Show case volume and branch splits on the arrows — line thickness follows the flow">→ Case flow</button>
+  <button id="simBtn" title="Watch a simulated day — cases flow through the map, pile up in queues, and overloads glow">▶ Simulate</button>
   <div class="pb-zoom">
     <button id="zoomOut" title="Zoom out">−</button>
     <span id="zoomLevel">100%</span>
@@ -691,6 +712,7 @@
   <div id="stage">
     <svg id="canvas"></svg>
     <div class="toast" id="toast"></div>
+    <button id="simViewerBtn" title="Watch a simulated day — cases flow through the map">▶ Simulate a day</button>
   </div>
   <aside id="inspector"></aside>
 </main>
@@ -849,6 +871,7 @@ const state = {
   zoom: 1,
   viewer: false,
   tool: null,        // null | "group" | "comment" — armed annotation tool
+  simming: false,    // a day-simulation is running — freezes all editing
 };
 
 /* ---------- helpers ---------- */
@@ -971,6 +994,7 @@ function rollupFor(model){
 
 /* ---------- flow CRUD ---------- */
 function openFlow(id, mode){
+  if(typeof stopSim==="function"&&state.simming) stopSim();   // never carry a sim across flows
   const f=state.library.flows[id]; if(!f) return;
   state.currentId=id; state.library.lastOpenedId=id; saveLibrary();
   loadModel(clone(f.model));   // imported stats (model.data) are hydrated inside loadModel
@@ -1233,7 +1257,7 @@ function maxWip(){
    RENDER
    ============================================================ */
 /* editing is on whenever we're in the flow screen and not a read-only shared viewer */
-const editable = () => state.mode==="build" && !state.viewer;
+const editable = () => state.mode==="build" && !state.viewer && !state.simming;
 
 function render(){
   updateChrome();
@@ -1243,6 +1267,10 @@ function render(){
   document.querySelectorAll("[data-cardview]").forEach(b=>b.classList.toggle("on",b.dataset.cardview===view()));
   { const ft=$("#flowToggle"); if(ft) ft.classList.toggle("tool-on",(state.model.settings&&state.model.settings.showFlow)!==false); }
   const r=rollup();
+  { const sb=$("#simBtn"); if(sb){
+      sb.textContent=state.simming?"⏹ Stop sim":"▶ Simulate";
+      sb.disabled=!state.simming&&r.cap.demand==null;
+      sb.title=sb.disabled?"Set incoming work on the Start step to simulate":"Watch a simulated day — cases flow through the map, pile up in queues, and overloads glow"; } }
   renderStats(r); renderCanvas(r); renderRibbon(r);
   renderInspector();
   scheduleSave();
@@ -1781,11 +1809,17 @@ function portGeo(node, L, side){
     default:       return {x:x+w,   y:cyy,        nx:1,  ny:0}; // right
   }
 }
-function edgePath(p1,p2){
+function edgeGeom(p1,p2){
   const dist=Math.hypot(p2.x-p1.x, p2.y-p1.y), k=Math.max(48, dist/3);
   const c1x=p1.x+p1.nx*k, c1y=p1.y+p1.ny*k, c2x=p2.x+p2.nx*k, c2y=p2.y+p2.ny*k;
-  return `M${p1.x},${p1.y} C${c1x},${c1y} ${c2x},${c2y} ${p2.x},${p2.y}`;
+  return {
+    d:`M${p1.x},${p1.y} C${c1x},${c1y} ${c2x},${c2y} ${p2.x},${p2.y}`,
+    at(t){ const u=1-t;   // analytic cubic-bezier point — for label placement on the real curve
+      return { x: u*u*u*p1.x + 3*u*u*t*c1x + 3*u*t*t*c2x + t*t*t*p2.x,
+               y: u*u*u*p1.y + 3*u*u*t*c1y + 3*u*t*t*c2y + t*t*t*p2.y }; }
+  };
 }
+const edgePath=(p1,p2)=>edgeGeom(p1,p2).d;
 function nearestSide(node, L, px, py){
   const x=node.x, y=node.y, w=L.w, top=y+L.bt, bottom=top+L.h;
   const d={ top:Math.abs(py-top), bottom:Math.abs(py-bottom), left:Math.abs(px-x), right:Math.abs(px-(x+w)) };
@@ -1875,48 +1909,88 @@ function renderCanvas(r){
   const eFlow=r.edgeFlow||{}, eShare=r.edgeShare||{}, demandV=r.cap?r.cap.demand:null;
   const maxEF=Math.max(1e-9,...m.edges.map(e=>eFlow[e.id]||0));
   const outCount={}; m.edges.forEach(e=>outCount[e.from]=(outCount[e.from]||0)+1);
+  const labelLayer=el("g",{id:"edgeLabels"});   // appended AFTER the node loop → pills never hide under cards
+  const placedPills=[];
   m.edges.forEach(e=>{
     const a=byId[e.from], b=byId[e.to]; if(!a||!b) return;
     const p1=portGeo(a,lay[a.id],e.fromSide||"right"), p2=portGeo(b,lay[b.id],e.toSide||"left");
-    const d=edgePath(p1,p2);
+    const geo=edgeGeom(p1,p2), d=geo.d;
     const onPath=hotPath.has(a.id)&&hotPath.has(b.id);
     const hot=onPath && (isBottleneck(a,r)||isBottleneck(b,r));
     const ef=eFlow[e.id]||0;
     const ep=el("path",{d,class:"edge"+(hot?" hot":""),"marker-end":`url(#${hot?'arrowHot':'arrow'})`});
+    ep.dataset.eid=e.id;                         // the simulator finds edge paths by id
     if(showFlow) ep.style.strokeWidth=Math.max(1.5,Math.min(5,1.5+3.5*ef/maxEF))+"px";  // thick = busy (inline style beats the .edge CSS rule)
     svg.appendChild(ep);
     if(editable()){ const hit=el("path",{d,class:"edge-hit"});
       hit.addEventListener("click",ev=>{ev.stopPropagation(); selectEdge(e.id);}); svg.appendChild(hit); }
-    const mx=(p1.x+p2.x)/2, my=(p1.y+p2.y)/2-6;
-    if(e.label){ const nl=el("text",{x:mx,y:my-12,class:"elabel","text-anchor":"middle"}); nl.textContent=e.label; svg.appendChild(nl); }
-    if(showFlow){
-      const branch=(outCount[e.from]||0)>1;
-      const assumed=branch && e.splitPct==null;
-      const share=eShare[e.id];
-      const flowStr=demandV!=null?`${fmt(ef*demandV)}/day`:null;
-      let str=null, fill="var(--muted)";
-      if(branch && share!=null){
-        str=`${assumed?"≈":""}${Math.round(share*100)}%`+(flowStr?` · ${flowStr}`:"");
-        fill=assumed?"var(--warn)":(share<=0?"var(--faint)":"var(--muted)");
-      } else if(flowStr){ str=flowStr; if(ef<=0) fill="var(--faint)"; }
-      if(str){
-        const tl=el("text",{x:mx,y:my,class:"eflow","text-anchor":"middle",fill});
-        tl.textContent=str;
-        const tip=el("title");
-        tip.textContent=assumed?"Assumed even split — no Split % set on this branch. Click to set the real share."
-          : branch?"Share of cases down this path":"Cases flowing along this arrow per day";
-        tl.appendChild(tip);
-        if(editable()){ tl.style.pointerEvents="all"; tl.style.cursor="pointer";
-          tl.addEventListener("mousedown",ev=>ev.stopPropagation());
-          tl.addEventListener("click",ev=>{ev.stopPropagation(); selectEdge(e.id);}); }
-        svg.appendChild(tl);
-      }
-    } else if(e.splitPct!=null){   // flow display off — keep the plain split label
-      const tl=el("text",{x:mx,y:my,class:"elabel","text-anchor":"middle"}); tl.textContent=e.splitPct+"%"; svg.appendChild(tl);
+
+    /* one label pill per edge, sitting ON the curve (t=0.5, dodging cards and other pills) */
+    const branch=(outCount[e.from]||0)>1;
+    const assumed=branch && e.splitPct==null && showFlow;
+    const share=eShare[e.id];
+    const name=(e.label||"").trim();
+    const parts=[];   // [text, fill, weight]
+    if(name) parts.push([name,"var(--ink)","600"]);
+    if(showFlow && branch && share!=null)
+      parts.push([`${assumed?"≈":""}${Math.round(share*100)}%`, assumed?"var(--warn)":(share<=0?"var(--faint)":"var(--muted)"),"700"]);
+    else if(!showFlow && e.splitPct!=null) parts.push([`${e.splitPct}%`,"var(--muted)","700"]);
+    const flowStr=showFlow && demandV!=null ? `${fmt(ef*demandV)}/day` : null;
+    if(flowStr && (branch||name)) parts.push([flowStr, ef<=0?"var(--faint)":"var(--muted)","500"]);
+    const mid=geo.at(0.5);
+    if(parts.length){
+      const str=parts.map(p=>p[0]).join(" · ");
+      const pw=measure(str,`600 10.5px ${FONT_STACK}`)+16, ph=17;
+      let cx=mid.x, cy=mid.y;
+      const hitsCard=(x,y)=>m.nodes.some(nn=>{ const LL=lay[nn.id]; if(!LL||nn.parentId) return false;
+        const bx=nn.x-8, by=nn.y+(LL.bt||0)-8, bw=LL.w+16, bh=(LL.h||NODE_H)+16;
+        return x+pw/2>bx && x-pw/2<bx+bw && y+ph/2>by && y-ph/2<by+bh; });
+      if(hitsCard(cx,cy)){ for(const t of [0.35,0.65,0.25,0.75]){ const p=geo.at(t);
+          if(!hitsCard(p.x,p.y)){ cx=p.x; cy=p.y; break; } } }
+      const clash=(x,y)=>placedPills.some(pp=>Math.abs(pp.y-y)<15 && Math.abs(pp.x-x)<(pp.w+pw)/2+4);
+      if(clash(cx,cy)){ if(!clash(cx,cy-17)) cy-=17; else if(!clash(cx,cy+17)) cy+=17; }
+      placedPills.push({x:cx,y:cy,w:pw});
+      const pg=el("g",{class:"epill"+(assumed?" assumed":"")});
+      pg.appendChild(el("rect",{x:cx-pw/2,y:cy-ph/2,width:pw,height:ph,rx:7,
+        fill:"var(--panel)",stroke:assumed?"var(--warn)":"var(--line)","stroke-width":1}));
+      const tl=el("text",{x:cx-pw/2+8,y:cy+3.5,"font-size":"10.5","font-family":FONT_STACK});
+      parts.forEach((p,i)=>{ const ts=el("tspan",{fill:p[1],"font-weight":p[2]});
+        ts.textContent=(i?" · ":"")+p[0]; tl.appendChild(ts); });
+      pg.appendChild(tl);
+      const tip=el("title");
+      tip.textContent=assumed?"Assumed even split — no Split % set on this branch. Click to set the real share."
+        : branch?"Share of cases down this path":"Cases flowing along this arrow per day";
+      pg.appendChild(tip);
+      if(editable()){ pg.style.cursor="pointer";
+        pg.addEventListener("mousedown",ev=>ev.stopPropagation());
+        pg.addEventListener("click",ev=>{ev.stopPropagation(); selectEdge(e.id);}); }
+      labelLayer.appendChild(pg);
+    } else if(flowStr){   // quiet tier: single-out volume — small faint text on the curve
+      const tl=el("text",{x:mid.x,y:mid.y-7,class:"eflow-min","text-anchor":"middle",fill:"var(--faint)"});
+      tl.textContent=flowStr; labelLayer.appendChild(tl);
     }
   });
 
   const txt=(x,y,str,cls,extra)=>{ const t=el("text",Object.assign({x,y,class:cls},extra||{})); t.textContent=str; return t; };
+
+  /* decision marker — auto: any card whose cases split ≥2 ways gets a double outline
+     (an intensification of the card's own hue, not a new shape); steps also get a fork badge */
+  const decorateDecision=(g,n,L,hue,bt,opts)=>{
+    if((outCount[n.id]||0)<2) return;
+    const o=opts||{};
+    g.appendChild(el("rect",{x:4,y:bt+4,width:L.w-8,height:L.h-8,rx:o.compact?8:10,fill:"none",
+      stroke:hue,"stroke-width":1,opacity:"0.45","pointer-events":"none"}));
+    if(o.badge && n.type==="touch"){
+      const bx=L.w-38, by=bt+L.h-9, cnt=outCount[n.id];
+      const bg=el("g",{class:"decbadge"});
+      bg.appendChild(el("rect",{x:bx,y:by,width:30,height:18,rx:6,fill:hue}));
+      bg.appendChild(el("path",{d:`M${bx+5},${by+9} h5 M${bx+10},${by+9} L${bx+16},${by+4.5} M${bx+10},${by+9} L${bx+16},${by+13.5}`,
+        stroke:"#0f1720","stroke-width":1.8,fill:"none","stroke-linecap":"round"}));
+      bg.appendChild(txt(bx+25,by+13,String(cnt),"",{fill:"#0f1720","font-size":"9.5","font-weight":"800","text-anchor":"middle"}));
+      const tip=el("title"); tip.textContent=`Decision — cases split ${cnt} ways from here`;
+      bg.appendChild(tip); g.appendChild(bg);
+    }
+  };
 
   m.nodes.forEach(n=>{
     // children only render while their parent is expanded (they live inside its frame)
@@ -1948,6 +2022,7 @@ function renderCanvas(r){
     } else if(L.kind==="card" && view()==="compact"){ // compact lens: icon + name only
       const isQ=n.type==="wait", hue=typeHue(n);
       g.appendChild(el("rect",{class:"nbox",x:0,y:bt,width:w,height:L.h,rx:12,fill:col.fill,stroke:hue,"stroke-width":1.5}));
+      decorateDecision(g,n,L,hue,bt,{compact:true});
       g.appendChild(el("rect",{x:8,y:bt+17,width:22,height:22,rx:6,fill:hue}));
       g.appendChild(useIc(ICON_FOR(n), 11, bt+20, 16, "#0f1720"));
       g.appendChild(txt(38,bt+32,L.titleLines[0],"nlabel"));
@@ -1964,6 +2039,7 @@ function renderCanvas(r){
     } else if(L.kind==="card" && view()==="people"){ // people & tools lens: who does it, with what
       const isQ=n.type==="wait", hue=typeHue(n);
       g.appendChild(el("rect",{class:"nbox",x:0,y:bt,width:w,height:L.h,rx:14,fill:col.fill,stroke:hue,"stroke-width":1.5}));
+      decorateDecision(g,n,L,hue,bt);
       const WELL=26;
       g.appendChild(el("rect",{x:12,y:bt+12,width:WELL,height:WELL,rx:7,fill:hue}));
       g.appendChild(useIc(ICON_FOR(n), 16, bt+16, WELL-8, "#0f1720"));
@@ -2003,6 +2079,7 @@ function renderCanvas(r){
       const CC={VA:"var(--va)",NNVA:"var(--nnva)",NVA:"var(--nva)"};
       const bandC = isQ ? "var(--wait)" : (n.classification?CC[n.classification]:"var(--faint)");
       g.appendChild(el("rect",{class:"nbox",x:0,y:bt,width:w,height:L.h,rx:14,fill:col.fill,stroke:hue,"stroke-width":1.5}));
+      decorateDecision(g,n,L,hue,bt);
       g.appendChild(el("rect",{x:2,y:bt+10,width:4,height:L.h-20,rx:2,fill:bandC}));
       const WELL=26;
       g.appendChild(el("rect",{x:12,y:bt+12,width:WELL,height:WELL,rx:7,fill:hue}));
@@ -2035,6 +2112,7 @@ function renderCanvas(r){
     } else if(L.kind==="card" && view()==="gaps"){ // gaps lens: required vs available, in raw numbers
       const isQ=n.type==="wait", hue=typeHue(n), isBot=n.performer==="bot";
       g.appendChild(el("rect",{class:"nbox",x:0,y:bt,width:w,height:L.h,rx:14,fill:col.fill,stroke:hue,"stroke-width":1.5}));
+      decorateDecision(g,n,L,hue,bt,{badge:true});
       const WELL=26;
       g.appendChild(el("rect",{x:12,y:bt+12,width:WELL,height:WELL,rx:7,fill:hue}));
       g.appendChild(useIc(ICON_FOR(n), 16, bt+16, WELL-8, "#0f1720"));
@@ -2131,6 +2209,7 @@ function renderCanvas(r){
     } else { // uniform card — V2 split columns: primary (quantity/rate) | time
       const isQ=n.type==="wait", hue=typeHue(n);
       g.appendChild(el("rect",{class:"nbox",x:0,y:bt,width:w,height:L.h,rx:14,fill:col.fill,stroke:hue,"stroke-width":1.5}));
+      decorateDecision(g,n,L,hue,bt,{badge:true});
       // type icon-well
       const WELL=26;
       g.appendChild(el("rect",{x:12,y:bt+12,width:WELL,height:WELL,rx:7,fill:hue}));
@@ -2270,6 +2349,8 @@ function renderCanvas(r){
       if(!g._dragged && !_annoJustFinished) selectNode(n.id); });
     svg.appendChild(g);
   });
+  svg.appendChild(labelLayer);   // edge pills above the cards — never hidden
+
   // comments render last so they float above the flow
   (m.comments||[]).forEach(cm=>{
     const g=el("g",{class:"comment"}); g.dataset.cid=cm.id;
@@ -2302,6 +2383,9 @@ function renderCanvas(r){
      ["Hover a box and drag a dot to connect. Everything snaps to the grid.",322]]
       .forEach(([s2,y2])=>{ const h=el("text",{x:hx,y:y2,class:"canvas-hint","text-anchor":"middle"}); h.textContent=s2; svg.appendChild(h); });
   }
+
+  // a running simulation survives re-renders: its layer rides on top, paths are re-cached lazily
+  if(_sim&&_sim.layer){ svg.appendChild(_sim.layer); _sim.pathsDirty=true; }
 
   svg.onclick=()=>{ if(state.linkingFrom){ cancelLink(); } else if(!_connectJustFinished && !_marqueeJustFinished && !_annoJustFinished){ state.selectedIds=[]; selectNode(null); } };
   svg.onmousedown=ev=>{ if(ev.target!==svg) return;
@@ -3221,6 +3305,7 @@ const PAD=28;
 function cssVar(name){ return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
 /* build a self-contained, theme-accurate SVG of the whole sheet */
 function buildExportSVG(){
+  if(typeof stopSim==="function") stopSim();   // belt: exports always capture a clean canvas
   const r=rollup(), u=unit();
   const canvas=$("#canvas");
   const mapW=_canvasExtent.w||800, mapH=_canvasExtent.h||480;
@@ -3287,10 +3372,11 @@ function buildExportSVG(){
   const styleVars=`--bg:${C.bg};--panel:${C.panel};--panel2:${C.panel2};--line:${C.line};--ink:${C.ink};--muted:${C.muted};--faint:${C.faint};--accent:${C.accent};--grid:${C.grid};--va:${C.va};--nva:${C.nva};--warn:${C.warn};--t-queue:${C.tq};--t-human:${C.th};--t-bot:${C.tb};--term:${C.term};--term-line:${C.termLine}`;
   const css=`text{font-family:${FONT_STACK};fill:var(--ink);font-variant-numeric:tabular-nums}
     .nlabel{font-weight:600;font-size:13px}.nmeta{fill:var(--muted);font-size:11px}.elabel{fill:var(--muted);font-size:11px}
-    .eflow{font-size:10.5px;font-weight:700;paint-order:stroke;stroke:var(--bg);stroke-width:3px;stroke-linejoin:round}
+    .eflow-min{font-size:9px;font-weight:600;paint-order:stroke;stroke:var(--bg);stroke-width:3px;stroke-linejoin:round}
     .nowner{fill:var(--faint);font-size:9px;letter-spacing:.6px;font-weight:700}
     .edge{fill:none;stroke:var(--faint);stroke-width:2}.edge.hot{stroke:var(--nva)}
     .anchor,.edge-hit,.temp-edge,.del-handle,.guide,.canvas-hint{display:none}
+    #simLayer,.sim-dot,.sim-rim,.sim-count{display:none}
     .nbox{filter:none}`;
   const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="${styleVars}">
     <style>${css}</style><defs>${symbols}</defs>
@@ -3311,6 +3397,7 @@ function svgToPng(svgStr, w, h, scale){
 function downloadDataUrl(name,dataUrl){ const a=document.createElement("a"); a.href=dataUrl; a.download=name; a.click(); }
 async function exportPicture(kind){
   if(!state.model){ return; }
+  stopSim();   // never let sim artifacts into a picture
   closeMenus();
   try{
     const {svg,w,h}=buildExportSVG();
@@ -3321,6 +3408,277 @@ async function exportPicture(kind){
       const doc=new J({orientation:w>h?"l":"p",unit:"pt",format:[w,h]});
       doc.addImage(png,"PNG",0,0,w,h); doc.save(base+".pdf"); toast("PDF exported"); }
   }catch(e){ toast("Export failed — try again"); }
+}
+
+/* ============================================================
+   SIMULATE A DAY — animated cases flowing through the map.
+   Deterministic, driven only by rollup() numbers; never touches the model.
+   Clock runs in calendar hours (1 day = 24 h): arrivals spread across the
+   working morning, steps drain at effective capacity/day (credit quota),
+   queues hold cases at least their average wait, blank splits stay even,
+   loop-backs carry dots backwards and turn them amber (rework made visible).
+   ============================================================ */
+let _sim=null;
+const SIM_SPEEDS=[
+  {label:"Day · 20s",  horizonH:24,  hPerSec:24/20},
+  {label:"Day · 60s",  horizonH:24,  hPerSec:24/60},
+  {label:"Week · 60s", horizonH:120, hPerSec:120/60}   // 5 working days
+];
+function startSim(speedIdx){
+  stopSim();
+  if(!state.model || state.mode!=="build") return;
+  const r=rollup();
+  if(r.cap.demand==null){ toast("Set incoming work on the Start step to simulate."); return; }
+  const m=state.model, sp=SIM_SPEEDS[speedIdx||0];
+  const {order}=flowWeights();
+  const idx={}; order.forEach((n,i)=>idx[n.id]=i);
+  const loopEdges=new Set(m.edges.filter(e=>(idx[e.to]!=null?idx[e.to]:1e9)<=(idx[e.from]!=null?idx[e.from]:-1)).map(e=>e.id));
+  const route={};
+  m.nodes.forEach(n=>{ const es=m.edges.filter(e=>e.from===n.id);
+    if(es.length) route[n.id]={edges:es.map(e=>({id:e.id,to:e.to,share:r.edgeShare[e.id]!=null?r.edgeShare[e.id]:1/es.length})),sent:{},total:0}; });
+  const perNode={}; let totWip=0; const u=unit();
+  m.nodes.forEach(n=>{
+    if(n.parentId) return;
+    const mt=metricFor(n);
+    const rate = n.type==="touch"
+      ? ((r.cap.per[n.id]&&r.cap.per[n.id].effCap!=null)?r.cap.per[n.id].effCap:(mt.effCapacity!=null?mt.effCapacity:Infinity)) : null;
+    const wv = n.type==="wait"?mt.wait:null;
+    perNode[n.id]={pile:[],inService:[],credit:0,rate,
+      minWaitH: wv==null?0:(u==="hrs"?wv:u==="min"?wv/60:wv*24),
+      dwellH: n.type==="touch"?Math.max(touchHours(mt.touch)||0,0.15):0,
+      startLen: n.type==="wait"?(mt.wip||0):0, wip:n.type==="wait"?(mt.wip||0):0,
+      badge:null, rim:null};
+    if(n.type==="wait"&&mt.wip) totWip+=mt.wip;
+  });
+  const k=Math.max(1,Math.ceil((totWip+r.cap.demand*5)/200));   // 1 dot = k cases when flows are huge
+  _sim={t:0,speedIdx:speedIdx||0,horizonH:sp.horizonH,hPerSec:sp.hPerSec,paused:false,done:false,
+    layer:el("g",{id:"simLayer"}),hud:null,dots:[],rings:[],
+    perNode,route,loopEdges,pathCache:{},pathsDirty:true,
+    stats:{arrived:0,delivered:0,rework:0},k,demand:r.cap.demand,arrIdx:0,lastNow:null,raf:0,hudAt:0,
+    flagId:r.flag?r.flag.node.id:null,
+    startId:(m.nodes.find(n=>n.type==="start")||m.nodes[0]||{}).id,
+    deliveredEl:null};
+  state.simming=true; document.body.classList.add("simming");
+  // queues start pre-loaded with their real backlog — already "on average" waited
+  m.nodes.forEach(n=>{ const pn=perNode[n.id];
+    if(pn&&pn.wip){ const cnt=Math.max(1,Math.round(pn.wip/k));
+      for(let i=0;i<cnt;i++){ const d=simMakeDot(); d.state="pile"; d.nodeId=n.id; d.sinceH=-pn.minWaitH; pn.pile.push(d); } } });
+  buildSimHud();
+  render();   // freezes editing; the renderCanvas hook re-appends the sim layer
+  _sim.raf=requestAnimationFrame(simTick);
+}
+function stopSim(){
+  if(!_sim) return;
+  cancelAnimationFrame(_sim.raf);
+  if(_sim.layer) _sim.layer.remove();
+  if(_sim.hud){ if(_sim.hud._place) window.removeEventListener("resize",_sim.hud._place); _sim.hud.remove(); }
+  _sim=null;
+  state.simming=false; document.body.classList.remove("simming");
+  if(state.model && state.mode==="build") render();
+}
+function simMakeDot(){
+  const d={el:el("circle",{class:"sim-dot",r:3.5,fill:"var(--accent)"}),state:"idle",rework:false,reserved:false,trav:0,dead:false};
+  _sim.layer.appendChild(d.el); _sim.dots.push(d); return d;
+}
+function simPickRoute(id,commit){
+  const rt=_sim.route[id]; if(!rt||!rt.edges.length) return null;
+  let best=null,bestVal=-1e9;
+  rt.edges.forEach(e=>{ const val=e.share*(rt.total+1)-(rt.sent[e.id]||0);
+    if(val>bestVal){ bestVal=val; best=e; } });
+  if(commit&&best){ rt.sent[best.id]=(rt.sent[best.id]||0)+1; rt.total++; }
+  return best;
+}
+function simTravel(d,tgt){
+  d.state="travel"; d.eid=tgt.id; d.to=tgt.to; d.trav=0;
+  if(_sim.loopEdges.has(tgt.id)&&!d.rework){ d.rework=true; _sim.stats.rework+=_sim.k;
+    d.el.setAttribute("fill","var(--warn)"); }
+}
+function simPathFor(eid){
+  const S=_sim;
+  if(S.pathsDirty){ S.pathCache={}; S.pathsDirty=false; }
+  if(!S.pathCache[eid]){
+    const p=document.querySelector(`#canvas path.edge[data-eid="${eid}"]`);
+    if(!p) return null;
+    S.pathCache[eid]={el:p,len:p.getTotalLength()};
+  }
+  return S.pathCache[eid];
+}
+function simArrive(d){
+  const S=_sim, n=state.model.nodes.find(x=>x.id===d.to);
+  d.eid=null;
+  if(!n){ simRemoveDot(d); return; }
+  if(n.type==="end"){ simDeliver(d,n); return; }
+  const pn=S.perNode[n.id];
+  if(!pn){ simRemoveDot(d); return; }
+  if(n.type==="touch"&&d.reserved){ d.reserved=false; d.state="service"; d.nodeId=n.id;
+    d.untilH=S.t+pn.dwellH; pn.inService.push(d); return; }
+  d.state="pile"; d.nodeId=n.id; d.sinceH=S.t; pn.pile.push(d);
+}
+function simRouteOut(d,fromId){
+  const S=_sim, pn=S.perNode[fromId];
+  if(pn){ const i=pn.inService.indexOf(d); if(i>=0) pn.inService.splice(i,1); }
+  const tgt=simPickRoute(fromId,true);
+  if(!tgt){ // dead end — count as delivered so the day still balances
+    S.stats.delivered+=S.k; simRemoveDot(d); return; }
+  simTravel(d,tgt);
+}
+function simDeliver(d,n){
+  const S=_sim; S.stats.delivered+=S.k;
+  const L=_lay[n.id]||{w:150,h:NODE_H,bt:0};
+  const cx=n.x+L.w/2, cy=n.y+(L.bt||0)+(L.h||NODE_H)/2;
+  const ring=el("circle",{cx,cy,r:4,fill:"none",stroke:"var(--va)","stroke-width":2});
+  S.layer.appendChild(ring); S.rings.push({el:ring,t:0});
+  if(!S.deliveredEl){ S.deliveredEl=el("text",{x:cx,y:n.y+(L.bt||0)-10,"text-anchor":"middle",
+    fill:"var(--va)","font-size":"11","font-weight":"800"}); S.layer.appendChild(S.deliveredEl); }
+  S.deliveredEl.textContent=`Delivered ${S.stats.delivered}`;
+  simRemoveDot(d);
+}
+function simRemoveDot(d){ d.dead=true; d.el.remove(); }
+function simDepartures(id){
+  const S=_sim, pn=S.perNode[id]; if(!pn) return;
+  const n=state.model.nodes.find(x=>x.id===id); if(!n) return;
+  let guard=0;
+  if(n.type==="wait"){
+    while(pn.pile.length&&guard++<60){
+      const d=pn.pile[0];
+      if(S.t-d.sinceH<pn.minWaitH) break;              // hasn't waited its average yet
+      const tgt=simPickRoute(id,false); if(!tgt) break;
+      const tNode=state.model.nodes.find(x=>x.id===tgt.to);
+      if(tNode&&tNode.type==="touch"){                  // downstream must have capacity free
+        const tpn=S.perNode[tgt.to];
+        if(!tpn||tpn.credit<1) break;
+        tpn.credit-=1; d.reserved=true;
+      }
+      pn.pile.shift(); simPickRoute(id,true); simTravel(d,tgt);
+    }
+  } else if(n.type==="touch"){
+    while(pn.pile.length&&pn.credit>=1&&guard++<60){    // admit from the step's own intake
+      const d=pn.pile.shift(); pn.credit-=1;
+      d.state="service"; d.untilH=S.t+pn.dwellH; pn.inService.push(d);
+    }
+  }
+}
+function simTick(now){
+  const S=_sim; if(!S) return;
+  if(state.mode!=="build"){ stopSim(); return; }
+  const dtReal=S.lastNow==null?16:Math.min(120,now-S.lastNow); S.lastNow=now;
+  if(!S.paused&&!S.done){
+    const dtH=dtReal/1000*S.hPerSec;
+    S.t+=dtH;
+    // arrivals — evenly across the working morning, every sim day
+    const N=Math.max(1,Math.round(S.demand/S.k));
+    for(let g=0; g<200; g++){
+      const i=S.arrIdx, day=Math.floor(i/N), within=i%N;
+      const tA=day*24+(within+0.5)*WORKDAY_HRS/N;
+      if(day>=S.horizonH/24||tA>S.t) break;
+      S.arrIdx++; S.stats.arrived+=S.k;
+      const d=simMakeDot(); const start=state.model.nodes.find(x=>x.id===S.startId);
+      if(start){ const L=_lay[start.id]||{w:150,h:NODE_H,bt:0};
+        d.el.setAttribute("cx",start.x+L.w/2); d.el.setAttribute("cy",start.y+(L.bt||0)+(L.h||NODE_H)/2); }
+      const tgt=simPickRoute(S.startId,true);
+      if(tgt) simTravel(d,tgt); else simRemoveDot(d);
+    }
+    // capacity credits (dot units — each dot is k cases)
+    for(const id in S.perNode){ const pn=S.perNode[id];
+      if(pn.rate==null) continue;
+      pn.credit = pn.rate===Infinity ? 1e9 : Math.min(5, pn.credit+pn.rate*dtH/(24*S.k)); }
+    for(const id in S.perNode) simDepartures(id);
+    S.dots.forEach(d=>{ if(!d.dead&&d.state==="service"&&d.untilH<=S.t) simRouteOut(d,d.nodeId); });
+  }
+  // travel is real-time visual motion (~500 ms per arrow), frozen while paused
+  S.dots.forEach(d=>{ if(d.dead||d.state!=="travel") return;
+    if(!S.paused&&!S.done) d.trav+=dtReal;
+    const pc=simPathFor(d.eid);
+    if(!pc){ simArrive(d); return; }
+    const prog=Math.min(1,d.trav/500);
+    const p=pc.el.getPointAtLength(prog*pc.len);
+    d.el.setAttribute("cx",p.x); d.el.setAttribute("cy",p.y);
+    if(prog>=1) simArrive(d); });
+  simLayout(); simGlows(); simRings(dtReal);
+  if(now-S.hudAt>150){ S.hudAt=now; simHudUpdate(); }
+  if(!S.done&&S.t>=S.horizonH){ S.done=true; S.paused=true; simSummary();
+    const pb=S.hud&&S.hud.querySelector("#simPlay"); if(pb) pb.textContent="▶"; }
+  if(S.dots.some(d=>d.dead)) S.dots=S.dots.filter(d=>!d.dead);
+  S.raf=requestAnimationFrame(simTick);
+}
+function simLayout(){
+  const S=_sim, byId=Object.fromEntries(state.model.nodes.map(n=>[n.id,n]));
+  for(const id in S.perNode){ const pn=S.perNode[id], n=byId[id], L=_lay[id];
+    if(!n||!L) continue;
+    const bt=L.bt||0, baseY=n.y+bt+(L.h||NODE_H)+10;
+    pn.pile.forEach((d,i)=>{ const vis=i<12;
+      d.el.style.display=vis?"":"none";
+      if(vis){ d.el.setAttribute("cx",n.x+10+(i%6)*9); d.el.setAttribute("cy",baseY+Math.floor(i/6)*9); } });
+    const extra=pn.pile.length-12;
+    if(extra>0){
+      if(!pn.badge){ pn.badge=el("text",{class:"sim-count","font-size":"10","font-weight":"800",fill:"var(--warn)"}); S.layer.appendChild(pn.badge); }
+      pn.badge.textContent=`+${extra*S.k}`;
+      pn.badge.setAttribute("x",n.x+10+6*9+2); pn.badge.setAttribute("y",baseY+13);
+      pn.badge.style.display="";
+    } else if(pn.badge) pn.badge.style.display="none";
+    pn.inService.forEach((d,i)=>{ d.el.style.display="";
+      d.el.setAttribute("cx",n.x+16+i*9); d.el.setAttribute("cy",n.y+bt+(L.h||NODE_H)-10); });
+  }
+}
+function simGlows(){
+  const S=_sim, byId=Object.fromEntries(state.model.nodes.map(n=>[n.id,n]));
+  for(const id in S.perNode){ const pn=S.perNode[id], n=byId[id], L=_lay[id];
+    if(!n||!L) continue;
+    const cases=pn.pile.length*S.k;
+    const warnAt=Math.max(pn.startLen+3,pn.startLen*1.5), hotAt=pn.startLen*2+5;
+    const mode = cases>hotAt?"hot" : cases>warnAt?"warn" : (id===S.flagId?"flag":"none");
+    if(mode==="none"){ if(pn.rim) pn.rim.style.display="none"; continue; }
+    if(!pn.rim){ pn.rim=el("rect",{class:"sim-rim",fill:"none","stroke-width":3,rx:17,"pointer-events":"none"});
+      S.layer.insertBefore(pn.rim,S.layer.firstChild); }
+    pn.rim.style.display="";
+    pn.rim.setAttribute("x",n.x-3); pn.rim.setAttribute("y",n.y+(L.bt||0)-3);
+    pn.rim.setAttribute("width",L.w+6); pn.rim.setAttribute("height",(L.h||NODE_H)+6);
+    pn.rim.setAttribute("stroke",mode==="warn"?"var(--warn)":"var(--nva)");
+    pn.rim.classList.toggle("pulse",mode!=="flag");
+    pn.rim.style.opacity=mode==="flag"?0.3:"";
+  }
+}
+function simRings(dtReal){
+  const S=_sim;
+  S.rings=S.rings.filter(rg=>{
+    rg.t+=dtReal;
+    if(rg.t>400){ rg.el.remove(); return false; }
+    rg.el.setAttribute("r",4+rg.t/400*12);
+    rg.el.style.opacity=String(0.9*(1-rg.t/400));
+    return true;
+  });
+}
+function simHudUpdate(){
+  const S=_sim; if(!S||!S.hud) return;
+  const day=Math.min(Math.floor(S.t/24)+1,Math.ceil(S.horizonH/24)), hh=String(Math.floor(S.t%24)).padStart(2,"0");
+  S.hud.querySelector("#simClock").textContent=`Day ${day} · ${hh}:00`;
+  const inFlight=S.dots.filter(d=>!d.dead).length*S.k;
+  S.hud.querySelector("#simStats").textContent=
+    `${S.stats.arrived} arrived · ${S.stats.delivered} delivered · ${inFlight} in flight${S.stats.rework?` · ${S.stats.rework} rework`:""}`;
+}
+function simSummary(){
+  const S=_sim; let worst=null;
+  const byId=Object.fromEntries(state.model.nodes.map(n=>[n.id,n]));
+  for(const id in S.perNode){ const c=S.perNode[id].pile.length*S.k;
+    if(c>0&&(!worst||c>worst.c)) worst={c,label:(byId[id]||{}).label||"?"}; }
+  toast(`${S.horizonH>24?"Week":"Day"} done — ${S.stats.arrived} arrived, ${S.stats.delivered} delivered${worst?` · biggest pile: ${worst.label} (${worst.c})`:""}`);
+}
+function buildSimHud(){
+  const hud=document.createElement("div"); hud.id="simHud";
+  hud.innerHTML=`<button id="simPlay" title="Pause / resume">⏸</button>
+    <span class="shseg">${SIM_SPEEDS.map((s,i)=>`<button data-simspeed="${i}" class="${i===_sim.speedIdx?"on":""}">${s.label}</button>`).join("")}</span>
+    <span id="simClock">Day 1 · 00:00</span><span id="simStats"></span>
+    <button id="simStop">⏹ Stop</button>
+    <div class="shnote">1 sim day = 24 h · arrivals spread over the working morning · steps drain at effective capacity · queues hold at least their average wait${_sim.k>1?` · 1 dot = ${_sim.k} cases`:""}</div>`;
+  document.body.appendChild(hud);
+  const place=()=>{ const sr=$("#stage").getBoundingClientRect();
+    hud.style.bottom=Math.max(10,window.innerHeight-sr.bottom+14)+"px"; };
+  place(); hud._place=place; window.addEventListener("resize",place);
+  hud.querySelector("#simPlay").onclick=()=>{ if(!_sim) return;
+    _sim.paused=!_sim.paused; hud.querySelector("#simPlay").textContent=_sim.paused?"▶":"⏸"; };
+  hud.querySelector("#simStop").onclick=()=>stopSim();
+  hud.querySelectorAll("[data-simspeed]").forEach(b=>b.onclick=()=>{ const i=+b.dataset.simspeed; startSim(i); });
+  _sim.hud=hud;
 }
 
 /* ============================================================
@@ -3353,6 +3711,8 @@ $("#autoArrange").onclick=autoArrange;
 $("#flowToggle").onclick=()=>{ if(!state.model) return;
   state.model.settings=state.model.settings||{};
   state.model.settings.showFlow=(state.model.settings.showFlow!==false)?false:true; render(); };
+$("#simBtn").onclick=()=>{ state.simming?stopSim():startSim(0); };
+$("#simViewerBtn").onclick=()=>{ state.simming?stopSim():startSim(0); };
 document.querySelectorAll("[data-rmode]").forEach(b=>b.onclick=()=>{
   if(!state.model) return;
   state.model.settings=state.model.settings||{}; state.model.settings.ribbonColor=b.dataset.rmode; render(); });
@@ -3400,7 +3760,8 @@ function deleteSelection(){
     n.parentId ? removeSubStep(n.id) : deleteNode(n.id); }
 }
 document.addEventListener("keydown",e=>{
-  if(e.key==="Escape"){ closeMenus(); if(state.tool) setTool(null);
+  if(e.key==="Escape"){ if(state.simming){ stopSim(); return; }
+    closeMenus(); if(state.tool) setTool(null);
     const ov=document.querySelector(".overlay.show"); if(ov) ov.classList.remove("show"); return; }
   const t=e.target;
   const typing = t && (t.tagName==="INPUT"||t.tagName==="TEXTAREA"||t.tagName==="SELECT"||t.isContentEditable);
@@ -3417,6 +3778,7 @@ document.addEventListener("keydown",e=>{
 /* save design / share */
 $("#saveModel").onclick=()=>{ download((state.model.name||"flow-builder").replace(/\s+/g,"-")+".json", JSON.stringify(state.model,null,2),"application/json"); toast("Design backed up (JSON)"); };
 $("#exportHtml").onclick=()=>{
+  stopSim();   // the clone must not carry sim artifacts or the HUD
   const cl=document.documentElement.cloneNode(true);
   cl.setAttribute("data-viewer","1");
   cl.querySelector("#egp-model").textContent=JSON.stringify(state.model,null,2);
