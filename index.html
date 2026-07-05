@@ -485,8 +485,8 @@
   .del-handle line{stroke:#fff;stroke-width:1.8;stroke-linecap:round}
   .temp-edge{fill:none;stroke:var(--accent);stroke-width:2;stroke-dasharray:5 4;pointer-events:none}
   .elabel{fill:var(--muted);font-size:11px;font-family:var(--font)}
-  /* case-flow labels on arrows — quiet tier for single-out volumes; pills carry their own attrs */
-  .eflow-min{font-size:9px;font-weight:600;font-family:var(--font);paint-order:stroke;stroke:var(--bg);stroke-width:3px;stroke-linejoin:round}
+  /* case-flow labels — one style everywhere; the bg halo keeps them legible inside the band */
+  .eflow{font-size:10.5px;font-weight:600;font-family:var(--font);paint-order:stroke;stroke:var(--bg);stroke-width:3.5px;stroke-linejoin:round}
   /* ---- Simulate-a-day ---- */
   #simHud{position:fixed;left:50%;transform:translateX(-50%);z-index:60;display:flex;align-items:center;gap:10px;
     background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:8px 12px;flex-wrap:wrap;max-width:min(880px,92vw)}
@@ -1816,10 +1816,21 @@ function edgeGeom(p1,p2){
     d:`M${p1.x},${p1.y} C${c1x},${c1y} ${c2x},${c2y} ${p2.x},${p2.y}`,
     at(t){ const u=1-t;   // analytic cubic-bezier point — for label placement on the real curve
       return { x: u*u*u*p1.x + 3*u*u*t*c1x + 3*u*t*t*c2x + t*t*t*p2.x,
-               y: u*u*u*p1.y + 3*u*u*t*c1y + 3*u*t*t*c2y + t*t*t*p2.y }; }
+               y: u*u*u*p1.y + 3*u*u*t*c1y + 3*u*t*t*c2y + t*t*t*p2.y }; },
+    tan(t){ const u=1-t;  // derivative — for the Sankey band's perpendicular offsets
+      return { x: 3*u*u*(c1x-p1.x) + 6*u*t*(c2x-c1x) + 3*t*t*(p2.x-c2x),
+               y: 3*u*u*(c1y-p1.y) + 6*u*t*(c2y-c1y) + 3*t*t*(p2.y-c2y) }; }
   };
 }
 const edgePath=(p1,p2)=>edgeGeom(p1,p2).d;
+/* closed ribbon around the curve, constant width w — the Sankey flow band */
+function bandD(geo,w){
+  const N=18, Lp=[], Rp=[];
+  for(let i=0;i<=N;i++){ const t=i/N, p=geo.at(t), tn=geo.tan(t);
+    const len=Math.hypot(tn.x,tn.y)||1, nx=-tn.y/len, ny=tn.x/len;
+    Lp.push(`${p.x+nx*w/2},${p.y+ny*w/2}`); Rp.push(`${p.x-nx*w/2},${p.y-ny*w/2}`); }
+  return `M${Lp.join(" L")} L${Rp.reverse().join(" L")} Z`;
+}
 function nearestSide(node, L, px, py){
   const x=node.x, y=node.y, w=L.w, top=y+L.bt, bottom=top+L.h;
   const d={ top:Math.abs(py-top), bottom:Math.abs(py-bottom), left:Math.abs(px-x), right:Math.abs(px-(x+w)) };
@@ -1918,56 +1929,57 @@ function renderCanvas(r){
     const onPath=hotPath.has(a.id)&&hotPath.has(b.id);
     const hot=onPath && (isBottleneck(a,r)||isBottleneck(b,r));
     const ef=eFlow[e.id]||0;
+    /* Sankey band: the flow itself is the container — width ∝ cases along this arrow */
+    if(showFlow){
+      const bw=Math.max(5,Math.min(22,5+17*ef/maxEF));
+      svg.appendChild(el("path",{d:bandD(geo,bw),class:"eband",
+        fill:hot?"var(--nva)":"var(--wait)","fill-opacity":hot?"0.16":"0.13","pointer-events":"none"}));
+    }
     const ep=el("path",{d,class:"edge"+(hot?" hot":""),"marker-end":`url(#${hot?'arrowHot':'arrow'})`});
     ep.dataset.eid=e.id;                         // the simulator finds edge paths by id
-    if(showFlow) ep.style.strokeWidth=Math.max(1.5,Math.min(5,1.5+3.5*ef/maxEF))+"px";  // thick = busy (inline style beats the .edge CSS rule)
     svg.appendChild(ep);
     if(editable()){ const hit=el("path",{d,class:"edge-hit"});
       hit.addEventListener("click",ev=>{ev.stopPropagation(); selectEdge(e.id);}); svg.appendChild(hit); }
 
-    /* one label pill per edge, sitting ON the curve (t=0.5, dodging cards and other pills) */
+    /* one uniform label per edge, horizontal, riding inside the band */
     const branch=(outCount[e.from]||0)>1;
     const assumed=branch && e.splitPct==null && showFlow;
     const share=eShare[e.id];
     const name=(e.label||"").trim();
-    const parts=[];   // [text, fill, weight]
+    const parts=[];   // [text, fill, weight] — identical container for every edge kind
     if(name) parts.push([name,"var(--ink)","600"]);
     if(showFlow && branch && share!=null)
       parts.push([`${assumed?"≈":""}${Math.round(share*100)}%`, assumed?"var(--warn)":(share<=0?"var(--faint)":"var(--muted)"),"700"]);
     else if(!showFlow && e.splitPct!=null) parts.push([`${e.splitPct}%`,"var(--muted)","700"]);
     const flowStr=showFlow && demandV!=null ? `${fmt(ef*demandV)}/day` : null;
-    if(flowStr && (branch||name)) parts.push([flowStr, ef<=0?"var(--faint)":"var(--muted)","500"]);
-    const mid=geo.at(0.5);
+    if(flowStr) parts.push([flowStr, ef<=0?"var(--faint)":"var(--muted)","500"]);
     if(parts.length){
       const str=parts.map(p=>p[0]).join(" · ");
-      const pw=measure(str,`600 10.5px ${FONT_STACK}`)+16, ph=17;
-      let cx=mid.x, cy=mid.y;
-      const hitsCard=(x,y)=>m.nodes.some(nn=>{ const LL=lay[nn.id]; if(!LL||nn.parentId) return false;
-        const bx=nn.x-8, by=nn.y+(LL.bt||0)-8, bw=LL.w+16, bh=(LL.h||NODE_H)+16;
-        return x+pw/2>bx && x-pw/2<bx+bw && y+ph/2>by && y-ph/2<by+bh; });
-      if(hitsCard(cx,cy)){ for(const t of [0.35,0.65,0.25,0.75]){ const p=geo.at(t);
-          if(!hitsCard(p.x,p.y)){ cx=p.x; cy=p.y; break; } } }
-      const clash=(x,y)=>placedPills.some(pp=>Math.abs(pp.y-y)<15 && Math.abs(pp.x-x)<(pp.w+pw)/2+4);
-      if(clash(cx,cy)){ if(!clash(cx,cy-17)) cy-=17; else if(!clash(cx,cy+17)) cy+=17; }
-      placedPills.push({x:cx,y:cy,w:pw});
-      const pg=el("g",{class:"epill"+(assumed?" assumed":"")});
-      pg.appendChild(el("rect",{x:cx-pw/2,y:cy-ph/2,width:pw,height:ph,rx:7,
-        fill:"var(--panel)",stroke:assumed?"var(--warn)":"var(--line)","stroke-width":1}));
-      const tl=el("text",{x:cx-pw/2+8,y:cy+3.5,"font-size":"10.5","font-family":FONT_STACK});
+      const tw=measure(str,`600 10.5px ${FONT_STACK}`);
+      const vertical=Math.abs(p2.y-p1.y)>Math.abs(p2.x-p1.x);
+      let pos=geo.at(0.5);
+      if(!vertical){   // horizontal runs: dodge cards (spacing pass makes room; verticals may overlap)
+        const hitsCard=(x,y)=>m.nodes.some(nn=>{ const LL=lay[nn.id]; if(!LL||nn.parentId) return false;
+          const bx=nn.x-6, by=nn.y+(LL.bt||0)-6;
+          return x+tw/2>bx && x-tw/2<bx+LL.w+12 && y+8>by && y-8<by+(LL.h||NODE_H)+12; });
+        if(hitsCard(pos.x,pos.y)){ for(const t of [0.35,0.65,0.25,0.75]){ const p=geo.at(t);
+            if(!hitsCard(p.x,p.y)){ pos=p; break; } } }
+      }
+      const clash=(x,y)=>placedPills.some(pp=>Math.abs(pp.y-y)<14 && Math.abs(pp.x-x)<(pp.w+tw)/2+6);
+      if(clash(pos.x,pos.y)){ if(!clash(pos.x,pos.y-15)) pos={x:pos.x,y:pos.y-15};
+        else if(!clash(pos.x,pos.y+15)) pos={x:pos.x,y:pos.y+15}; }
+      placedPills.push({x:pos.x,y:pos.y,w:tw});
+      const tl=el("text",{x:pos.x,y:pos.y+3.5,class:"eflow","text-anchor":"middle"});
       parts.forEach((p,i)=>{ const ts=el("tspan",{fill:p[1],"font-weight":p[2]});
         ts.textContent=(i?" · ":"")+p[0]; tl.appendChild(ts); });
-      pg.appendChild(tl);
       const tip=el("title");
       tip.textContent=assumed?"Assumed even split — no Split % set on this branch. Click to set the real share."
         : branch?"Share of cases down this path":"Cases flowing along this arrow per day";
-      pg.appendChild(tip);
-      if(editable()){ pg.style.cursor="pointer";
-        pg.addEventListener("mousedown",ev=>ev.stopPropagation());
-        pg.addEventListener("click",ev=>{ev.stopPropagation(); selectEdge(e.id);}); }
-      labelLayer.appendChild(pg);
-    } else if(flowStr){   // quiet tier: single-out volume — small faint text on the curve
-      const tl=el("text",{x:mid.x,y:mid.y-7,class:"eflow-min","text-anchor":"middle",fill:"var(--faint)"});
-      tl.textContent=flowStr; labelLayer.appendChild(tl);
+      tl.appendChild(tip);
+      if(editable()){ tl.style.pointerEvents="all"; tl.style.cursor="pointer";
+        tl.addEventListener("mousedown",ev=>ev.stopPropagation());
+        tl.addEventListener("click",ev=>{ev.stopPropagation(); selectEdge(e.id);}); }
+      labelLayer.appendChild(tl);
     }
   });
 
@@ -3116,6 +3128,39 @@ function animateNodes(targets, ms=280, done){
   _anim=anim; anim.raf=requestAnimationFrame(step);
 }
 /* shift everything at/right of x0 by dx (nodes + annotations) — makes room when a step expands */
+/* widen horizontal gaps so case-flow labels fit inside their bands — tight but measured.
+   Runs when the Case-flow view is switched on; verticals are allowed to overlap by design. */
+function ensureFlowSpacing(){
+  const m=state.model; if(!m||!m.nodes.length) return;
+  const r=rollup(); const demandV=r.cap?r.cap.demand:null;
+  const outCount={}; m.edges.forEach(e=>outCount[e.from]=(outCount[e.from]||0)+1);
+  const byId=Object.fromEntries(m.nodes.map(n=>[n.id,n]));
+  const items=[];
+  m.edges.forEach(e=>{
+    const a=byId[e.from], b=byId[e.to]; if(!a||!b||a.parentId||b.parentId) return;
+    if((e.fromSide||"right")!=="right"||(e.toSide||"left")!=="left") return;   // horizontal runs only
+    if(b.x<=a.x) return;                                                       // loop-backs keep their curves
+    const parts=[]; const name=(e.label||"").trim();
+    if(name) parts.push(name);
+    if((outCount[e.from]||0)>1&&r.edgeShare[e.id]!=null) parts.push(`≈${Math.round(r.edgeShare[e.id]*100)}%`);
+    if(demandV!=null) parts.push(`${fmt((r.edgeFlow[e.id]||0)*demandV)}/day`);
+    if(!parts.length) return;
+    items.push({a,b,need:measure(parts.join(" · "),`600 10.5px ${FONT_STACK}`)+36});
+  });
+  if(!items.length) return;
+  items.sort((i,j)=>i.b.x-j.b.x);
+  const nx={}; m.nodes.forEach(n=>{ if(!n.parentId) nx[n.id]=n.x; });
+  const gx=new Map(); (m.groups||[]).concat(m.comments||[]).forEach(g=>gx.set(g,g.x));
+  const shiftFrom=(x0,dx)=>{ for(const id in nx) if(nx[id]>=x0) nx[id]+=dx;
+    gx.forEach((x,g)=>{ if(x>=x0) gx.set(g,x+dx); }); };
+  items.forEach(it=>{
+    const gap=nx[it.b.id]-(nx[it.a.id]+nodeLayout(it.a).w);
+    if(gap<it.need) shiftFrom(nx[it.b.id], Math.ceil((it.need-gap)/GRID)*GRID);
+  });
+  const targets=m.nodes.filter(n=>!n.parentId&&nx[n.id]!==n.x).map(n=>({ent:n,x:nx[n.id]}));
+  gx.forEach((x,g)=>{ if(x!==g.x) targets.push({ent:g,x}); });
+  if(targets.length){ animateNodes(targets,320,()=>tidyGroups()); toast("Spaced the map so the case flow fits."); }
+}
 function reflowFrom(x0, dx, exceptIds){
   if(!dx) return; const m=state.model, skip=new Set(exceptIds||[]), t=[];
   (m.nodes||[]).forEach(n=>{ if(!skip.has(n.id) && !n.parentId && n.x>=x0) t.push({ent:n, x:Math.max(0,n.x+dx)}); });
@@ -3372,7 +3417,8 @@ function buildExportSVG(){
   const styleVars=`--bg:${C.bg};--panel:${C.panel};--panel2:${C.panel2};--line:${C.line};--ink:${C.ink};--muted:${C.muted};--faint:${C.faint};--accent:${C.accent};--grid:${C.grid};--va:${C.va};--nva:${C.nva};--warn:${C.warn};--t-queue:${C.tq};--t-human:${C.th};--t-bot:${C.tb};--term:${C.term};--term-line:${C.termLine}`;
   const css=`text{font-family:${FONT_STACK};fill:var(--ink);font-variant-numeric:tabular-nums}
     .nlabel{font-weight:600;font-size:13px}.nmeta{fill:var(--muted);font-size:11px}.elabel{fill:var(--muted);font-size:11px}
-    .eflow-min{font-size:9px;font-weight:600;paint-order:stroke;stroke:var(--bg);stroke-width:3px;stroke-linejoin:round}
+    .eflow{font-size:10.5px;font-weight:600;paint-order:stroke;stroke:var(--bg);stroke-width:3.5px;stroke-linejoin:round}
+    .eflow tspan{stroke:var(--bg);stroke-width:3.5px;paint-order:stroke}
     .nowner{fill:var(--faint);font-size:9px;letter-spacing:.6px;font-weight:700}
     .edge{fill:none;stroke:var(--faint);stroke-width:2}.edge.hot{stroke:var(--nva)}
     .anchor,.edge-hit,.temp-edge,.del-handle,.guide,.canvas-hint{display:none}
@@ -3710,7 +3756,10 @@ $("#zoomOut").onclick=()=>setZoom(Z()-0.1);
 $("#autoArrange").onclick=autoArrange;
 $("#flowToggle").onclick=()=>{ if(!state.model) return;
   state.model.settings=state.model.settings||{};
-  state.model.settings.showFlow=(state.model.settings.showFlow!==false)?false:true; render(); };
+  const on=!(state.model.settings.showFlow!==false);
+  state.model.settings.showFlow=on; render();
+  if(on&&editable()) ensureFlowSpacing();   // make room for the labels inside their bands
+};
 $("#simBtn").onclick=()=>{ state.simming?stopSim():startSim(0); };
 $("#simViewerBtn").onclick=()=>{ state.simming?stopSim():startSim(0); };
 document.querySelectorAll("[data-rmode]").forEach(b=>b.onclick=()=>{
