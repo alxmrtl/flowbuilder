@@ -1165,11 +1165,11 @@ function rollup(){
   const S=state.model.settings||{};
   const demand = S.demand!=null && S.demand!=="" ? +S.demand : null;
   let touch=0, wait=0, unclassified=0; const waits=[]; const flow=[]; const dw={}; const qOut={};
-  state.model.nodes.forEach(n=>{ if(n.type==="touch" && !n.classification) unclassified++; });
+  state.model.nodes.forEach(n=>{ if(n.type==="touch" && !n.classification && !n.excludeStats) unclassified++; });
   /* capacity web — per on-path touch step: demand at the step, load vs effective capacity, pace.
      Loads use each step's own demand (incoming × visits), so rework loop-backs raise the load. */
   const per={}; let flowCap=null, busiest=null;
-  order.forEach(n=>{ const v=visits[n.id]||0; if(v<=0 || n.type!=="touch") return;
+  order.forEach(n=>{ const v=visits[n.id]||0; if(v<=0 || n.type!=="touch" || n.excludeStats) return;
     const mt=metricFor(n);
     const stepDemand = demand!=null ? demand*v : null;
     let load=null, modeled=false;
@@ -1186,7 +1186,7 @@ function rollup(){
   const downTouch=id=>{ let cur=id; for(let i=0;i<10;i++){ const es=state.model.edges.filter(e=>e.from===cur);
       if(!es.length) return null; es.sort((a,b)=>(b.splitPct||0)-(a.splitPct||0));
       const nx=byId[es[0].to]; if(!nx) return null; if(nx.type==="touch") return nx; cur=nx.id; } return null; };
-  order.forEach(n=>{ const v=visits[n.id]||0; if(v<=0) return; const mt=metricFor(n);
+  order.forEach(n=>{ const v=visits[n.id]||0; if(v<=0 || n.excludeStats) return; const mt=metricFor(n);
     if(n.type==="touch" && mt.touch!=null && mt.touch>0){ const tc=v*mt.touch; touch+=tc;
       flow.push({node:n, kind:"touch", time:tc, visits:v, base:mt.touch}); }
     if(n.type==="wait"){
@@ -1194,7 +1194,7 @@ function rollup(){
       const t=downTouch(n.id), dpace=t&&per[t.id]?per[t.id].pace:null;   // downstream clearing pace
       /* queue clearing CAPACITY (for the Gaps verdict): only real numbers count — effective capacity
          or measured throughput; a demand-derived pace would compare the queue against itself */
-      if(t){ const dm=metricFor(t);
+      if(t&&!t.excludeStats){ const dm=metricFor(t);
         const dcap=dm.effCapacity!=null?dm.effCapacity:(dm.throughput!=null?dm.throughput:null);
         if(dcap!=null) qOut[n.id]=dcap; }
       if(base==null && mt.wip!=null && mt.wip>0){   // time to clear the queue at today's pace
@@ -1211,6 +1211,8 @@ function rollup(){
   /* owner load + quality — leaf steps only (sub-steps inherit the parent's spot on the flow) */
   const owners={}; let lost=0, rft=null, worst=null, rcount=0;
   state.model.nodes.forEach(n=>{ if(n.type!=="touch" || hasSubs(n)) return;
+    const par=n.parentId?byId[n.parentId]:null;
+    if(n.excludeStats||(par&&par.excludeStats)) return;   // excluded from flow stats (drawer checkbox)
     const mt=metricFor(n);
     const v = n.parentId ? (visits[n.parentId]||0) : (visits[n.id]||0);
     const vol = demand!=null && v>0 ? demand*v : mt.throughput;
@@ -1239,7 +1241,7 @@ function groupRollup(grp){
   const {visits}=flowWeights();
   const mem=new Set(grp.members||[]);
   let touch=0, wait=0;
-  state.model.nodes.forEach(n=>{ if(!mem.has(n.id)) return;
+  state.model.nodes.forEach(n=>{ if(!mem.has(n.id)||n.excludeStats) return;
     const v=visits[n.id]||0; if(v<=0) return; const mt=metricFor(n);
     if(n.type==="touch" && mt.touch!=null && mt.touch>0) touch += v*mt.touch;
     if(n.type==="wait"  && mt.wait!=null  && mt.wait>0)  wait  += v*mt.wait; });
@@ -1584,7 +1586,7 @@ function deriveInsights(r){
   }
 
   { let nvaH=0, biggest=null;                                 // effort on "could remove" work
-    state.model.nodes.forEach(n=>{ if(n.type!=="touch"||hasSubs(n)||n.classification!=="NVA") return;
+    state.model.nodes.forEach(n=>{ if(n.type!=="touch"||hasSubs(n)||n.classification!=="NVA"||n.excludeStats) return;
       const mt=metricFor(n);
       const v=n.parentId?(visits[n.parentId]||0):(visits[n.id]||0);
       const vol=cap.demand!=null&&v>0?cap.demand*v:mt.throughput;
@@ -2009,6 +2011,7 @@ function renderCanvas(r){
     if(n.parentId){ const p=byId[n.parentId];
       if(!p || !p.expanded || !(p.children||[]).includes(n.id)) return; }
     const g=el("g",{class:"node"+(state.selected&&state.selected.id===n.id?" selected":"")+(state.selectedIds.includes(n.id)?" multi":""),transform:`translate(${n.x},${n.y})`});
+    if(n.excludeStats) g.setAttribute("opacity","0.6");   // excluded from flow stats — visibly quieter
     const col=nodeColors(n), L=lay[n.id], w=L.w, bt=L.bt, mt=L.mt;
 
     if(L.kind==="frame"){ // expanded meta step: dashed hue frame + header; child cards draw themselves
@@ -2554,6 +2557,7 @@ function renderInspector(){
       ${toolSeg}
       ${field(n.performer==="bot"?"Bot name":"Owner / role","owner",n.owner||"","text")}
       ${metricFields}
+      ${excludeRow(n)}
     </div>`;
     if(!n.parentId){
       const rows=kids.map((k,i)=>`<div class="subrow">
@@ -2592,6 +2596,7 @@ function renderInspector(){
       ${cathead("speed")}
       ${field(`Avg ${ML("wait").toLowerCase()} (${u})`,"waitTimeManual",n.waitTimeManual==null?"":n.waitTimeManual,"number","Leave blank to estimate it from the queue ÷ the next step's pace")}
       ${r.dw&&r.dw[n.id]!=null?`<div class="sub" style="margin:2px 0 6px">→ waiting ≈ <b>${fmt(r.dw[n.id])} ${u}</b> — time to clear the queue at today's pace</div>`:""}
+      ${excludeRow(n)}
     </div>`;
     body+=advanced(n,true);
   } else if(n.type==="start"){
@@ -2694,6 +2699,12 @@ function settingsSelect(label,key,val,opts){
   return `<div class="field"><label>${label}</label><select data-setbind="${key}">
     ${opts.map(o=>`<option ${o===val?"selected":""}>${o}</option>`).join("")}</select></div>`;
 }
+/* drawer checkbox: keep the box on the map but leave its numbers out of every flow stat */
+function excludeRow(n){
+  return `<label class="checkrow"><input type="checkbox" data-bindchk="excludeStats" ${n.excludeStats?"checked":""}/>
+    <span class="ck-label">Exclude from flow stats</span></label>
+  <div class="sub" style="margin:0 0 4px 25px">Stays on the map, but its numbers stay out of the totals, capacity, quality and insights.</div>`;
+}
 function advanced(n, includeColor){
   return `<details class="insp-adv"><summary>Advanced</summary>
     ${field("Data key (StepID)","stepId",n.stepId||"","text","Matches the StepID column in FlowData")}
@@ -2716,6 +2727,8 @@ function wireInspector(n){
     inp.addEventListener("change",()=>{ let v=inp.value;
       if(inp.type==="number") v=v===""?null:parseFloat(v);
       n[inp.dataset.bind]=v===""?undefined:v; render(); }); });
+  insp.querySelectorAll("[data-bindchk]").forEach(ch=>ch.addEventListener("change",()=>{
+    n[ch.dataset.bindchk]=ch.checked||undefined; render(); }));
   insp.querySelectorAll("[data-cls]").forEach(b=>b.addEventListener("click",()=>{ n.classification=b.dataset.cls; render(); }));
   insp.querySelectorAll("[data-perf]").forEach(b=>b.addEventListener("click",()=>{ n.performer=b.dataset.perf; render(); }));
   insp.querySelectorAll("[data-tool]").forEach(b=>b.addEventListener("click",()=>{ n.tool=b.dataset.tool||undefined; render(); }));
