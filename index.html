@@ -329,6 +329,20 @@
   .insp-adv>summary::before{content:"\25B8  ";color:var(--faint)}
   .insp-adv[open]>summary::before{content:"\25BE  "}
   .insp-adv .field{margin-top:12px;margin-bottom:0}
+  /* primary drawer sections — bigger titles, collapsible, open state remembered */
+  .insp-sec2{border-top:1px solid var(--line)}
+  .insp-sec2:first-child{border-top:none}
+  .insp-sec2>summary{display:flex;align-items:baseline;gap:6px;font-size:12.5px;letter-spacing:.4px;text-transform:uppercase;
+    color:var(--muted);font-weight:700;cursor:pointer;list-style:none;padding:13px 0}
+  .insp-sec2[open]>summary{color:var(--ink)}
+  .insp-sec2>summary:hover{color:var(--ink)}
+  .insp-sec2>summary::-webkit-details-marker{display:none}
+  .insp-sec2>summary::before{content:"\25B8";color:var(--faint);font-size:10px;transform:translateY(-1px)}
+  .insp-sec2[open]>summary::before{content:"\25BE"}
+  .insp-sec2>summary .h4note{text-transform:none;letter-spacing:0;font-weight:500;font-size:11px;color:var(--faint)}
+  .insp-sec2-body{padding:2px 0 16px}
+  .insp-sec2-body .insp-cath:first-child{margin-top:2px}
+  .insp-sec2-body>.insp-adv:first-child{border-top:none;padding-top:0}
   .idline{font-size:11px;color:var(--faint);font-family:ui-monospace,Menlo,monospace;word-break:break-all;padding-top:2px}
   /* swatch / colour rows */
   .swatchrow{display:flex;align-items:center;gap:8px}
@@ -491,6 +505,11 @@
   .del-handle circle{fill:var(--nva);stroke:#2a0a04;stroke-width:1}
   .del-handle:hover circle{stroke-width:2}
   .del-handle line{stroke:#fff;stroke-width:1.8;stroke-linecap:round}
+  .plus-handle{opacity:0;pointer-events:none;cursor:pointer;transition:opacity .1s}
+  .build .node:hover .plus-handle,.build .group:hover .plus-handle{opacity:1;pointer-events:all}
+  .plus-handle circle{fill:var(--va);stroke:#06251a;stroke-width:1}
+  .plus-handle:hover circle{stroke-width:2}
+  .plus-handle line{stroke:#fff;stroke-width:2;stroke-linecap:round}
   .temp-edge{fill:none;stroke:var(--accent);stroke-width:2;stroke-dasharray:5 4;pointer-events:none}
   .elabel{fill:var(--muted);font-size:11px;font-family:var(--font)}
   /* case-flow labels — one style everywhere; the bg halo keeps them legible inside the band */
@@ -879,6 +898,7 @@ const state = {
   zoom: 1,
   viewer: false,
   tool: null,        // null | "group" | "comment" — armed annotation tool
+  ui: { openSecs: {} },   // which drawer sections are expanded — remembered across renders & node switches
   simming: false,    // a day-simulation is running — freezes all editing
 };
 
@@ -1059,8 +1079,10 @@ function loadModel(m){
   // membership for a one-time spatial backfill once node layout (_lay) exists (renderCanvas)
   m.groups.forEach(grp=>{
     if(grp.showInfo==null) grp.showInfo=true;
+    if(grp.collapsed==null) grp.collapsed=false;   // existing flows load expanded; cx/cy set on first collapse
     if(!Array.isArray(grp.members)) grp._backfill=true;
   });
+  migrateSubStepsToGroups(m);   // fold legacy meta-steps (children/parentId) into collapsed groups
   state.data = Array.isArray(m.data) ? m.data : [];   // imported stats are stored on the model
   state.selected=null; state.linkingFrom=null;
   undoStack=[]; redoStack=[]; _undoBase=JSON.stringify(m);   // undo history is per open flow
@@ -1257,7 +1279,8 @@ function groupRollup(grp){
     if(n.type==="wait"){
       const base = mt.wait!=null ? mt.wait : (dw[n.id]!=null ? dw[n.id] : null);
       if(base!=null && base>0) wait += v*base; } });
-  return {touch, wait, turnaround:touch+wait};
+  const containsBottleneck = !!(r.flag && mem.has(r.flag.node.id));
+  return {touch, wait, turnaround:touch+wait, count:(grp.members||[]).length, containsBottleneck};
 }
 function isBottleneck(node, r){
   return !!(r.flag && r.flag.node.id===node.id);
@@ -1718,6 +1741,7 @@ const LBL_LH=16, MET_LH=14, CAP_RY=9;
 
 /* ---- design-06 visual language: type hues, severity, icons (uniform cards) ---- */
 const CARD_W=236, CARD_H=156, TITLE_X=44;
+const GCARD_W=236, GCARD_H=96;   // collapsed-group card footprint (lens-independent)
 /* ---- card views (lenses): what every card shows; size adapts, positions stay put ---- */
 const VIEW_DIMS={ metrics:{w:236,h:156}, gaps:{w:236,h:156}, people:{w:236,h:118}, value:{w:236,h:140}, compact:{w:170,h:56} };
 const view  = () => (state.model&&state.model.settings&&state.model.settings.cardView)||"metrics";
@@ -1899,6 +1923,7 @@ function renderCanvas(r){
   (m.groups||[]).forEach(grp=>{
     // one-time membership backfill for flows saved before explicit members existed
     if(grp._backfill){ grp.members=groupHits(grp.x,grp.y,grp.x+grp.w,grp.y+grp.h).map(n=>n.id); delete grp._backfill; }
+    if(grp.collapsed) return;   // collapsed groups draw as a node-layer card later, not as a box
     const sel=state.selected&&state.selected.type==="group"&&state.selected.id===grp.id;
     const g=el("g",{class:"group"+(sel?" selected":"")}); g.dataset.gid=grp.id;
     const box=el("rect",{class:"gbox",x:grp.x,y:grp.y,width:grp.w,height:grp.h,rx:14});
@@ -1914,11 +1939,22 @@ function renderCanvas(r){
       const rh=el("rect",{class:"anno-resize",x:grp.x+grp.w-7,y:grp.y+grp.h-7,width:12,height:12,rx:3});
       rh.addEventListener("mousedown",ev=>startAnnoResize(ev,grp)); g.appendChild(rh);
       g.appendChild(annoDelHandle(grp.x+grp.w, grp.y, ()=>removeAnno("groups",grp.id)));
+      // "+" (bottom-left, clear of the resize grip) — collapse the group into one card
+      g.appendChild(plusHandle(grp.x+16, grp.y+grp.h, ()=>toggleCollapse(grp)));
     }
     svg.appendChild(g);
   });
 
   const byId=Object.fromEntries(m.nodes.map(n=>[n.id,n]));
+  // collapsed groups: hide their members + intra-group edges, and stand in as a single card.
+  // register each as a pseudo-node in the layout map so portGeo/edge-routing work unchanged.
+  const hidden=new Set(), memberOf={}, collapsedById={};
+  (m.groups||[]).forEach(grp=>{ if(!grp.collapsed||!(grp.members||[]).length) return;
+    const L={w:GCARD_W, h:GCARD_H, kind:"gcard"}; L.bt=NODE_H/2 - L.h/2; lay[grp.id]=L;
+    collapsedById[grp.id]={id:grp.id, x:grp.cx, y:grp.cy};
+    (grp.members||[]).forEach(id=>{ hidden.add(id); memberOf[id]=grp.id; }); });
+  const geomOf=id=>byId[id]||collapsedById[id];
+  const resolveEndpoint=id=>memberOf[id]||id;   // a member id → its collapsed group's card
   const hotPath=new Set(r.path.map(n=>n.id));
   /* case flow on the arrows: volume + branch splits; ASSUMED splits (no Split % on a branch)
      show in amber with ≈ — the engine divides those evenly, which multiplies demand through loops */
@@ -1927,13 +1963,21 @@ function renderCanvas(r){
   const maxEF=Math.max(1e-9,...m.edges.map(e=>eFlow[e.id]||0));
   const outCount={}; m.edges.forEach(e=>outCount[e.from]=(outCount[e.from]||0)+1);
   const labelLayer=el("g",{id:"edgeLabels"});   // appended AFTER the node loop → pills never hide under cards
-  const placedPills=[];
+  const placedPills=[], seenBoundary=new Set();
   m.edges.forEach(e=>{
-    const a=byId[e.from], b=byId[e.to]; if(!a||!b) return;
-    const p1=portGeo(a,lay[a.id],e.fromSide||"right"), p2=portGeo(b,lay[b.id],e.toSide||"left");
+    // resolve endpoints through collapsed groups: a hidden member routes to its group card
+    const fa=resolveEndpoint(e.from), fb=resolveEndpoint(e.to);
+    if(fa===fb) return;                                  // both ends inside one collapsed group → internal, hidden
+    const a=geomOf(fa), b=geomOf(fb), La=lay[fa], Lb=lay[fb]; if(!a||!b||!La||!Lb) return;
+    if(fa!==e.from || fb!==e.to){                         // boundary edge onto a collapsed card: dedupe overlaps
+      const key=fa+"|"+fb+"|"+(e.fromSide||"right")+"|"+(e.toSide||"left");
+      if(seenBoundary.has(key)) return; seenBoundary.add(key);
+    }
+    const p1=portGeo(a,La,e.fromSide||"right"), p2=portGeo(b,Lb,e.toSide||"left");
     const geo=edgeGeom(p1,p2), d=geo.d;
-    const onPath=hotPath.has(a.id)&&hotPath.has(b.id);
-    const hot=onPath && (isBottleneck(a,r)||isBottleneck(b,r));
+    const aReal=byId[fa], bReal=byId[fb];                 // null when an endpoint is a collapsed group card
+    const onPath=aReal&&bReal&&hotPath.has(fa)&&hotPath.has(fb);
+    const hot=onPath && (isBottleneck(aReal,r)||isBottleneck(bReal,r));
     const ef=eFlow[e.id]||0;
     /* Sankey band: the flow itself is the container — width ∝ cases along this arrow */
     if(showFlow){
@@ -1965,7 +2009,7 @@ function renderCanvas(r){
       const vertical=Math.abs(p2.y-p1.y)>Math.abs(p2.x-p1.x);
       let pos=geo.at(0.5);
       if(!vertical){   // horizontal runs: dodge cards (spacing pass makes room; verticals may overlap)
-        const hitsCard=(x,y)=>m.nodes.some(nn=>{ const LL=lay[nn.id]; if(!LL||nn.parentId) return false;
+        const hitsCard=(x,y)=>m.nodes.some(nn=>{ const LL=lay[nn.id]; if(!LL||nn.parentId||hidden.has(nn.id)) return false;
           const bx=nn.x-6, by=nn.y+(LL.bt||0)-6;
           return x+tw/2>bx && x-tw/2<bx+LL.w+12 && y+8>by && y-8<by+(LL.h||NODE_H)+12; });
         if(hitsCard(pos.x,pos.y)){ for(const t of [0.35,0.65,0.25,0.75]){ const p=geo.at(t);
@@ -2011,6 +2055,7 @@ function renderCanvas(r){
   };
 
   m.nodes.forEach(n=>{
+    if(hidden.has(n.id)) return;   // member of a collapsed group — not drawn while collapsed
     // children only render while their parent is expanded (they live inside its frame)
     if(n.parentId){ const p=byId[n.parentId];
       if(!p || !p.expanded || !(p.children||[]).includes(n.id)) return; }
@@ -2225,8 +2270,8 @@ function renderCanvas(r){
         chip.addEventListener("click",ev=>{ ev.stopPropagation(); toggleExpand(n.id); });
         g.appendChild(chip);
       }
-    } else { // uniform card — V2 split columns: primary (quantity/rate) | time
-      const isQ=n.type==="wait", hue=typeHue(n);
+    } else { // uniform card — split columns: primary (quantity/rate) | time, each with the minor metrics that explain it
+      const isQ=n.type==="wait", isBot=n.performer==="bot", hue=typeHue(n);
       g.appendChild(el("rect",{class:"nbox",x:0,y:bt,width:w,height:L.h,rx:14,fill:col.fill,stroke:hue,"stroke-width":1.5}));
       decorateDecision(g,n,L,hue,bt,{badge:true});
       // type icon-well
@@ -2247,12 +2292,11 @@ function renderCanvas(r){
       let ty = ownerStr ? bt+34 : bt+25;
       L.titleLines.forEach(ln=>{ g.appendChild(txt(TITLE_X,ty,ln,"nlabel")); ty+=LBL_LH; });
 
-      // ---- two equal metric columns ----
+      // ---- two metric columns: a primary number + the minor metrics that explain where it comes from ----
       const NUMF=`800 21px ${FONT_STACK}`;
-      const padL=12, midX=Math.round(w/2), colTop=bt+72, vizY=colTop+38;
+      const padL=12, midX=Math.round(w/2), colTop=bt+64, colW=midX-padL-12;
       g.appendChild(el("line",{x1:midX,y1:colTop-2,x2:midX,y2:bt+L.h-12,stroke:"var(--line)","stroke-width":1}));
-      // label + big number (+ unit) at a column's x; both columns use the same 21px number (balance)
-      // cat: metric category id — draws the tiny Speed/Capacity/Quality glyph before the eyebrow
+      // primary: tiny Speed/Capacity/Quality glyph + all-caps eyebrow + 21px number (+ unit)
       const drawNum=(x,label,numStr,unitStr,numColor,cat)=>{
         let lx=x;
         if(cat){ g.appendChild(useIc(METRICS_SPEC.categories[cat].icon, x, colTop-4.5, 9, `var(--cat-${cat})`)); lx=x+13; }
@@ -2261,17 +2305,26 @@ function renderCanvas(r){
         if(unitStr){ const nw=measure(numStr,NUMF);
           g.appendChild(txt(x+nw+5,colTop+26,unitStr,"nmeta",{"font-size":"10"})); }
       };
+      // minor "key ···· value" row beneath a primary — the driver metrics, small, with a faint dotted leader
+      const F_ROW=`10px ${FONT_STACK}`, F_ROWB=`700 10px ${FONT_STACK}`, rowY0=colTop+44, rowH=12.5;
+      const drawRow=(colX,i,key,val,valColor)=>{
+        const y=rowY0+i*rowH, vs=String(val);
+        g.appendChild(txt(colX,y,key,"",{"font-size":"10",fill:"var(--faint)"}));
+        g.appendChild(txt(colX+colW,y,vs,"",{"font-size":"10","font-weight":"700","text-anchor":"end",fill:valColor||"var(--muted)"}));
+        const x1=colX+measure(key,F_ROW)+4, x2=colX+colW-measure(vs,F_ROWB)-4;
+        if(x2-x1>6) g.appendChild(el("line",{x1,y1:y-3,x2,y2:y-3,stroke:"var(--line)","stroke-width":1,"stroke-dasharray":"1 2.5"}));
+      };
+      const rowPct = p => p==null?"—":(p<1?"<1%":Math.round(p)+"%");
 
-      // LEFT = primary
+      // LEFT = primary quantity/rate + its drivers
       if(isQ){
         drawNum(padL,ML("wip").toUpperCase(), mt.wip!=null?fmt(mt.wip):"—","cases", mt.wip!=null?null:"var(--faint)","capacity");
-        const cw=midX-padL-14, cols=10, rows=2, gap=3, cellH=8;
-        const cellW=(cw-gap*(cols-1))/cols;
-        const frac=mt.wip!=null?Math.max(0,Math.min(1,mt.wip/mwQ)):0;
-        const onN=mt.wip!=null?Math.max(mt.wip>0?1:0,Math.round(frac*cols*rows)):0;
-        for(let i=0;i<cols*rows;i++){ const rI=Math.floor(i/cols), cI=i%cols;
-          g.appendChild(el("rect",{x:padL+cI*(cellW+gap),y:vizY+rI*(cellH+gap),width:cellW,height:cellH,rx:2,
-            fill:i<onN?hue:"#0f1825",stroke:i<onN?hue:"var(--line)","stroke-width":1})); }
+        const dmd=(state.model.settings&&state.model.settings.demand);
+        const vv=(r.visits&&r.visits[n.id])||1;
+        const arriving=dmd!=null?dmd*vv:null;
+        const clears=(r.qOut&&r.qOut[n.id]!=null)?r.qOut[n.id]:null;
+        drawRow(padL,0,"Arriving",arriving!=null?fmt(arriving)+"/d":"—");
+        drawRow(padL,1,"Clears",clears!=null?fmt(clears)+"/d":"—",clears!=null?"var(--ink)":"var(--muted)");
       } else {
         // pace + load come from the metric web when it can derive them (demand × visits ÷ people × hours)
         const pc=(r.cap&&r.cap.per&&r.cap.per[n.id])||null;
@@ -2287,41 +2340,25 @@ function renderCanvas(r){
           const vt=el("title"); vt.textContent=`Each case passes through here ≈${fmt(vv)}× — loop-backs multiply this step's demand`;
           vm.appendChild(vt); g.appendChild(vm);
         }
-        // capacity scale: idle (left) → at capacity (right), red danger zone at the top end
-        const sX=padL, sW=midX-padL-14, tY=vizY+14, tH=10, dz=0.85;
-        g.appendChild(el("rect",{x:sX,y:tY,width:sW,height:tH,rx:5,fill:"#0f1825",stroke:"var(--line)","stroke-width":1}));
-        g.appendChild(el("rect",{x:sX+sW*dz,y:tY,width:sW*(1-dz),height:tH,rx:5,fill:"rgba(240,101,72,.35)"}));
-        if(load!=null){
-          const drawn=Math.min(load,1);   // >100% clamps the bar; the % label tells the real story
-          g.appendChild(el("rect",{x:sX,y:tY,width:Math.max(sW*drawn,3),height:tH,rx:5,fill:lc}));
-          const mx=sX+sW*drawn;
-          g.appendChild(txt(Math.min(Math.max(mx,sX+13),sX+sW-13),tY-5,Math.round(load*100)+"%","",
-            {"text-anchor":"middle","font-size":"10.5","font-weight":"800",fill:lc}));
-        } else g.appendChild(txt(sX+sW/2,tY-5,"no data","nmeta",{"text-anchor":"middle","font-size":"9"}));
-        // raw numbers beat a bare %: when the web modeled this step, show need vs can under the bar
-        if(pc&&pc.demand!=null&&capV!=null){
-          const over=load!=null&&load>1;
-          g.appendChild(txt(sX,tY+tH+11,`NEED ${fmt(pc.demand)}/D`,"",{"font-size":"7.5","font-weight":"700",fill:lc,"letter-spacing":"0.3"}));
-          g.appendChild(txt(sX+sW,tY+tH+11, over?`OVER BY ${fmt(pc.demand-capV)}/D`:`CAN ${fmt(capV)}/D`,"",{"text-anchor":"end","font-size":"7.5","font-weight":"700",fill:over?"var(--nva)":"var(--faint)","letter-spacing":"0.3"}));
-        } else {
-          g.appendChild(txt(sX,tY+tH+11,"IDLE","",{"font-size":"7.5","font-weight":"700",fill:"var(--faint)","letter-spacing":"0.4"}));
-          g.appendChild(txt(sX+sW,tY+tH+11,load!=null&&load>1?"OVERLOADED":"AT CAPACITY","",{"text-anchor":"end","font-size":"7.5","font-weight":"700",fill:load!=null&&load>1?"var(--nva)":"var(--faint)","letter-spacing":"0.4"}));
+        const capRow=(i)=>drawRow(padL,i,"Capacity",capV!=null?fmt(capV)+"/d":"—",capV!=null?"var(--ink)":"var(--muted)");
+        const loadRow=(i)=>drawRow(padL,i,"Load",load!=null?Math.round(load*100)+"%":"—",lc);
+        if(isBot){ capRow(0); loadRow(1); }
+        else {
+          drawRow(padL,0,"People",n.people!=null?fmt(n.people):"—");
+          drawRow(padL,1,"Hours/day",fmt(n.hoursPerDay!=null?n.hoursPerDay:AVAIL_HRS)+"h");
+          capRow(2); loadRow(3);
         }
       }
 
-      // RIGHT = time (positioned segment with % to the left); queues fall back to the ≈ estimated wait
+      // RIGHT = time primary + its share of the flow's turnaround
       const rx=midX+12, dwv=isQ&&r.dw?r.dw[n.id]:null;
       const time=isQ?(mt.wait!=null?mt.wait:dwv):mt.touch;
       const approx=isQ&&mt.wait==null&&dwv!=null;
       const info=tl[n.id]||{start:0,pct:0}, pct = time!=null ? info.pct : null;
-      const sc=SEVC[sevOf((pct||0)/100)];
       drawNum(rx, (isQ?ML("wait"):ML("touch")).toUpperCase(), time!=null?(approx?"≈"+fmt(time):fmt(time)):"—", unit(), time!=null?null:"var(--faint)","speed");
-      { const trackX=rx+30, trackW=w-12-trackX, trackY=vizY+8, trackH=11;
-        g.appendChild(txt(rx,trackY+9, pct!=null?(pct<1?"<1%":Math.round(pct)+"%"):"—","",
-          {"font-size":"11","font-weight":"800",fill:pct!=null?sc.c:"var(--faint)"}));
-        g.appendChild(el("rect",{x:trackX,y:trackY,width:trackW,height:trackH,rx:4,fill:"#0f1825",stroke:"var(--line)","stroke-width":1}));
-        if(pct!=null){ const wpx=Math.max(trackW*Math.max(pct,2)/100,4), sx=trackX+Math.min(trackW*info.start/100, trackW-wpx);
-          g.appendChild(el("rect",{x:sx,y:trackY,width:wpx,height:trackH,rx:3,fill:sc.c})); } }
+      drawRow(rx,0,"of turnaround",rowPct(pct),pct!=null?"var(--ink)":"var(--muted)");
+      if(isQ) drawRow(rx,1,"Basis",time==null?"—":(approx?"≈ estimate":"measured"));
+      else drawRow(rx,1,"Rework",mt.rework!=null?fmt(mt.rework)+"%":"—");
 
       // bottleneck flag — only the single biggest bottleneck
       if(r.flag && r.flag.node.id===n.id){
@@ -2356,6 +2393,8 @@ function renderCanvas(r){
       dh.addEventListener("mousedown",ev=>ev.stopPropagation());
       dh.addEventListener("click",ev=>{ ev.stopPropagation(); deleteNode(n.id); });
       g.appendChild(dh);
+      // "+" (bottom-right) — turn this step into a group container
+      if(L.kind==="card") g.appendChild(plusHandle(w, bt+L.h, ()=>wrapInGroup(n.id)));
     }
 
     g.dataset.id=n.id;
@@ -2366,6 +2405,33 @@ function renderCanvas(r){
     g.addEventListener("click",ev=>{ ev.stopPropagation();
       if(state.linkingFrom){ completeLink(n.id); return; }
       if(!g._dragged && !_annoJustFinished) selectNode(n.id); });
+    svg.appendChild(g);
+  });
+
+  // collapsed groups draw here, at node z-level, as a single "stack of cards" with rolled-up stats
+  (m.groups||[]).forEach(grp=>{ if(!grp.collapsed||!(grp.members||[]).length) return;
+    const L=lay[grp.id]; if(!L) return; const gr=groupRollup(grp);
+    const hue=grp.color||"var(--accent)";
+    const sel=state.selected&&state.selected.type==="group"&&state.selected.id===grp.id;
+    const g=el("g",{class:"node gcard"+(sel?" selected":""),transform:`translate(${grp.cx},${grp.cy})`});
+    g.dataset.gid=grp.id;
+    // a peeking card behind → reads as "several steps stacked into one"
+    g.appendChild(el("rect",{x:5,y:L.bt+5,width:L.w,height:L.h,rx:14,fill:"var(--panel2)",
+      stroke:hue,"stroke-opacity":"0.4","stroke-width":1.2,"stroke-dasharray":"7 5","pointer-events":"none"}));
+    g.appendChild(el("rect",{class:"nbox",x:0,y:L.bt,width:L.w,height:L.h,rx:14,
+      fill:"var(--panel)",stroke:hue,"stroke-width":1.5,"stroke-dasharray":"7 5"}));
+    g.appendChild(txt(14,L.bt+24,truncToWidth(grp.label||"Group",L.w-80,F_LABEL),"nlabel"));
+    g.appendChild(el("rect",{x:L.w-64,y:L.bt+11,width:54,height:18,rx:6,fill:hue}));
+    g.appendChild(txt(L.w-37,L.bt+24,`${gr.count} steps`,"",{fill:"#0f1720","font-size":"9.5","font-weight":"800","text-anchor":"middle"}));
+    if(gr.containsBottleneck) g.appendChild(el("circle",{cx:15,cy:L.bt+L.h-31,r:5,fill:"var(--nva)"}));
+    g.appendChild(txt(gr.containsBottleneck?27:14,L.bt+L.h-27,`${fmt(gr.turnaround)} ${unit()} turnaround`,"nmeta"));
+    g.appendChild(txt(14,L.bt+L.h-11,`touch ${fmt(gr.touch)} · wait ${fmt(gr.wait)} ${unit()}`,"nmeta"));
+    if(editable()){
+      g.appendChild(annoDelHandle(L.w, L.bt, ()=>removeAnno("groups",grp.id)));
+      g.appendChild(plusHandle(L.w, L.bt+L.h, ()=>toggleCollapse(grp)));   // "+" → expand back in place
+    }
+    g.addEventListener("mousedown",ev=>startAnnoMove(ev,groupPos(grp)));
+    g.addEventListener("click",ev=>{ ev.stopPropagation(); if(!_annoMoved) selectGroup(grp.id); });
     svg.appendChild(g);
   });
   svg.appendChild(labelLayer);   // edge pills above the cards — never hidden
@@ -2502,12 +2568,8 @@ function renderInspector(){
   let headRow="";
   const bottleneck = r.flag && r.flag.node.id===n.id;
   if(n.type==="touch"){
-    headRow=`<div class="seg perf" style="flex:1">
-        <button class="${(n.performer!=="bot")?"on":""}" data-perf="human"><svg class="t-ic"><use href="#ic-human"/></svg> Human</button>
-        <button class="${(n.performer==="bot")?"on":""}" data-perf="bot"><svg class="t-ic"><use href="#ic-bot"/></svg> Bot</button>
-      </div>`;
-    if(bottleneck) headRow+=`<span class="insp-chip hot">⚑ Bottleneck</span>`;
-    else if(!n.classification) headRow+=`<span class="insp-chip warn">⚠ Unrated</span>`;
+    if(bottleneck) headRow=`<span class="insp-chip hot">⚑ Bottleneck</span>`;
+    else if(!n.classification) headRow=`<span class="insp-chip warn">⚠ Unrated</span>`;
   } else if(n.type==="wait"){
     if(bottleneck) headRow=`<span class="insp-chip hot">⚑ Bottleneck</span>`;
   }
@@ -2557,27 +2619,13 @@ function renderInspector(){
           +observed
           +cathead("quality")
           +field(`${ML("rework")} (optional)`,"reworkPct",n.reworkPct==null?"":n.reworkPct,"number","Share of cases that come back (0–100)"));
-    body+=`<div class="insp-sec"><h4>Setup</h4>
-      ${toolSeg}
-      ${field(n.performer==="bot"?"Bot name":"Owner / role","owner",n.owner||"","text")}
-      ${metricFields}
-      ${excludeRow(n)}
-    </div>`;
-    if(!n.parentId){
-      const rows=kids.map((k,i)=>`<div class="subrow">
-          <button class="subname" data-subsel="${k.id}" title="Edit this sub-step">${esc(k.label)}</button>
-          <button data-submove="${i},-1" ${i===0?"disabled":""} title="Move earlier">↑</button>
-          <button data-submove="${i},1" ${i===kids.length-1?"disabled":""} title="Move later">↓</button>
-          <button class="subx" data-subdel="${k.id}" title="Remove sub-step">✕</button>
-        </div>`).join("");
-      body+=`<div class="insp-sec"><h4>Sub-steps <span class="h4note">· break the step down</span></h4>
-        ${rows?`<div class="sublist">${rows}</div>`
-              :`<div class="sub" style="margin-bottom:8px">Split this step into smaller steps — times roll up automatically and the card expands in place on the map.</div>`}
-        <button id="addSub" class="addsub">+ Add sub-step</button>
-      </div>`;
-    }
-    body+=`<details class="insp-adv"><summary>${T.classTitle}</summary>
-      <div class="field"><label>Details</label>
+    body+=section("info","Info",
+      `${field(n.performer==="bot"?"Bot name":"Owner / role","owner",n.owner||"","text")}
+       ${toolSeg}`);
+    body+=section("metrics","Metrics",metricFields);
+    // to break a step down, hover it on the map and hit the "+" → wrap it in a Group (collapsible)
+    body+=section("value",T.classTitle,
+      `<div class="field"><label>Details</label>
         <textarea data-bind="valueNote" placeholder="What happens in this step">${esc(n.valueNote||"")}</textarea>
       </div>
       <div class="field"><label>Value to customer</label>
@@ -2589,20 +2637,17 @@ function renderInspector(){
         <div class="defs">
           ${["VA","NNVA","NVA"].map(k=>`<div class="def ${n.classification===k?"sel "+k.toLowerCase():""}"><b>${T.cls[k].name}</b> — ${T.cls[k].def}</div>`).join("")}
         </div>
-      </div>
-    </details>`;
-    body+=advanced(n,true);
+      </div>`);
+    body+=section("advanced","Advanced",`${excludeRow(n)}${advanced(n,true)}`);
   } else if(n.type==="wait"){
-    body+=`<div class="insp-sec">
-      ${field("Owner","owner",n.owner||"","text")}
-      ${cathead("capacity")}
-      ${field(ML("wip"),"wip",n.wip==null?"":n.wip,"number","Items sitting here right now")}
-      ${cathead("speed")}
-      ${field(`Avg ${ML("wait").toLowerCase()} (${u})`,"waitTimeManual",n.waitTimeManual==null?"":n.waitTimeManual,"number","Leave blank to estimate it from the queue ÷ the next step's pace")}
-      ${r.dw&&r.dw[n.id]!=null?`<div class="sub" style="margin:2px 0 6px">→ waiting ≈ <b>${fmt(r.dw[n.id])} ${u}</b> — time to clear the queue at today's pace</div>`:""}
-      ${excludeRow(n)}
-    </div>`;
-    body+=advanced(n,true);
+    body+=section("info","Info",field("Owner","owner",n.owner||"","text"));
+    body+=section("metrics","Metrics",
+      `${cathead("capacity")}
+       ${field(ML("wip"),"wip",n.wip==null?"":n.wip,"number","Items sitting here right now")}
+       ${cathead("speed")}
+       ${field(`Avg ${ML("wait").toLowerCase()} (${u})`,"waitTimeManual",n.waitTimeManual==null?"":n.waitTimeManual,"number","Leave blank to estimate it from the queue ÷ the next step's pace")}
+       ${r.dw&&r.dw[n.id]!=null?`<div class="sub" style="margin:2px 0 6px">→ waiting ≈ <b>${fmt(r.dw[n.id])} ${u}</b> — time to clear the queue at today's pace</div>`:""}`);
+    body+=section("advanced","Advanced",`${excludeRow(n)}${advanced(n,true)}`);
   } else if(n.type==="start"){
     body+=`<div class="insp-sec"><h4>Flow settings</h4>
       <div class="field"><label>Flow name</label>
@@ -2710,10 +2755,16 @@ function excludeRow(n){
   <div class="sub" style="margin:0 0 4px 25px">Stays on the map, but its numbers stay out of the totals, capacity, quality and insights.</div>`;
 }
 function advanced(n, includeColor){
-  return `<details class="insp-adv"><summary>Advanced</summary>
-    ${field("Data key (StepID)","stepId",n.stepId||"","text","Matches the StepID column in FlowData")}
+  return `${field("Data key (StepID)","stepId",n.stepId||"","text","Matches the StepID column in FlowData")}
     ${includeColor?colorOverrideRow(n):""}
-    <div class="field"><label>Node id</label><div class="idline">${esc(n.id)}</div></div>
+    <div class="field"><label>Node id</label><div class="idline">${esc(n.id)}</div></div>`;
+}
+/* collapsible drawer section; open state persists in state.ui.openSecs across renders & node switches */
+function section(id, title, inner, note){
+  const open = state.ui && state.ui.openSecs && state.ui.openSecs[id];
+  return `<details class="insp-sec2" data-sec="${id}"${open?" open":""}>
+    <summary>${title}${note?` <span class="h4note">· ${note}</span>`:""}</summary>
+    <div class="insp-sec2-body">${inner}</div>
   </details>`;
 }
 function field(label,bind,val,type,hint){
@@ -2733,8 +2784,10 @@ function wireInspector(n){
       n[inp.dataset.bind]=v===""?undefined:v; render(); }); });
   insp.querySelectorAll("[data-bindchk]").forEach(ch=>ch.addEventListener("change",()=>{
     n[ch.dataset.bindchk]=ch.checked||undefined; render(); }));
+  /* remember which sections are open (no re-render — keeps the section open while typing) */
+  insp.querySelectorAll("details.insp-sec2").forEach(d=>d.addEventListener("toggle",()=>{
+    if(d.open) state.ui.openSecs[d.dataset.sec]=true; else delete state.ui.openSecs[d.dataset.sec]; }));
   insp.querySelectorAll("[data-cls]").forEach(b=>b.addEventListener("click",()=>{ n.classification=b.dataset.cls; render(); }));
-  insp.querySelectorAll("[data-perf]").forEach(b=>b.addEventListener("click",()=>{ n.performer=b.dataset.perf; render(); }));
   insp.querySelectorAll("[data-tool]").forEach(b=>b.addEventListener("click",()=>{ n.tool=b.dataset.tool||undefined; render(); }));
   /* flow-level settings (start drawer) */
   insp.querySelectorAll("[data-modelbind]").forEach(inp=>inp.addEventListener("change",()=>{
@@ -2937,6 +2990,57 @@ function toggleExpand(id){
     reflowFrom(n.x+viewW(), -dx, [n.id]); }
   render();
 }
+/* ---------- groups as collapsible containers ---------- */
+/* collapse a group into a single card (or expand it back). render-time only: members and
+   their edges stay in the model at their real positions — collapse just hides them and
+   slides downstream nodes in to fill the freed span; expand is the exact inverse. */
+function toggleCollapse(grp){
+  if(!grp || !(grp.members||[]).length) return;
+  const find=id=>state.model.nodes.find(n=>n.id===id);
+  let bx0=Infinity,by0=Infinity,bx1=-Infinity,by1=-Infinity, midY=0, cnt=0;
+  (grp.members).forEach(id=>{ const k=find(id), L=_lay[id]; if(!k||!L) return;
+    const t=k.y+(L.bt||0); bx0=Math.min(bx0,k.x); by0=Math.min(by0,t);
+    bx1=Math.max(bx1,k.x+L.w); by1=Math.max(by1,t+L.h); midY+=k.y; cnt++; });
+  if(!cnt) return;
+  if(!grp.collapsed){
+    grp.cx=bx0; grp.cy=Math.round(midY/cnt);          // card sits where the leftmost member was
+    grp._reflowDx=(grp.cx+GCARD_W)-bx1;               // negative → downstream slides left to fill
+    grp.collapsed=true;
+    if(state.selected && grp.members.includes(state.selected.id)) selectGroup(grp.id);
+    reflowFrom(bx1, grp._reflowDx, grp.members.slice());
+  } else {
+    grp.collapsed=false;
+    fitGroupBox(grp);   // refit the box to wrap every member as it reappears
+    reflowFrom(grp.cx+GCARD_W, -(grp._reflowDx||0), grp.members.slice());
+  }
+  render();
+}
+/* the "+" on a plain step: wrap just that step in a fresh (expanded) group, ready to grow */
+function wrapInGroup(id){
+  const n=state.model.nodes.find(x=>x.id===id); if(!n||n.parentId) return;
+  const L=_lay[id]; if(!L) return;
+  const PAD=22, TOP=PAD+16, ny0=n.y+(L.bt||0);        // mirror onGroupSelUp's padding
+  const gx=Math.max(0,n.x-PAD), gy=Math.max(0,ny0-TOP);
+  const g={id:uid("grp"), x:gx, y:gy, w:(n.x+L.w+PAD)-gx, h:(ny0+L.h+PAD)-gy,
+           label:"Group", members:[id], showInfo:true, collapsed:false};
+  state.model.groups.push(g); selectGroup(g.id); render();
+}
+/* migrate legacy sub-steps (nodes with children/parentId) into collapsed groups. mutates the
+   model once on load: children become real top-level nodes chained by edges, the parent's
+   in/out edges re-home onto the chain ends, and the whole chain is wrapped in a collapsed group. */
+function migrateSubStepsToGroups(m){
+  (m.nodes||[]).filter(p=>p.children&&p.children.length).forEach(p=>{
+    const kids=p.children.map(id=>m.nodes.find(n=>n.id===id)).filter(Boolean);
+    if(!kids.length){ delete p.children; delete p.expanded; return; }
+    let px=p.x;
+    kids.forEach((k,i)=>{ delete k.parentId; k.x=px; k.y=p.y; px+=CARD_W+40;
+      if(i>0) m.edges.push({id:uid("e_"), from:kids[i-1].id, to:k.id, fromSide:"right", toSide:"left"}); });
+    m.edges.forEach(e=>{ if(e.to===p.id) e.to=kids[0].id; if(e.from===p.id) e.from=kids[kids.length-1].id; });
+    m.nodes=m.nodes.filter(n=>n.id!==p.id);
+    m.groups.push({id:uid("grp"), label:p.label||"Group", members:kids.map(k=>k.id),
+      showInfo:true, collapsed:true, x:0,y:0,w:0,h:0, cx:p.x, cy:p.y, _reflowDx:0, color:p.color});
+  });
+}
 function addSubStep(pid){
   const p=state.model.nodes.find(x=>x.id===pid); if(!p||p.type!=="touch"||p.parentId) return;
   const oldN=(p.children||[]).length, id=uid("t_");
@@ -3106,7 +3210,7 @@ function onGroupSelUp(ev){ window.removeEventListener("mousemove",onGroupSelMove
   hits.forEach(n=>{ const L=_lay[n.id], ny0=n.y+(L.bt||0);
     bx0=Math.min(bx0,n.x); by0=Math.min(by0,ny0); bx1=Math.max(bx1,n.x+L.w); by1=Math.max(by1,ny0+L.h); });
   const g={id:uid("grp"), x:Math.max(0,bx0-PAD), y:Math.max(0,by0-TOP), w:0, h:0, label:"Group",
-           members:hits.map(n=>n.id), showInfo:true};
+           members:hits.map(n=>n.id), showInfo:true, collapsed:false};
   g.w=(bx1+PAD)-g.x; g.h=(by1+PAD)-g.y;
   state.model.groups.push(g); annoDone(); render(); }
 
@@ -3135,6 +3239,13 @@ function annoDelHandle(cx,cy,onDel){ const dh=el("g",{class:"del-handle"});
   dh.appendChild(el("line",{x1:cx+3.5,y1:cy-3.5,x2:cx-3.5,y2:cy+3.5}));
   dh.addEventListener("mousedown",ev=>ev.stopPropagation());
   dh.addEventListener("click",ev=>{ ev.stopPropagation(); onDel(); }); return dh; }
+/* a "+" corner control (bottom-right of a card): convert a step into a group, or expand/collapse one */
+function plusHandle(cx,cy,onClick){ const h=el("g",{class:"plus-handle"});
+  h.appendChild(el("circle",{cx,cy,r:9}));
+  h.appendChild(el("line",{x1:cx-3.5,y1:cy,x2:cx+3.5,y2:cy}));
+  h.appendChild(el("line",{x1:cx,y1:cy-3.5,x2:cx,y2:cy+3.5}));
+  h.addEventListener("mousedown",ev=>ev.stopPropagation());
+  h.addEventListener("click",ev=>{ ev.stopPropagation(); onClick(); }); return h; }
 function editGroupLabel(grp){ const svg=$("#canvas");
   const fo=el("foreignObject",{x:grp.x+13,y:grp.y+16,width:Math.min(340,Math.max(160,grp.w-26)),height:26});
   const inp=document.createElement("input"); inp.type="text"; inp.value=grp.label||""; inp.className="glabel-edit";
@@ -3194,30 +3305,37 @@ function ensureFlowSpacing(){
   gx.forEach((x,g)=>{ if(x!==g.x) targets.push({ent:g,x}); });
   if(targets.length){ animateNodes(targets,320,()=>tidyGroups()); toast("Spaced the map so the case flow fits."); }
 }
+/* a collapsed group is positioned by cx/cy (its card); expanded groups by x/y (the box).
+   this proxy lets the shared move/tween code (animateNodes, startAnnoMove) drive either. */
+function groupPos(g){
+  if(!g.collapsed) return g;
+  return { get x(){return g.cx}, set x(v){g.cx=v}, get y(){return g.cy}, set y(v){g.cy=v} };
+}
 function reflowFrom(x0, dx, exceptIds){
   if(!dx) return; const m=state.model, skip=new Set(exceptIds||[]), t=[];
   (m.nodes||[]).forEach(n=>{ if(!skip.has(n.id) && !n.parentId && n.x>=x0) t.push({ent:n, x:Math.max(0,n.x+dx)}); });
-  (m.groups||[]).forEach(g=>{ if(g.x>=x0) t.push({ent:g, x:Math.max(0,g.x+dx)}); });
+  (m.groups||[]).forEach(g=>{ const gx=g.collapsed?g.cx:g.x; if(gx>=x0) t.push({ent:groupPos(g), x:Math.max(0,gx+dx)}); });
   (m.comments||[]).forEach(c=>{ if(c.x>=x0) t.push({ent:c, x:Math.max(0,c.x+dx)}); });
   animateNodes(t);
 }
 /* refit each group rect to encapsulate its member boxes: room up top for the header
    card (title + stats), a comfortable margin on the sides and underneath, and a min
    width so the header always fits. Groups with the header hidden hug their boxes tighter. */
+function fitGroupBox(g){
+  const m=state.model, PAD=24, HEAD=98, MINW=250;
+  const members=(g.members||[]).map(id=>m.nodes.find(n=>n.id===id)).filter(Boolean);
+  if(!members.length) return;
+  let bx0=Infinity,by0=Infinity,bx1=-Infinity,by1=-Infinity;
+  members.forEach(n=>{ const L=_lay[n.id]; if(!L) return; const ny0=n.y+(L.bt||0);
+    bx0=Math.min(bx0,n.x); by0=Math.min(by0,ny0); bx1=Math.max(bx1,n.x+L.w); by1=Math.max(by1,ny0+L.h); });
+  if(bx0===Infinity) return;
+  const top = g.showInfo!==false ? HEAD : PAD;   // header needs vertical room; hidden = tight
+  g.x=Math.max(0,bx0-PAD); g.y=Math.max(0,by0-top);
+  g.w=Math.max((bx1+PAD)-g.x, g.showInfo!==false?MINW:0); g.h=(by1+PAD)-g.y;
+}
 function tidyGroups(){
   const m=state.model; if(!m.groups||!m.groups.length) return;
-  const PAD=24, HEAD=98, MINW=250;
-  m.groups.forEach(g=>{
-    const members=(g.members||[]).map(id=>m.nodes.find(n=>n.id===id)).filter(Boolean);
-    if(!members.length) return;
-    let bx0=Infinity,by0=Infinity,bx1=-Infinity,by1=-Infinity;
-    members.forEach(n=>{ const L=_lay[n.id]; if(!L) return; const ny0=n.y+(L.bt||0);
-      bx0=Math.min(bx0,n.x); by0=Math.min(by0,ny0); bx1=Math.max(bx1,n.x+L.w); by1=Math.max(by1,ny0+L.h); });
-    if(bx0===Infinity) return;
-    const top = g.showInfo!==false ? HEAD : PAD;   // header needs vertical room; hidden = tight
-    g.x=Math.max(0,bx0-PAD); g.y=Math.max(0,by0-top);
-    g.w=Math.max((bx1+PAD)-g.x, g.showInfo!==false?MINW:0); g.h=(by1+PAD)-g.y;
-  });
+  m.groups.forEach(fitGroupBox);
 }
 
 /* ---------- Tidy: lay nodes out as a left-to-right flow grid ---------- */
