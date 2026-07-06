@@ -458,6 +458,9 @@
   body.tool-group #stage, body.tool-comment #stage{cursor:crosshair}
   body.tool-group .node, body.tool-comment .node{opacity:.5;transition:opacity .08s}
   body.tool-group .node.in-group{opacity:1}
+  /* dragging/resizing a group box over steps → same "include" affordance as drawing a group */
+  body.anno-grouping .node[data-id]{opacity:.5;transition:opacity .08s}
+  body.anno-grouping .node[data-id].in-group{opacity:1}
   /* ---- canvas cursors (select box / hand pan) ---- */
   body.tool-select #stage, body.tool-select #stage *{cursor:crosshair}
   body.tool-pan #stage, body.tool-pan #stage *{cursor:grab}
@@ -575,6 +578,21 @@
   </symbol>
   <symbol id="ic-clock" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
     <circle cx="12" cy="12" r="8.4"/><path d="M12 7.6V12l3 1.8"/>
+  </symbol>
+  <symbol id="ic-expand" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="4 9 4 4 9 4"/><line x1="4" y1="4" x2="10" y2="10"/>
+    <polyline points="15 4 20 4 20 9"/><line x1="20" y1="4" x2="14" y2="10"/>
+    <polyline points="4 15 4 20 9 20"/><line x1="4" y1="20" x2="10" y2="14"/>
+    <polyline points="20 15 20 20 15 20"/><line x1="20" y1="20" x2="14" y2="14"/>
+  </symbol>
+  <symbol id="ic-collapse" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="9 4 9 9 4 9"/><line x1="9" y1="9" x2="4" y2="4"/>
+    <polyline points="15 4 15 9 20 9"/><line x1="15" y1="9" x2="20" y2="4"/>
+    <polyline points="9 20 9 15 4 15"/><line x1="9" y1="15" x2="4" y2="20"/>
+    <polyline points="15 20 15 15 20 15"/><line x1="15" y1="15" x2="20" y2="20"/>
+  </symbol>
+  <symbol id="ic-group" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="4" y="4" width="13" height="13" rx="2.4"/><path d="M20 8.5v10a1.5 1.5 0 0 1-1.5 1.5h-10"/>
   </symbol>
   <!-- metric-category glyphs (Speed / Capacity / Quality) — chosen in the metrics workbench -->
   <symbol id="ic-cat-speed" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -1741,7 +1759,6 @@ const LBL_LH=16, MET_LH=14, CAP_RY=9;
 
 /* ---- design-06 visual language: type hues, severity, icons (uniform cards) ---- */
 const CARD_W=236, CARD_H=156, TITLE_X=44;
-const GCARD_W=236, GCARD_H=96;   // collapsed-group card footprint (lens-independent)
 /* ---- card views (lenses): what every card shows; size adapts, positions stay put ---- */
 const VIEW_DIMS={ metrics:{w:236,h:156}, gaps:{w:236,h:156}, people:{w:236,h:118}, value:{w:236,h:140}, compact:{w:170,h:56} };
 const view  = () => (state.model&&state.model.settings&&state.model.settings.cardView)||"metrics";
@@ -1939,8 +1956,8 @@ function renderCanvas(r){
       const rh=el("rect",{class:"anno-resize",x:grp.x+grp.w-7,y:grp.y+grp.h-7,width:12,height:12,rx:3});
       rh.addEventListener("mousedown",ev=>startAnnoResize(ev,grp)); g.appendChild(rh);
       g.appendChild(annoDelHandle(grp.x+grp.w, grp.y, ()=>removeAnno("groups",grp.id)));
-      // "+" (bottom-left, clear of the resize grip) — collapse the group into one card
-      g.appendChild(plusHandle(grp.x+16, grp.y+grp.h, ()=>toggleCollapse(grp)));
+      // collapse toggle (bottom-left, clear of the resize grip) — fold the group into one card
+      g.appendChild(iconHandle(grp.x+16, grp.y+grp.h, "ic-collapse", ()=>toggleCollapse(grp)));
     }
     svg.appendChild(g);
   });
@@ -1950,7 +1967,7 @@ function renderCanvas(r){
   // register each as a pseudo-node in the layout map so portGeo/edge-routing work unchanged.
   const hidden=new Set(), memberOf={}, collapsedById={};
   (m.groups||[]).forEach(grp=>{ if(!grp.collapsed||!(grp.members||[]).length) return;
-    const L={w:GCARD_W, h:GCARD_H, kind:"gcard"}; L.bt=NODE_H/2 - L.h/2; lay[grp.id]=L;
+    const L={w:viewW(), h:VIEW_DIMS[view()].h, kind:"gcard"}; L.bt=NODE_H/2 - L.h/2; lay[grp.id]=L;
     collapsedById[grp.id]={id:grp.id, x:grp.cx, y:grp.cy};
     (grp.members||[]).forEach(id=>{ hidden.add(id); memberOf[id]=grp.id; }); });
   const geomOf=id=>byId[id]||collapsedById[id];
@@ -2408,27 +2425,59 @@ function renderCanvas(r){
     svg.appendChild(g);
   });
 
-  // collapsed groups draw here, at node z-level, as a single "stack of cards" with rolled-up stats
+  // collapsed groups draw here, at node z-level, as one step-sized card carrying the group's
+  // rolled-up stats, ringed by a striped outer line that marks it as a whole group
   (m.groups||[]).forEach(grp=>{ if(!grp.collapsed||!(grp.members||[]).length) return;
     const L=lay[grp.id]; if(!L) return; const gr=groupRollup(grp);
-    const hue=grp.color||"var(--accent)";
+    const w=L.w, bt=L.bt, hue=grp.color||"var(--accent)";
     const sel=state.selected&&state.selected.type==="group"&&state.selected.id===grp.id;
     const g=el("g",{class:"node gcard"+(sel?" selected":""),transform:`translate(${grp.cx},${grp.cy})`});
     g.dataset.gid=grp.id;
-    // a peeking card behind → reads as "several steps stacked into one"
-    g.appendChild(el("rect",{x:5,y:L.bt+5,width:L.w,height:L.h,rx:14,fill:"var(--panel2)",
-      stroke:hue,"stroke-opacity":"0.4","stroke-width":1.2,"stroke-dasharray":"7 5","pointer-events":"none"}));
-    g.appendChild(el("rect",{class:"nbox",x:0,y:L.bt,width:L.w,height:L.h,rx:14,
-      fill:"var(--panel)",stroke:hue,"stroke-width":1.5,"stroke-dasharray":"7 5"}));
-    g.appendChild(txt(14,L.bt+24,truncToWidth(grp.label||"Group",L.w-80,F_LABEL),"nlabel"));
-    g.appendChild(el("rect",{x:L.w-64,y:L.bt+11,width:54,height:18,rx:6,fill:hue}));
-    g.appendChild(txt(L.w-37,L.bt+24,`${gr.count} steps`,"",{fill:"#0f1720","font-size":"9.5","font-weight":"800","text-anchor":"middle"}));
-    if(gr.containsBottleneck) g.appendChild(el("circle",{cx:15,cy:L.bt+L.h-31,r:5,fill:"var(--nva)"}));
-    g.appendChild(txt(gr.containsBottleneck?27:14,L.bt+L.h-27,`${fmt(gr.turnaround)} ${unit()} turnaround`,"nmeta"));
-    g.appendChild(txt(14,L.bt+L.h-11,`touch ${fmt(gr.touch)} · wait ${fmt(gr.wait)} ${unit()}`,"nmeta"));
+    // striped line just outside the card → "this single card is a whole group"
+    g.appendChild(el("rect",{x:-5,y:bt-5,width:w+10,height:L.h+10,rx:18,fill:"none",
+      stroke:hue,"stroke-opacity":"0.7","stroke-width":1.5,"stroke-dasharray":"7 5","pointer-events":"none"}));
+    // the card itself — same footprint as a single step
+    g.appendChild(el("rect",{class:"nbox",x:0,y:bt,width:w,height:L.h,rx:14,fill:"var(--panel)",stroke:hue,"stroke-width":1.5}));
+    // group icon-well (mirrors a step's type well)
+    const WELL=26;
+    g.appendChild(el("rect",{x:12,y:bt+12,width:WELL,height:WELL,rx:7,fill:hue}));
+    g.appendChild(useIc("ic-group", 16, bt+16, WELL-8, "#0f1720"));
+    // "N steps" count pill, top-right
+    g.appendChild(el("rect",{x:w-64,y:bt+13,width:54,height:18,rx:6,fill:hue}));
+    g.appendChild(txt(w-37,bt+26,`${gr.count} steps`,"",{fill:"#0f1720","font-size":"9.5","font-weight":"800","text-anchor":"middle"}));
+    if(L.h<130){
+      // short lenses (compact/people) — no room for columns: label + turnaround on one line
+      g.appendChild(txt(TITLE_X,bt+22,truncToWidth(grp.label||"Group",w-TITLE_X-70,F_LABEL),"nlabel"));
+      g.appendChild(txt(TITLE_X,bt+Math.min(L.h-12,40),`${fmt(gr.turnaround)} ${unit()} turnaround`,"nmeta"));
+    } else {
+      // eyebrow + title, then two metric columns — same geometry as a uniform step card
+      g.appendChild(txt(TITLE_X,bt+20,"GROUP","nowner"));
+      g.appendChild(txt(TITLE_X,bt+36,truncToWidth(grp.label||"Group",w-TITLE_X-70,F_LABEL),"nlabel"));
+      const NUMF=`800 21px ${FONT_STACK}`, F_ROW=`10px ${FONT_STACK}`, F_ROWB=`700 10px ${FONT_STACK}`;
+      const padL=12, midX=Math.round(w/2), colTop=bt+64, colW=midX-padL-12, rowY0=colTop+44, rowH=12.5;
+      g.appendChild(el("line",{x1:midX,y1:colTop-2,x2:midX,y2:bt+L.h-12,stroke:"var(--line)","stroke-width":1}));
+      const dnum=(x,label,numStr,unitStr,cat)=>{ let lx=x;
+        if(cat){ g.appendChild(useIc(METRICS_SPEC.categories[cat].icon, x, colTop-4.5, 9, `var(--cat-${cat})`)); lx=x+13; }
+        g.appendChild(txt(lx,colTop+4,truncToWidth(label,midX-padL-(cat?28:14),F_META),"nowner"));
+        g.appendChild(txt(x,colTop+26,numStr,"",{"font-size":"21","font-weight":"800",fill:"var(--ink)"}));
+        if(unitStr){ const nw=measure(numStr,NUMF); g.appendChild(txt(x+nw+5,colTop+26,unitStr,"nmeta",{"font-size":"10"})); } };
+      const drow=(colX,i,key,val,valColor)=>{ const y=rowY0+i*rowH, vs=String(val);
+        g.appendChild(txt(colX,y,key,"",{"font-size":"10",fill:"var(--faint)"}));
+        g.appendChild(txt(colX+colW,y,vs,"",{"font-size":"10","font-weight":"700","text-anchor":"end",fill:valColor||"var(--muted)"}));
+        const x1=colX+measure(key,F_ROW)+4, x2=colX+colW-measure(vs,F_ROWB)-4;
+        if(x2-x1>6) g.appendChild(el("line",{x1,y1:y-3,x2,y2:y-3,stroke:"var(--line)","stroke-width":1,"stroke-dasharray":"1 2.5"})); };
+      // LEFT = turnaround headline with its touch/wait drivers (mirrors the expanded header stats)
+      dnum(padL,"TURNAROUND",fmt(gr.turnaround),unit(),"speed");
+      drow(padL,0,"Touch",`${fmt(gr.touch)} ${unit()}`);
+      drow(padL,1,"Wait",`${fmt(gr.wait)} ${unit()}`);
+      // RIGHT = step count + whether a bottleneck hides inside
+      const rx=midX+12;
+      dnum(rx,"STEPS",String(gr.count),"","capacity");
+      drow(rx,0,"Bottleneck",gr.containsBottleneck?"yes":"—",gr.containsBottleneck?"var(--nva)":null);
+    }
     if(editable()){
-      g.appendChild(annoDelHandle(L.w, L.bt, ()=>removeAnno("groups",grp.id)));
-      g.appendChild(plusHandle(L.w, L.bt+L.h, ()=>toggleCollapse(grp)));   // "+" → expand back in place
+      g.appendChild(annoDelHandle(w, bt, ()=>removeAnno("groups",grp.id)));
+      g.appendChild(iconHandle(16, bt+L.h, "ic-expand", ()=>toggleCollapse(grp)));   // bottom-left → expand back in place
     }
     g.addEventListener("mousedown",ev=>startAnnoMove(ev,groupPos(grp)));
     g.addEventListener("click",ev=>{ ev.stopPropagation(); if(!_annoMoved) selectGroup(grp.id); });
@@ -3004,14 +3053,14 @@ function toggleCollapse(grp){
   if(!cnt) return;
   if(!grp.collapsed){
     grp.cx=bx0; grp.cy=Math.round(midY/cnt);          // card sits where the leftmost member was
-    grp._reflowDx=(grp.cx+GCARD_W)-bx1;               // negative → downstream slides left to fill
+    grp._reflowDx=(grp.cx+viewW())-bx1;               // negative → downstream slides left to fill
     grp.collapsed=true;
     if(state.selected && grp.members.includes(state.selected.id)) selectGroup(grp.id);
     reflowFrom(bx1, grp._reflowDx, grp.members.slice());
   } else {
     grp.collapsed=false;
     fitGroupBox(grp);   // refit the box to wrap every member as it reappears
-    reflowFrom(grp.cx+GCARD_W, -(grp._reflowDx||0), grp.members.slice());
+    reflowFrom(grp.cx+viewW(), -(grp._reflowDx||0), grp.members.slice());
   }
   render();
 }
@@ -3019,10 +3068,9 @@ function toggleCollapse(grp){
 function wrapInGroup(id){
   const n=state.model.nodes.find(x=>x.id===id); if(!n||n.parentId) return;
   const L=_lay[id]; if(!L) return;
-  const PAD=22, TOP=PAD+16, ny0=n.y+(L.bt||0);        // mirror onGroupSelUp's padding
-  const gx=Math.max(0,n.x-PAD), gy=Math.max(0,ny0-TOP);
-  const g={id:uid("grp"), x:gx, y:gy, w:(n.x+L.w+PAD)-gx, h:(ny0+L.h+PAD)-gy,
+  const g={id:uid("grp"), x:0, y:0, w:0, h:0,
            label:"Group", members:[id], showInfo:true, collapsed:false};
+  fitGroupBox(g);   // header + margins right on creation, same as a post-Tidy fit
   state.model.groups.push(g); selectGroup(g.id); render();
 }
 /* migrate legacy sub-steps (nodes with children/parentId) into collapsed groups. mutates the
@@ -3205,13 +3253,9 @@ function onGroupSelUp(ev){ window.removeEventListener("mousemove",onGroupSelMove
   const p=svgPt(ev);
   const hits=groupHits(Math.min(gs.x0,p.x),Math.min(gs.y0,p.y),Math.max(gs.x0,p.x),Math.max(gs.y0,p.y));
   if(!hits.length){ render(); return; }
-  const PAD=22, TOP=PAD+16;   // extra headroom up top for the label
-  let bx0=Infinity,by0=Infinity,bx1=-Infinity,by1=-Infinity;
-  hits.forEach(n=>{ const L=_lay[n.id], ny0=n.y+(L.bt||0);
-    bx0=Math.min(bx0,n.x); by0=Math.min(by0,ny0); bx1=Math.max(bx1,n.x+L.w); by1=Math.max(by1,ny0+L.h); });
-  const g={id:uid("grp"), x:Math.max(0,bx0-PAD), y:Math.max(0,by0-TOP), w:0, h:0, label:"Group",
+  const g={id:uid("grp"), x:0, y:0, w:0, h:0, label:"Group",
            members:hits.map(n=>n.id), showInfo:true, collapsed:false};
-  g.w=(bx1+PAD)-g.x; g.h=(by1+PAD)-g.y;
+  fitGroupBox(g);   // header + margins right on creation, same as a post-Tidy fit
   state.model.groups.push(g); annoDone(); render(); }
 
 /* COMMENT: click to drop a note, then double-click it to type */
@@ -3222,16 +3266,32 @@ function placeComment(ev){ ev.preventDefault(); const p=svgPt(ev);
 /* shared move / resize for both annotation kinds (groups move independently of nodes) */
 let annoDrag=null, _annoMoved=false;   // _annoMoved distinguishes a drag from a click-to-select
 function startAnnoMove(ev, ent){ if(!editable()) return; ev.preventDefault(); ev.stopPropagation(); const p=svgPt(ev);
-  _annoMoved=false; annoDrag={ent, mode:"move", ox:p.x-ent.x, oy:p.y-ent.y};
+  _annoMoved=false; annoDrag={ent, mode:"move", ox:p.x-ent.x, oy:p.y-ent.y, grp:Array.isArray(ent.members)};
   window.addEventListener("mousemove",onAnnoMove); window.addEventListener("mouseup",onAnnoUp); }
 function startAnnoResize(ev, ent){ if(!editable()) return; ev.preventDefault(); ev.stopPropagation(); const p=svgPt(ev);
-  _annoMoved=true; annoDrag={ent, mode:"resize", ox:p.x-(ent.x+ent.w), oy:p.y-(ent.y+ent.h)};
+  _annoMoved=true; annoDrag={ent, mode:"resize", ox:p.x-(ent.x+ent.w), oy:p.y-(ent.y+ent.h), grp:Array.isArray(ent.members)};
   window.addEventListener("mousemove",onAnnoMove); window.addEventListener("mouseup",onAnnoUp); }
 function onAnnoMove(ev){ if(!annoDrag) return; _annoMoved=true; const p=svgPt(ev), e=annoDrag.ent;
   if(annoDrag.mode==="move"){ e.x=Math.max(0,p.x-annoDrag.ox); e.y=Math.max(0,p.y-annoDrag.oy); }
   else { e.w=Math.max(60,p.x-annoDrag.ox-e.x); e.h=Math.max(40,p.y-annoDrag.oy-e.y); }
-  render(); }
-function onAnnoUp(){ window.removeEventListener("mousemove",onAnnoMove); window.removeEventListener("mouseup",onAnnoUp); annoDrag=null; }
+  render();
+  if(annoDrag.grp) highlightGroupCandidates(annoDrag.ent); }
+/* while a group box is dragged/resized, dim the map and light up the steps it now covers
+   (its current members stay lit) — same affordance as drawing a new group */
+function highlightGroupCandidates(grp){
+  const hit=new Set(groupHits(grp.x,grp.y,grp.x+grp.w,grp.y+grp.h).map(n=>n.id));
+  (grp.members||[]).forEach(id=>hit.add(id));
+  document.body.classList.add("anno-grouping");
+  $("#canvas").querySelectorAll("g.node[data-id]").forEach(g=>g.classList.toggle("in-group", hit.has(g.dataset.id))); }
+function onAnnoUp(){ window.removeEventListener("mousemove",onAnnoMove); window.removeEventListener("mouseup",onAnnoUp);
+  const d=annoDrag; annoDrag=null; document.body.classList.remove("anno-grouping");
+  // dropping a moved/resized group box absorbs any steps it now covers (additive — never drops members)
+  if(d && d.grp && _annoMoved){
+    const grp=d.ent, before=(grp.members||[]).length, set=new Set(grp.members||[]);
+    groupHits(grp.x,grp.y,grp.x+grp.w,grp.y+grp.h).forEach(n=>set.add(n.id));
+    grp.members=[...set];
+    if(grp.members.length!==before){ fitGroupBox(grp); render(); }   // re-hug to wrap the new step(s) with header room
+  } }
 function removeAnno(kind,id){ const a=state.model[kind]; const i=a.findIndex(x=>x.id===id); if(i>=0)a.splice(i,1); render(); }
 function annoDelHandle(cx,cy,onDel){ const dh=el("g",{class:"del-handle"});
   dh.appendChild(el("circle",{cx,cy,r:9}));
@@ -3244,6 +3304,13 @@ function plusHandle(cx,cy,onClick){ const h=el("g",{class:"plus-handle"});
   h.appendChild(el("circle",{cx,cy,r:9}));
   h.appendChild(el("line",{x1:cx-3.5,y1:cy,x2:cx+3.5,y2:cy}));
   h.appendChild(el("line",{x1:cx,y1:cy-3.5,x2:cx,y2:cy+3.5}));
+  h.addEventListener("mousedown",ev=>ev.stopPropagation());
+  h.addEventListener("click",ev=>{ ev.stopPropagation(); onClick(); }); return h; }
+/* a circular corner control carrying an icon glyph (reuses the .plus-handle hover styling) —
+   used for the group collapse/expand toggle, always drawn bottom-left */
+function iconHandle(cx,cy,iconId,onClick){ const h=el("g",{class:"plus-handle"});
+  h.appendChild(el("circle",{cx,cy,r:9}));
+  h.appendChild(useIc(iconId, cx-6, cy-6, 12, "#fff"));
   h.addEventListener("mousedown",ev=>ev.stopPropagation());
   h.addEventListener("click",ev=>{ ev.stopPropagation(); onClick(); }); return h; }
 function editGroupLabel(grp){ const svg=$("#canvas");
@@ -3272,25 +3339,35 @@ function animateNodes(targets, ms=280, done){
   _anim=anim; anim.raf=requestAnimationFrame(step);
 }
 /* shift everything at/right of x0 by dx (nodes + annotations) — makes room when a step expands */
-/* widen horizontal gaps so case-flow labels fit inside their bands — tight but measured.
-   Runs when the Case-flow view is switched on; verticals are allowed to overlap by design. */
-function ensureFlowSpacing(){
-  const m=state.model; if(!m||!m.nodes.length) return;
-  const r=rollup(); const demandV=r.cap?r.cap.demand:null;
+/* horizontal room each edge's rendered label needs between its two boxes. Mirrors the label
+   `parts` drawn in renderCanvas (branch name · split% · flow/day, gated on showFlow) so Tidy
+   and the Case-flow view reserve the same space. Horizontal right→left runs only. */
+function flowLabelNeeds(){
+  const m=state.model; const r=rollup();
+  const showFlow=(m.settings&&m.settings.showFlow)!==false;
+  const demandV=r.cap?r.cap.demand:null;
   const outCount={}; m.edges.forEach(e=>outCount[e.from]=(outCount[e.from]||0)+1);
   const byId=Object.fromEntries(m.nodes.map(n=>[n.id,n]));
   const items=[];
   m.edges.forEach(e=>{
     const a=byId[e.from], b=byId[e.to]; if(!a||!b||a.parentId||b.parentId) return;
     if((e.fromSide||"right")!=="right"||(e.toSide||"left")!=="left") return;   // horizontal runs only
-    if(b.x<=a.x) return;                                                       // loop-backs keep their curves
+    const branch=(outCount[e.from]||0)>1, share=r.edgeShare[e.id];
     const parts=[]; const name=(e.label||"").trim();
     if(name) parts.push(name);
-    if((outCount[e.from]||0)>1&&r.edgeShare[e.id]!=null) parts.push(`≈${Math.round(r.edgeShare[e.id]*100)}%`);
-    if(demandV!=null) parts.push(`${fmt((r.edgeFlow[e.id]||0)*demandV)}/day`);
+    if(showFlow && branch && share!=null) parts.push(`${e.splitPct==null?"≈":""}${Math.round(share*100)}%`);
+    else if(!showFlow && e.splitPct!=null) parts.push(`${e.splitPct}%`);
+    if(showFlow && demandV!=null) parts.push(`${fmt((r.edgeFlow[e.id]||0)*demandV)}/day`);
     if(!parts.length) return;
     items.push({a,b,need:measure(parts.join(" · "),`600 10.5px ${FONT_STACK}`)+36});
   });
+  return items;
+}
+/* widen horizontal gaps so case-flow labels fit inside their bands — tight but measured.
+   Runs when the Case-flow view is switched on; verticals are allowed to overlap by design. */
+function ensureFlowSpacing(){
+  const m=state.model; if(!m||!m.nodes.length) return;
+  const items=flowLabelNeeds().filter(it=>it.b.x>it.a.x);   // loop-backs keep their curves
   if(!items.length) return;
   items.sort((i,j)=>i.b.x-j.b.x);
   const nx={}; m.nodes.forEach(n=>{ if(!n.parentId) nx[n.id]=n.x; });
@@ -3368,6 +3445,18 @@ function autoArrange(){
     if(yCur[c]==null) yCur[c]=MARGIN_Y+(maxH-colH[c])/2;   // short columns centre vertically
     const top=yCur[c]; yCur[c]+=L.h+GAPY;
     targets.push({ent:n, x:snapG(colXs[c]), y:snapG(top-L.bt)}); });
+  // widen inter-column gaps so case-flow labels fit between boxes — same measure the
+  // Case-flow view uses, so Tidy no longer collapses room the labels need (avoids overlap)
+  { const needs=flowLabelNeeds();
+    if(needs.length){
+      const nxT={}; targets.forEach(t=>{ if(!t.ent.parentId) nxT[t.ent.id]=t.x; });
+      const items=needs.filter(it=>nxT[it.a.id]!=null&&nxT[it.b.id]!=null&&col[it.b.id]>col[it.a.id])
+                       .sort((i,j)=>nxT[i.b.id]-nxT[j.b.id]);
+      const shiftFrom=(x0,dx)=>{ for(const id in nxT) if(nxT[id]>=x0) nxT[id]+=dx; };
+      items.forEach(it=>{ const gap=nxT[it.b.id]-(nxT[it.a.id]+layOf(it.a).w);
+        if(gap<it.need) shiftFrom(nxT[it.b.id], Math.ceil((it.need-gap)/GRID)*GRID); });
+      targets.forEach(t=>{ if(nxT[t.ent.id]!=null) t.x=nxT[t.ent.id]; });
+    } }
   // reserve clearance above grouped boxes so each group's header card (title + stats)
   // fits without overlapping the first row — tidyGroups needs ~HEAD px above its members
   const HEAD_ROOM=104;
