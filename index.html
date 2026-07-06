@@ -368,6 +368,14 @@
   .memberlist{display:flex;flex-direction:column;gap:2px;max-height:240px;overflow:auto}
   .memberlist .checkrow{border-top:1px solid var(--line)}
   .memberlist .checkrow:first-child{border-top:0}
+  /* read-only member row: flow icon + label (membership is spatial, not toggled here) */
+  .memberitem{display:flex;align-items:center;gap:9px;padding:6px 2px;color:var(--ink);font-size:13px;border-top:1px solid var(--line)}
+  .memberitem:first-child{border-top:0}
+  .memberitem .mem-ic{width:15px;height:15px;flex:0 0 auto;stroke:var(--muted);fill:none}
+  .memberitem .mem-ic.mem-queue{stroke:var(--t-queue)}
+  .memberitem .mem-ic.mem-bot{stroke:var(--t-bot)}
+  .memberitem .mem-ic.mem-human{stroke:var(--t-human)}
+  .memberitem .ck-label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .field input,.field textarea,.field select{width:100%;background:var(--panel2);border:1px solid var(--line);
     color:var(--ink);border-radius:7px;padding:8px;font-size:13px;font-family:inherit}
   .field textarea{min-height:64px;resize:vertical}
@@ -461,6 +469,9 @@
   /* dragging/resizing a group box over steps → same "include" affordance as drawing a group */
   body.anno-grouping .node[data-id]{opacity:.5;transition:opacity .08s}
   body.anno-grouping .node[data-id].in-group{opacity:1}
+  /* held marquee selection: chosen steps stay lit, the rest dim until you click empty canvas */
+  body.has-selection:not(.anno-grouping) .node[data-id]{opacity:.5;transition:opacity .08s}
+  body.has-selection:not(.anno-grouping) .node[data-id].multi{opacity:1}
   /* ---- canvas cursors (select box / hand pan) ---- */
   body.tool-select #stage, body.tool-select #stage *{cursor:crosshair}
   body.tool-pan #stage, body.tool-pan #stage *{cursor:grab}
@@ -502,7 +513,13 @@
   .anchor{fill:var(--accent);stroke:#06202a;stroke-width:1.5;opacity:0;cursor:crosshair;transition:opacity .1s}
   .build .node:hover .anchor{opacity:.95}
   body.connecting .anchor{opacity:.85}
+  body.tool-connect .node .anchor{opacity:.9}   /* Connect tool: every port visible at once */
   .anchor:hover{stroke-width:2.5;opacity:1}
+  /* Connect tool: draggable endpoint handles to re-attach an existing arrow */
+  body.tool-connect #stage{cursor:crosshair}
+  .edge-end{fill:var(--panel);stroke:var(--accent);stroke-width:2.5;cursor:grab}
+  .edge-end:hover{fill:var(--accent)}
+  body.connecting .edge-end{cursor:grabbing}
   .del-handle{opacity:0;pointer-events:none;cursor:pointer;transition:opacity .1s}
   .build .node:hover .del-handle{opacity:1;pointer-events:all}
   .del-handle circle{fill:var(--nva);stroke:#2a0a04;stroke-width:1}
@@ -626,6 +643,10 @@
   <symbol id="ic-hand" viewBox="0 0 24 24" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
     <path d="M9 11V5.5a1.5 1.5 0 0 1 3 0V11M12 10.5V4.5a1.5 1.5 0 0 1 3 0V11M15 11V6a1.5 1.5 0 0 1 3 0v7.5c0 3.6-2.6 6.5-6.3 6.5-2.1 0-3.7-.9-4.9-2.5L4 13.5a1.6 1.6 0 0 1 2.6-1.8L9 14.5V8a1.5 1.5 0 0 1 3 0"/>
   </symbol>
+  <symbol id="ic-connect" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="5.5" cy="18.5" r="2.6"/><circle cx="18.5" cy="5.5" r="2.6"/>
+    <path d="M7.4 16.6 16.6 7.4"/>
+  </symbol>
 </svg>
 <header>
   <div class="brand" id="brandHome">Flow <span>Builder</span></div>
@@ -737,12 +758,13 @@
   <button data-add="start"><span class="swatch" style="background:#cdd9e6"></span>Start</button>
   <button data-add="end"><span class="swatch" style="background:#cdd9e6"></span>End</button>
   <span class="pb-sep"></span>
+  <span class="pb-label">Tools</span>
+  <button data-tool="pan" title="Move (default) — drag empty canvas to pan the map; drag a step to reposition it"><svg class="t-ic"><use href="#ic-hand"/></svg>Move</button>
+  <button data-tool="select" title="Selection box — drag across steps to select several, then drag one to move them together"><svg class="t-ic"><use href="#ic-select"/></svg>Select</button>
+  <button data-tool="connect" title="Connect — shows every connection point; drag a dot to wire two steps, or drag an arrow's end to re-attach it"><svg class="t-ic"><use href="#ic-connect"/></svg>Connect</button>
   <button data-tool="group" title="Draw a box around several steps to group and label them"><span class="swatch swatch-group"></span>Group</button>
   <button data-tool="comment" title="Drop a note anywhere on the map"><span class="swatch swatch-comment"></span>Comment</button>
-  <span class="pb-sep"></span>
-  <button data-tool="select" title="Selection box — drag to select several steps, then move them together"><svg class="t-ic"><use href="#ic-select"/></svg>Select</button>
-  <button data-tool="pan" title="Hand — drag to move the canvas around"><svg class="t-ic"><use href="#ic-hand"/></svg>Pan</button>
-  <span class="pb-hint">Drag boxes to arrange · drag empty space to select several · hover a box and drag a dot to connect (loops &amp; branches OK).</span>
+  <span class="pb-hint">Pan moves the map · switch to Select to lasso several steps · hover a box and drag a dot to connect (loops &amp; branches OK).</span>
   <button id="autoArrange" title="Snap boxes into neat columns — never touches your arrows">✨ Tidy</button>
   <button id="flowToggle" title="Show case volume and branch splits on the arrows — line thickness follows the flow">→ Case flow</button>
   <button id="simBtn" title="Watch a simulated day — cases flow through the map, pile up in queues, and overloads glow">▶ Simulate</button>
@@ -915,7 +937,8 @@ const state = {
   selectedIds: [],   // ids of marquee multi-selected nodes (for group move)
   zoom: 1,
   viewer: false,
-  tool: null,        // null | "group" | "comment" — armed annotation tool
+  tool: "pan",       // "pan" | "select" always-on base mode · "group" | "comment" one-shot tools
+  baseTool: "pan",   // last pan/select chosen — a one-shot tool reverts here when done
   ui: { openSecs: {} },   // which drawer sections are expanded — remembered across renders & node switches
   simming: false,    // a day-simulation is running — freezes all editing
 };
@@ -1319,6 +1342,7 @@ function render(){
   if(state.mode==="home"){ renderHome(); return; }
   if(!state.model) return;
   applyTheme(); applyTypeColors();
+  document.body.classList.toggle("has-selection",(state.selectedIds||[]).length>0);
   document.querySelectorAll("[data-cardview]").forEach(b=>b.classList.toggle("on",b.dataset.cardview===view()));
   { const ft=$("#flowToggle"); if(ft) ft.classList.toggle("tool-on",(state.model.settings&&state.model.settings.showFlow)!==false); }
   const r=rollup();
@@ -1980,6 +2004,7 @@ function renderCanvas(r){
   const maxEF=Math.max(1e-9,...m.edges.map(e=>eFlow[e.id]||0));
   const outCount={}; m.edges.forEach(e=>outCount[e.from]=(outCount[e.from]||0)+1);
   const labelLayer=el("g",{id:"edgeLabels"});   // appended AFTER the node loop → pills never hide under cards
+  const endLayer=el("g",{id:"edgeEnds"});       // Connect-tool endpoint handles, above the cards so they're grabbable
   const placedPills=[], seenBoundary=new Set();
   m.edges.forEach(e=>{
     // resolve endpoints through collapsed groups: a hidden member routes to its group card
@@ -2007,6 +2032,12 @@ function renderCanvas(r){
     svg.appendChild(ep);
     if(editable()){ const hit=el("path",{d,class:"edge-hit"});
       hit.addEventListener("click",ev=>{ev.stopPropagation(); selectEdge(e.id);}); svg.appendChild(hit); }
+    // Connect tool: grabbable endpoint handles (only when both ends are real, visible nodes)
+    if(editable() && state.tool==="connect" && aReal && bReal){
+      const mkEnd=(pt,which)=>{ const h=el("circle",{class:"edge-end",cx:pt.x,cy:pt.y,r:6});
+        h.addEventListener("mousedown",ev=>startReconnect(ev,e,which)); endLayer.appendChild(h); };
+      mkEnd(p1,"from"); mkEnd(p2,"to");
+    }
 
     /* one uniform label per edge, horizontal, riding inside the band */
     const branch=(outCount[e.from]||0)>1;
@@ -2484,6 +2515,7 @@ function renderCanvas(r){
     svg.appendChild(g);
   });
   svg.appendChild(labelLayer);   // edge pills above the cards — never hidden
+  svg.appendChild(endLayer);     // connector endpoint handles on top so they're grabbable
 
   // comments render last so they float above the flow
   (m.comments||[]).forEach(cm=>{
@@ -2521,11 +2553,12 @@ function renderCanvas(r){
   // a running simulation survives re-renders: its layer rides on top, paths are re-cached lazily
   if(_sim&&_sim.layer){ svg.appendChild(_sim.layer); _sim.pathsDirty=true; }
 
-  svg.onclick=()=>{ if(state.linkingFrom){ cancelLink(); } else if(!_connectJustFinished && !_marqueeJustFinished && !_annoJustFinished){ state.selectedIds=[]; selectNode(null); } };
+  svg.onclick=()=>{ if(state.linkingFrom){ cancelLink(); } else if(!_connectJustFinished && !_marqueeJustFinished && !_annoJustFinished && !_panJustFinished){ state.selectedIds=[]; selectNode(null); } };
   svg.onmousedown=ev=>{ if(ev.target!==svg) return;
     if(state.tool==="group"){ startGroupSel(ev); return; }
     if(state.tool==="comment"){ placeComment(ev); return; }
-    startMarquee(ev); };
+    if(state.tool==="select"){ startMarquee(ev); return; }
+    startPan(ev); };   // pan is the default base mode — drag empty canvas to move the map
 }
 
 
@@ -2929,12 +2962,14 @@ function renderGroupInspector(){
   const u=unit(), gr=groupRollup(grp);
   const accent=(getComputedStyle(document.body).getPropertyValue("--accent")||"#5ec6c6").trim();
   const cur=grp.color||"";
-  const boxes=state.model.nodes.filter(n=>n.type==="touch"||n.type==="wait");
-  const mem=new Set(grp.members||[]);
-  const memberRows = boxes.length
-    ? boxes.map(n=>`<label class="checkrow"><input type="checkbox" data-member="${n.id}" ${mem.has(n.id)?"checked":""}/>
-        <span class="ck-label">${esc(n.label||"Untitled")}</span></label>`).join("")
-    : `<div class="sub">No step or queue boxes yet.</div>`;
+  // read-only list of the boxes this group actually contains, in flow order (left→right).
+  // membership is set spatially (draw the box / drag it over steps), so it always stays contiguous.
+  const memberNodes=(grp.members||[]).map(id=>state.model.nodes.find(n=>n.id===id))
+    .filter(n=>n&&(n.type==="touch"||n.type==="wait")).sort((a,b)=>(a.x||0)-(b.x||0));
+  const memberRows = memberNodes.length
+    ? memberNodes.map(n=>`<div class="memberitem"><svg class="mem-ic mem-${KIND(n)}"><use href="#${ICON_FOR(n)}"/></svg>
+        <span class="ck-label">${esc(n.label||"Untitled")}</span></div>`).join("")
+    : `<div class="sub">No boxes in this group yet — draw the box around steps or drag it over them.</div>`;
   insp.innerHTML=`<div class="insp-head">
       <div class="insp-htop">
         <div class="insp-iconwell" style="--hue:${grp.color||"var(--accent)"}"><span>▢</span></div>
@@ -2958,7 +2993,7 @@ function renderGroupInspector(){
           <thead><tr><th>Turnaround (${u})</th><th>Touch</th><th>Wait</th></tr></thead>
           <tbody><tr><td>${fmt(gr.turnaround)}</td><td>${fmt(gr.touch)}</td><td>${fmt(gr.wait)}</td></tr></tbody></table>
       </div>
-      <div class="insp-sec"><h4>Boxes in this group</h4>
+      <div class="insp-sec"><h4>Boxes in this group <span class="h4note">· ${memberNodes.length}</span></h4>
         <div class="memberlist">${memberRows}</div>
       </div>
     </div>
@@ -2976,11 +3011,6 @@ function wireGroupInspector(grp){
   const gc=insp.querySelector("[data-gcolor]"); if(gc) gc.addEventListener("change",()=>{ grp.color=gc.value; render(); });
   const gcr=insp.querySelector("[data-gcolorreset]"); if(gcr) gcr.addEventListener("click",()=>{ delete grp.color; render(); });
   const gs=insp.querySelector("[data-gshow]"); if(gs) gs.addEventListener("change",()=>{ grp.showInfo=gs.checked; render(); });
-  insp.querySelectorAll("[data-member]").forEach(cb=>cb.addEventListener("change",()=>{
-    const id=cb.dataset.member; grp.members=grp.members||[];
-    if(cb.checked){ if(!grp.members.includes(id)) grp.members.push(id); }
-    else grp.members=grp.members.filter(x=>x!==id);
-    render(); }));
   const cl=insp.querySelector("#inspClose"); if(cl) cl.addEventListener("click",()=>selectNode(null));
   const del=insp.querySelector("#delGroup"); if(del) del.addEventListener("click",()=>{ removeAnno("groups",grp.id); selectNode(null); });
 }
@@ -3187,44 +3217,58 @@ function onMarqueeMove(ev){ if(!marquee) return; const p=svgPt(ev);
   const x=Math.min(marquee.x0,p.x), y=Math.min(marquee.y0,p.y), w=Math.abs(p.x-marquee.x0), h=Math.abs(p.y-marquee.y0);
   marquee.rect.setAttribute("x",x); marquee.rect.setAttribute("y",y);
   marquee.rect.setAttribute("width",w); marquee.rect.setAttribute("height",h);
-  if(w>3||h>3) marquee.moved=true; }
+  if(w>3||h>3) marquee.moved=true;
+  // live affordance: dim the map, light up the steps the box currently covers (same as a group draw)
+  const hit=new Set(groupHits(x,y,x+w,y+h).map(n=>n.id));
+  document.body.classList.add("anno-grouping");
+  $("#canvas").querySelectorAll("g.node[data-id]").forEach(g=>g.classList.toggle("in-group", hit.has(g.dataset.id))); }
 function onMarqueeUp(ev){ window.removeEventListener("mousemove",onMarqueeMove); window.removeEventListener("mouseup",onMarqueeUp);
+  document.body.classList.remove("anno-grouping");
   const m=marquee; marquee=null; if(m&&m.rect.parentNode) m.rect.parentNode.removeChild(m.rect);
-  if(!m||!m.moved){ if(state.tool==="select") setTool(null); return; }   // a click, not a drag — let svg.onclick clear
+  if(!m||!m.moved){ return; }   // a click, not a drag — let svg.onclick clear any held selection
   const p=svgPt(ev);
   const rx0=Math.min(m.x0,p.x), ry0=Math.min(m.y0,p.y), rx1=Math.max(m.x0,p.x), ry1=Math.max(m.y0,p.y);
-  const hits=[]; (state.model.nodes||[]).forEach(n=>{ if(n.parentId) return; const L=_lay[n.id]; if(!L) return;
-    const nx0=n.x, ny0=n.y+(L.bt||0), nx1=n.x+L.w, ny1=n.y+(L.bt||0)+L.h;   // box-intersection test
-    if(nx0<rx1 && nx1>rx0 && ny0<ry1 && ny1>ry0) hits.push(n.id); });
-  state.selectedIds=hits; state.selected=null;
-  if(state.tool==="select") setTool(null);              // drop the tool so the user can immediately drag the set to move it
+  state.selectedIds=groupHits(rx0,ry0,rx1,ry1).map(n=>n.id); state.selected=null;
+  // Select stays armed — the chosen steps hold full opacity (rest dimmed) until you click empty canvas
   _marqueeJustFinished=true; setTimeout(()=>{ _marqueeJustFinished=false; },0); // suppress the trailing svg click
   render(); }
 
-/* ---------- pan (hand tool): drag to scroll the stage ---------- */
-let pan=null;
+/* ---------- pan (default mode): drag empty canvas to scroll the stage ---------- */
+let pan=null, _panJustFinished=false;
 function startPan(ev){ ev.preventDefault();
   const stage=$("#stage");
-  pan={x:ev.clientX, y:ev.clientY, sl:stage.scrollLeft, st:stage.scrollTop};
+  pan={x:ev.clientX, y:ev.clientY, sl:stage.scrollLeft, st:stage.scrollTop, moved:false};
   document.body.classList.add("panning");
   window.addEventListener("mousemove",onPanMove); window.addEventListener("mouseup",onPanUp); }
 function onPanMove(ev){ if(!pan) return; const stage=$("#stage");
+  if(Math.abs(ev.clientX-pan.x)>2||Math.abs(ev.clientY-pan.y)>2) pan.moved=true;
   stage.scrollLeft = pan.sl - (ev.clientX - pan.x);
   stage.scrollTop  = pan.st - (ev.clientY - pan.y); }
 function onPanUp(){ window.removeEventListener("mousemove",onPanMove); window.removeEventListener("mouseup",onPanUp);
-  pan=null; document.body.classList.remove("panning"); }
+  const moved=pan&&pan.moved; pan=null; document.body.classList.remove("panning");
+  // a real pan drag: keep any held selection (suppress the trailing click that would clear it)
+  if(moved){ _panJustFinished=true; setTimeout(()=>{ _panJustFinished=false; },0); } }
 
 /* ---------- annotations: groups & comments ---------- */
 let _annoJustFinished=false;
 function annoDone(){ _annoJustFinished=true; setTimeout(()=>{ _annoJustFinished=false; },0); }
 function setTool(t){
-  state.tool = (state.tool===t) ? null : t;
+  // Move (pan) / Select / Connect are persistent base modes — one is always active (Move is default).
+  // Group & Comment are one-shot tools; passing null (or finishing one) reverts to the base mode.
+  const prev=state.tool;
+  if(t==="pan"||t==="select"||t==="connect"){ state.tool=t; state.baseTool=t; }
+  else if(t==="group"||t==="comment"){ state.tool=t; }
+  else { state.tool=state.baseTool||"pan"; }
   $("#paletteBar").querySelectorAll("[data-tool]").forEach(b=>b.classList.toggle("tool-on", b.dataset.tool===state.tool));
   document.body.classList.toggle("tool-group", state.tool==="group");
   document.body.classList.toggle("tool-comment", state.tool==="comment");
   document.body.classList.toggle("tool-select", state.tool==="select");
+  document.body.classList.toggle("tool-connect", state.tool==="connect");
   document.body.classList.toggle("tool-pan", state.tool==="pan");
-  if(state.tool){ state.selectedIds=[]; selectNode(null); }
+  // Connect/Group/Comment don't use a marquee selection — drop it. Connect also needs a re-render
+  // to draw (or, on exit, remove) the per-edge endpoint handles.
+  if(state.tool==="group"||state.tool==="comment"||state.tool==="connect"){ state.selectedIds=[]; selectNode(null); return; }
+  if(state.model && state.mode==="build" && (prev==="connect")!==(state.tool==="connect")) render();
 }
 
 /* GROUP: drag a box; nodes inside light up live; on release a padded box is drawn around them */
@@ -3275,22 +3319,30 @@ function onAnnoMove(ev){ if(!annoDrag) return; _annoMoved=true; const p=svgPt(ev
   if(annoDrag.mode==="move"){ e.x=Math.max(0,p.x-annoDrag.ox); e.y=Math.max(0,p.y-annoDrag.oy); }
   else { e.w=Math.max(60,p.x-annoDrag.ox-e.x); e.h=Math.max(40,p.y-annoDrag.oy-e.y); }
   render();
-  if(annoDrag.grp) highlightGroupCandidates(annoDrag.ent); }
-/* while a group box is dragged/resized, dim the map and light up the steps it now covers
-   (its current members stay lit) — same affordance as drawing a new group */
-function highlightGroupCandidates(grp){
+  if(annoDrag.grp) highlightGroupCandidates(annoDrag.ent, annoDrag.mode); }
+/* while a group box is dragged/resized, dim the map and light up the steps it will contain.
+   move is additive (current members stay lit); resize is authoritative — only steps the box
+   actually covers light up, so shrinking past a step visibly drops it. */
+function highlightGroupCandidates(grp, mode){
   const hit=new Set(groupHits(grp.x,grp.y,grp.x+grp.w,grp.y+grp.h).map(n=>n.id));
-  (grp.members||[]).forEach(id=>hit.add(id));
+  if(mode!=="resize") (grp.members||[]).forEach(id=>hit.add(id));
   document.body.classList.add("anno-grouping");
   $("#canvas").querySelectorAll("g.node[data-id]").forEach(g=>g.classList.toggle("in-group", hit.has(g.dataset.id))); }
 function onAnnoUp(){ window.removeEventListener("mousemove",onAnnoMove); window.removeEventListener("mouseup",onAnnoUp);
   const d=annoDrag; annoDrag=null; document.body.classList.remove("anno-grouping");
-  // dropping a moved/resized group box absorbs any steps it now covers (additive — never drops members)
   if(d && d.grp && _annoMoved){
-    const grp=d.ent, before=(grp.members||[]).length, set=new Set(grp.members||[]);
-    groupHits(grp.x,grp.y,grp.x+grp.w,grp.y+grp.h).forEach(n=>set.add(n.id));
-    grp.members=[...set];
-    if(grp.members.length!==before){ fitGroupBox(grp); render(); }   // re-hug to wrap the new step(s) with header room
+    const grp=d.ent, before=(grp.members||[]).slice();
+    if(d.mode==="resize"){
+      // resizing the box sets membership to exactly what it covers — steps left outside drop out
+      grp.members=groupHits(grp.x,grp.y,grp.x+grp.w,grp.y+grp.h).map(n=>n.id);
+    } else {
+      // moving the box absorbs any steps it now covers (additive — never drops members)
+      const set=new Set(grp.members||[]);
+      groupHits(grp.x,grp.y,grp.x+grp.w,grp.y+grp.h).forEach(n=>set.add(n.id));
+      grp.members=[...set];
+    }
+    const changed=grp.members.length!==before.length||grp.members.some(id=>!before.includes(id));
+    if(changed){ fitGroupBox(grp); render(); }   // re-hug to wrap the current members with header room
   } }
 function removeAnno(kind,id){ const a=state.model[kind]; const i=a.findIndex(x=>x.id===id); if(i>=0)a.splice(i,1); render(); }
 function annoDelHandle(cx,cy,onDel){ const dh=el("g",{class:"del-handle"});
@@ -3476,15 +3528,32 @@ function autoArrange(){
 let connectState=null, _connectJustFinished=false;
 function svgPt(ev){ const r=$("#canvas").getBoundingClientRect(),z=Z(),vb=$("#canvas").viewBox.baseVal;
   return {x:vb.x+(ev.clientX-r.left)/z, y:vb.y+(ev.clientY-r.top)/z}; }
-function startConnect(ev, n, side){
-  if(!editable()||state.tool) return;
-  ev.preventDefault(); ev.stopPropagation();             // don't start a node move
-  const p=portGeo(n,_lay[n.id],side);
-  connectState={fromId:n.id, fromSide:side, p};
+function beginConnectDrag(p){                            // shared temp-edge drag for new + reconnect
   document.body.classList.add("connecting");
   const temp=el("path",{class:"temp-edge",id:"tempEdge",d:`M${p.x},${p.y} L${p.x},${p.y}`});
   $("#canvas").appendChild(temp);
   window.addEventListener("mousemove",onConnectMove); window.addEventListener("mouseup",onConnectUp);
+}
+function startConnect(ev, n, side){
+  // works in the default Move mode and the dedicated Connect mode (not while select/group/comment are armed)
+  if(!editable()) return;
+  if(state.tool==="select"||state.tool==="group"||state.tool==="comment") return;
+  ev.preventDefault(); ev.stopPropagation();             // don't start a node move
+  const p=portGeo(n,_lay[n.id],side);
+  connectState={kind:"new", fromId:n.id, fromSide:side, p};
+  beginConnectDrag(p);
+}
+/* Connect tool: grab an existing arrow's end and re-attach it to another box (which = "from"|"to") */
+function startReconnect(ev, edge, which){
+  if(!editable()) return;
+  ev.preventDefault(); ev.stopPropagation();
+  const m=state.model;
+  const fixedId  = which==="from" ? edge.to : edge.from;               // the end that stays put
+  const fixedSide= which==="from" ? (edge.toSide||"left") : (edge.fromSide||"right");
+  const fn=m.nodes.find(x=>x.id===fixedId); if(!fn||!_lay[fixedId]) return;
+  const p=portGeo(fn,_lay[fixedId],fixedSide);
+  connectState={kind:"reconnect", which, edge, fixedId, p};
+  beginConnectDrag(p);
 }
 function onConnectMove(ev){ if(!connectState) return;
   const c=svgPt(ev), p=connectState.p;
@@ -3500,12 +3569,18 @@ function onConnectUp(ev){
   let toId=g && g.dataset.id;
   if(toId){ const tn=state.model.nodes.find(x=>x.id===toId);   // arrows never attach to a sub-step — bump to its parent frame
     if(tn && tn.parentId) toId=tn.parentId; }
-  if(toId && toId!==cs.fromId){
-    let toSide = elUnder.classList && elUnder.classList.contains("anchor") ? elUnder.getAttribute("data-side") : null;
-    if(!toSide){ const tn=state.model.nodes.find(x=>x.id===toId); const c=svgPt(ev); toSide=nearestSide(tn,_lay[toId],c.x,c.y); }
-    if(!state.model.edges.some(e=>e.from===cs.fromId&&e.to===toId&&e.fromSide===cs.fromSide&&e.toSide===toSide)){
-      state.model.edges.push({id:uid("e"),from:cs.fromId,to:toId,fromSide:cs.fromSide,toSide});
-      toast("Connected");
+  if(toId){
+    let side = elUnder.classList && elUnder.classList.contains("anchor") ? elUnder.getAttribute("data-side") : null;
+    if(!side){ const tn=state.model.nodes.find(x=>x.id===toId); const c=svgPt(ev); side=nearestSide(tn,_lay[toId],c.x,c.y); }
+    if(cs.kind==="new"){
+      if(toId!==cs.fromId && !state.model.edges.some(e=>e.from===cs.fromId&&e.to===toId&&e.fromSide===cs.fromSide&&e.toSide===side)){
+        state.model.edges.push({id:uid("e"),from:cs.fromId,to:toId,fromSide:cs.fromSide,toSide:side});
+        toast("Connected");
+      }
+    } else {   // reconnect: move the dragged end of an existing arrow to the new box/side
+      const e=cs.edge;
+      if(cs.which==="to"){ if(toId!==e.from){ e.to=toId; e.toSide=side; toast("Re-connected"); } }
+      else               { if(toId!==e.to){   e.from=toId; e.fromSide=side; toast("Re-connected"); } }
     }
   }
   _connectJustFinished=true; setTimeout(()=>_connectJustFinished=false,0);
@@ -3994,13 +4069,8 @@ $("#perSel").onchange=e=>{ state.period=e.target.value; render(); };
 $("#paletteBar").querySelectorAll("[data-add]").forEach(b=>b.addEventListener("click",()=>addNode(b.dataset.add,b.dataset.perf)));
 $("#paletteBar").querySelectorAll("[data-tool]").forEach(b=>b.addEventListener("click",()=>setTool(b.dataset.tool)));
 
-/* Pan / Select cursors intercept in capture phase so they win over node drag & annotation move,
-   wherever the press lands on the canvas. */
-$("#stage").addEventListener("mousedown", ev=>{
-  if(ev.button!==0) return;
-  if(state.tool==="pan"){ startPan(ev); ev.stopPropagation(); }
-  else if(state.tool==="select" && editable()){ startMarquee(ev); ev.stopPropagation(); }
-}, true);
+/* Pan & Select only act on empty canvas (svg.onmousedown), so pressing a node still moves it in
+   either mode — arranging steps never requires disarming the base tool. */
 
 /* zoom the build canvas */
 function setZoom(z){ state.zoom=Math.max(0.4,Math.min(2,Math.round(z*100)/100));
@@ -4064,7 +4134,9 @@ function deleteSelection(){
 }
 document.addEventListener("keydown",e=>{
   if(e.key==="Escape"){ if(state.simming){ stopSim(); return; }
-    closeMenus(); if(state.tool) setTool(null);
+    closeMenus();
+    if(state.tool==="group"||state.tool==="comment") setTool(null);   // cancel a one-shot tool → back to base
+    else if(state.selectedIds.length) selectNode(null);               // else drop a held marquee selection
     const ov=document.querySelector(".overlay.show"); if(ov) ov.classList.remove("show"); return; }
   const t=e.target;
   const typing = t && (t.tagName==="INPUT"||t.tagName==="TEXTAREA"||t.tagName==="SELECT"||t.isContentEditable);
