@@ -719,6 +719,8 @@
     <button class="btn" id="exportPng" title="Export this flow as a PNG image"><svg class="t-ic"><use href="#ic-image"/></svg>PNG</button>
     <button class="btn" id="exportPdf" title="Export this flow as a PDF document"><svg class="t-ic"><use href="#ic-doc"/></svg>PDF</button>
     <button class="btn" id="exportHtml" title="Make a read-only copy of this flow to hand to the team"><svg class="t-ic"><use href="#ic-share"/></svg>HTML</button>
+    <button class="btn" id="copyText" title="Copy a text version of this flow (with a built-in analysis prompt) to the clipboard"><svg class="t-ic"><use href="#ic-doc"/></svg>Copy text</button>
+    <button class="btn" id="exportText" title="Download a text version of this flow (with a built-in analysis prompt) as a .txt file"><svg class="t-ic"><use href="#ic-download"/></svg>Text file</button>
     <button class="btn" id="saveModel" title="Download this flow's blueprint as a design file (JSON) — for backup, or to move it to another machine (re-add via Import)."><svg class="t-ic"><use href="#ic-file"/></svg>Design file</button>
   </div>
   <button class="btn iconbtn" id="howData" title="How saving &amp; data work">ℹ</button>
@@ -3817,6 +3819,143 @@ function exportSheet(){
   toast(`Sheet for ${nodes.length} steps downloaded — fill it in, then Import sheet`);
 }
 
+/* ---------- export the flow as LLM-ready text (whole flow + stats + built-in analysis prompt) ---------- */
+function clsName(k){ return (T.cls[k]&&T.cls[k].name)||k; }   // VA→"Valued", NNVA→"Necessary", NVA→"Could remove", MIXED→"Mixed"
+function buildFlowText(){
+  const m=state.model;
+  if(!m){ toast("Add a step first"); return null; }
+  const steps=(m.nodes||[]).filter(n=>n.type==="touch"||n.type==="wait");
+  if(!steps.length){ toast("Add a step first"); return null; }
+  const r=rollup(), u=unit(), cap=r.cap||{}, q=r.qual||{};
+  const byId=Object.fromEntries(m.nodes.map(n=>[n.id,n]));
+  const num=v=>(v==null||isNaN(v))?null:fmt(v);          // formatted number, or null to drop the field
+  const L=[];
+
+  L.push(`# ${m.name||"Untitled flow"} — value stream (text export)`);
+  L.push(`A lean value-stream map: the "work" steps and "queues" (waits) an item passes through`);
+  L.push(`from start to delivery, with timing, capacity and value data for each step.`);
+  L.push("");
+  L.push("LEGEND");
+  L.push('- Touch time = hands-on working time per item; Wait = time an item sits in a queue.');
+  L.push('- Turnaround = touch + wait; Flow efficiency = touch ÷ turnaround (higher is better).');
+  L.push('- Capacity/day = most a step could do; Load = demand ÷ effective capacity (over 80% runs hot).');
+  L.push('- Value: Valued (customer would pay for it) / Necessary (compliance/risk, not valued) / Could remove (no value).');
+  L.push('- Rework % = share of cases bounced back to redo; RFT = right-first-time across the whole flow.');
+  L.push(`- Time unit for this flow: ${u}.  A "≈" marks an estimated (derived) number.`);
+  L.push("");
+
+  /* ---- whole-flow computed metrics ---- */
+  L.push("FLOW METRICS (computed)");
+  if(cap.demand!=null) L.push(`- Incoming demand: ${num(cap.demand)}/day`);
+  if(r.turnaround!=null) L.push(`- Turnaround: ${num(r.turnaround)} ${u}  (touch ${num(r.touch)} / wait ${num(r.wait)})`);
+  if(r.eff!=null) L.push(`- Flow efficiency: ${Math.round(r.eff*100)}%`);
+  if(cap.flowCap!=null){ let tail="";
+    if(cap.demand!=null){ const short=cap.demand-cap.flowCap;
+      tail = short>0.05 ? ` (vs ${num(cap.demand)} demand → short ${num(short)}/day)` : ` (vs ${num(cap.demand)} demand → keeping up)`; }
+    L.push(`- Can deliver: ${num(cap.flowCap)}/day${tail}`); }
+  if(r.flag){ const n=r.flag.node;
+    const desc = r.flag.kind==="load" ? `${Math.round((r.flag.load||0)*100)}% load`
+                                      : `${r.flag.derived?"≈":""}${num(r.flag.wait)} ${u} wait`;
+    L.push(`- Bottleneck: ${n.label} — ${desc}`); }
+  if(q.rft!=null) L.push(`- Right first time: ${Math.round(q.rft*100)}%`);
+  if(cap.lostToRework!=null) L.push(`- Lost to rework: ${num(cap.lostToRework)} hrs/day`);
+  if(r.unclassified>0) L.push(`- Unrated steps (no value set): ${r.unclassified}`);
+  L.push("");
+
+  /* ---- steps, in flow order ---- */
+  const order=flowWeights().order||[];
+  const ordered = order.length ? order.filter(n=>n.type==="touch"||n.type==="wait") : steps;
+  L.push("STEPS (in flow order)");
+  ordered.forEach((n,i)=>{
+    const mt=metricFor(n), per=(cap.per||{})[n.id];
+    if(n.type==="wait"){
+      L.push(`${i+1}. [QUEUE] ${n.label}`);
+      const seg=[];
+      if(mt.wip!=null) seg.push(`in queue (WIP) ${num(mt.wip)}`);
+      const waitBase = mt.wait!=null ? mt.wait : (r.dw||{})[n.id];
+      if(waitBase!=null) seg.push(`wait ${mt.wait==null?"≈":""}${num(waitBase)} ${u}`);
+      if(seg.length) L.push(`     ${seg.join(" · ")}`);
+    } else {
+      const isBot=n.performer==="bot";
+      const head=[`${i+1}. [${isBot?"BOT":"WORK"}] ${n.label}`];
+      if((n.owner||"").trim()) head.push(`${isBot?"runs on":"owner"}: ${n.owner.trim()}`);
+      head.push(`value: ${n.classification?clsName(n.classification):"unrated"}`);
+      L.push(head.join("  ·  "));
+      const seg=[];
+      if(mt.touch!=null) seg.push(`touch ${num(mt.touch)} ${u}`);
+      if(mt.capacity!=null){ const eff=mt.effCapacity!=null&&mt.effCapacity!==mt.capacity?` (eff ${num(mt.effCapacity)})`:"";
+        seg.push(`capacity ${mt.derivedCap?"≈":""}${num(mt.capacity)}/day${eff}`); }
+      if(per&&per.load!=null) seg.push(`load ${Math.round(per.load*100)}%`);
+      if(mt.rework!=null) seg.push(`rework ${num(mt.rework)}%`);
+      if(!isBot && n.people!=null) seg.push(`staffing ${num(n.people)}${n.hoursPerDay!=null?` × ${num(n.hoursPerDay)}h/day`:""}`);
+      if(seg.length) L.push(`     ${seg.join(" · ")}`);
+    }
+    if((n.valueNote||"").trim()) L.push(`     details: ${n.valueNote.trim()}`);
+  });
+  L.push("");
+
+  /* ---- connections (with branch splits) ---- */
+  if((m.edges||[]).length){
+    L.push("CONNECTIONS");
+    const outCount={}; m.edges.forEach(e=>{ outCount[e.from]=(outCount[e.from]||0)+1; });
+    m.edges.forEach(e=>{
+      const a=byId[e.from], b=byId[e.to]; if(!a||!b) return;
+      let line=`- ${a.label} → ${b.label}`;
+      if(e.splitPct!=null && outCount[e.from]>1) line+=`  (${e.splitPct}% of cases)`;
+      if((e.label||"").trim()) line+=`  [${e.label.trim()}]`;
+      L.push(line);
+    });
+    L.push("");
+  }
+
+  /* ---- groups ---- */
+  const groups=(m.groups||[]).filter(g=>(g.members||[]).length);
+  if(groups.length){
+    L.push("GROUPS");
+    groups.forEach(g=>{
+      const gv=groupValue(g), gr=groupRollup(g);
+      const val=gv.key?clsName(gv.key):"unrated";
+      L.push(`- ${g.label||"Group"}: ${g.members.length} steps [${val}] · turnaround ${num(gr.turnaround)} ${u}`);
+      if((g.valueNote||"").trim()) L.push(`    ${g.valueNote.trim()}`);
+    });
+    L.push("");
+  }
+
+  /* ---- built-in analysis prompt ---- */
+  L.push("---");
+  L.push("ANALYSIS TASK");
+  L.push("You are a lean / operations analyst. The value stream above is described step by");
+  L.push("step with its measured numbers. Analyse it and return:");
+  L.push("1. The top 1–3 constraints (bottlenecks / overloaded roles) and what each costs.");
+  L.push("2. The biggest sources of waste — waiting, rework, and Could-remove work — with the hours involved.");
+  L.push("3. Flow-efficiency read: how much of the journey is waiting vs. real work, and where.");
+  L.push("4. Three concrete quick wins, each citing the specific step(s) and numbers, with the");
+  L.push("   expected impact (e.g. lift to flow efficiency or throughput).");
+  L.push("Be specific and quantitative; reference steps by name and the figures given.");
+
+  return L.join("\n");
+}
+function copyFlowText(){
+  const txt=buildFlowText(); if(txt==null) return;
+  const done=()=>toast("Flow text copied");
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(txt).then(done).catch(()=>fallbackCopy(txt,done));
+  } else fallbackCopy(txt,done);
+}
+function fallbackCopy(txt,done){   // non-secure / file:// contexts have no async clipboard API
+  const ta=document.createElement("textarea"); ta.value=txt;
+  ta.style.position="fixed"; ta.style.opacity="0"; document.body.appendChild(ta);
+  ta.select();
+  try{ document.execCommand("copy") ? done() : toast("Copy failed — use Text file"); }
+  catch(e){ toast("Copy failed — use Text file"); }
+  document.body.removeChild(ta);
+}
+function exportFlowText(){
+  const txt=buildFlowText(); if(txt==null) return;
+  download((state.model.name||"flow").replace(/\s+/g,"-")+".txt", txt, "text/plain");
+  toast("Text exported");
+}
+
 /* ============================================================
    EXPORT TO PICTURE  (PNG / PDF) — title + map + full analysis
    ============================================================ */
@@ -4270,6 +4409,8 @@ $("#themeBtn").onclick=e=>{ e.stopPropagation(); const open=$("#themePop").class
 $("#exportJpg").onclick=()=>exportPicture("jpg");
 $("#exportPng").onclick=()=>exportPicture("png");
 $("#exportPdf").onclick=()=>exportPicture("pdf");
+$("#copyText").onclick=copyFlowText;
+$("#exportText").onclick=exportFlowText;
 document.addEventListener("click",e=>{ if(!e.target.closest(".themewrap")) closeMenus(); });
 /* delete whatever is selected (single node/edge/group or a marquee set) */
 function deleteSelection(){
