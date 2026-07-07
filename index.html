@@ -10,7 +10,7 @@
   :root{
     --bg:#0f1720; --panel:#16212e; --panel2:#1d2a3a; --line:#2b3a4d;
     --ink:#e8eef5; --muted:#9fb0c3; --faint:#6b7d92;
-    --va:#34c38f; --nnva:#5a8dee; --nva:#f06548; --wait:#7b8aa0;
+    --va:#34c38f; --nnva:#5a8dee; --nva:#f06548; --wait:#7b8aa0; --vmixed:#9b8cff;
     --warn:#f7b84b; --accent:#4cc9f0; --shadow:0 6px 24px rgba(0,0,0,.35);
     --font:-apple-system,'SF Pro Text','Segoe UI Variable Text','Segoe UI',Roboto,system-ui,Arial,sans-serif;
     /* node type hues (queue / human / bot) — tuned for the dark canvas */
@@ -451,6 +451,11 @@
   .node .nlabel{font-weight:600;font-size:13px}
   .node .nmeta{fill:var(--muted);font-size:11px}
   .node .nowner{fill:var(--faint);font-size:9px;letter-spacing:.6px;font-weight:700}
+  /* inline-edit affordance on value cards: transparent until the card is hovered, brightens per-zone */
+  .build .node .vedit{fill:var(--accent);fill-opacity:0;stroke:var(--accent);stroke-opacity:0;stroke-width:1;stroke-dasharray:3 2;cursor:text;transition:fill-opacity .1s,stroke-opacity .1s}
+  .build .node:hover .vedit{fill-opacity:.06}
+  .build .node .vedit:hover{fill-opacity:.12;stroke-opacity:.8}
+  .build .node .vedit.pick{cursor:pointer}
   .node.selected .nbox{stroke:var(--accent);stroke-width:2.5}
   .node.multi .nbox{stroke:var(--accent);stroke-width:2}
   .marquee{fill:var(--accent);fill-opacity:.08;stroke:var(--accent);stroke-width:1;stroke-dasharray:4 3;pointer-events:none}
@@ -507,6 +512,9 @@
   .build .comment .ctext.editing{pointer-events:auto;cursor:text}
   .glabel-edit{width:100%;box-sizing:border-box;background:var(--panel2);border:1px solid var(--accent);color:var(--ink);
     border-radius:5px;font-family:var(--font);font-size:13px;font-weight:700;padding:2px 6px;outline:none}
+  /* on-card inline editors (title / details) — transient, spawned only while editing */
+  .gnote-edit{width:100%;height:100%;box-sizing:border-box;background:var(--panel2);border:1px solid var(--accent);color:var(--ink);
+    border-radius:5px;font-family:var(--font);font-size:11px;font-weight:400;line-height:1.3;padding:3px 6px;outline:none;resize:none}
   .anno-resize{fill:var(--accent);stroke:#06202a;stroke-width:1;opacity:0;cursor:nwse-resize;transition:opacity .1s}
   .build .group:hover .anno-resize,.build .comment:hover .anno-resize{opacity:.9}
   .comment .anno-resize{fill:#caa83f}
@@ -635,6 +643,10 @@
   </symbol>
   <symbol id="ic-val-waste" viewBox="0 0 24 24" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
     <circle cx="6.5" cy="7" r="2.4"/><circle cx="6.5" cy="17" r="2.4"/><path d="M8.7 8.6 20 17M8.7 15.4 20 7"/>
+  </symbol>
+  <symbol id="ic-val-mixed" viewBox="0 0 24 24" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M8.5 3.2l2 4.1 4.5.65-3.25 3.15.77 4.5L8.5 13.4l-4 2.1.77-4.5L2 7.95l4.5-.65L8.5 3.2Z"/>
+    <path d="M16.5 12l1.4 2.85 3.15.46-2.28 2.2.54 3.14L16.5 19.2l-2.8 1.45.54-3.14-2.28-2.2 3.15-.46L16.5 12Z"/>
   </symbol>
   <!-- tool logos (raster, full-colour) — shown top-right of a step; travel into exports -->
   <symbol id="ic-tool-uipath" viewBox="0 0 64 64"><image width="64" height="64" href="data:image/png;base64,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"/></symbol>
@@ -904,7 +916,8 @@ const T = {
   classTitle:"Value",
   cls:{ VA:{name:"Valued",        def:"Customers would pay for this."},
         NNVA:{name:"Necessary",   def:"Required — compliance or risk — but not valued directly."},
-        NVA:{name:"Could remove", def:"Adds no value; a candidate to cut."} },
+        NVA:{name:"Could remove", def:"Adds no value; a candidate to cut."},
+        MIXED:{name:"Mixed",      def:"Members span more than one value type."} },
   capEmpty:"Set incoming work on the Start step and people on your steps to see capacity.",
   qualEmpty:"No rework data yet — add a Rework % in a step's Setup panel."
 };
@@ -1349,6 +1362,18 @@ function rollup(){
   const qual={rft: rcount?rft:null, count:rcount, worst};
   return {path, flow, touch, wait, turnaround, eff, waits, bottleneck, flag, unclassified, cap, qual, dw,
           visits, edgeFlow, edgeShare, qOut};
+}
+/* aggregate value classification for a group's member steps (queues carry no value).
+   key: a single VA/NNVA/NVA when members agree, "MIXED" when they differ, null when none are rated.
+   counts: per-classification tallies for the breakdown tooltip. */
+function groupValue(grp){
+  const byId=Object.fromEntries(state.model.nodes.map(n=>[n.id,n]));
+  const counts={}; let rated=0;
+  (grp.members||[]).forEach(id=>{ const n=byId[id];
+    if(n && n.type==="touch" && n.classification){ counts[n.classification]=(counts[n.classification]||0)+1; rated++; } });
+  const keys=Object.keys(counts);
+  const key = keys.length===0 ? null : keys.length===1 ? keys[0] : "MIXED";
+  return {key, counts, rated};
 }
 /* flow-weighted Turnaround / Touch / Wait totals for a group's member boxes only */
 function groupRollup(grp){
@@ -1894,7 +1919,8 @@ const SEVC      = {calm:{c:"var(--va)",  bg:"rgba(52,195,143,.15)"},
                    warn:{c:"var(--warn)",bg:"rgba(247,184,75,.15)"},
                    hot: {c:"var(--nva)", bg:"rgba(240,101,72,.18)"}};
 const sevOf     = share => share>=0.30 ? "hot" : share>=0.15 ? "warn" : "calm";
-const VAL_IC    = {VA:"ic-val-value", NNVA:"ic-val-necessary", NVA:"ic-val-waste"};
+const VAL_IC    = {VA:"ic-val-value", NNVA:"ic-val-necessary", NVA:"ic-val-waste", MIXED:"ic-val-mixed"};
+const VAL_COLOR = {VA:"var(--va)", NNVA:"var(--nnva)", NVA:"var(--nva)", MIXED:"var(--vmixed)"};
 const TOOL_IC   = {uipath:"ic-tool-uipath", copilot:"ic-tool-copilot", excel:"ic-tool-excel"};
 const TOOL_NAME = {uipath:"UiPath", copilot:"Copilot", excel:"Excel"};
 /* place a symbol from the library at (x,y), sized & coloured (CSS vars resolve via style) */
@@ -2233,29 +2259,46 @@ function renderCanvas(r){
       }
     } else if(L.kind==="card" && view()==="value"){ // value / Lean lens: the waste-hunting view
       const isQ=n.type==="wait", hue=typeHue(n);
-      const CC={VA:"var(--va)",NNVA:"var(--nnva)",NVA:"var(--nva)"};
-      const bandC = isQ ? "var(--wait)" : (n.classification?CC[n.classification]:"var(--faint)");
+      const bandC = isQ ? "var(--wait)" : (n.classification?VAL_COLOR[n.classification]:"var(--faint)");
       g.appendChild(el("rect",{class:"nbox",x:0,y:bt,width:w,height:L.h,rx:14,fill:col.fill,stroke:hue,"stroke-width":1.5}));
       decorateDecision(g,n,L,hue,bt);
-      g.appendChild(el("rect",{x:2,y:bt+10,width:4,height:L.h-20,rx:2,fill:bandC}));
       const WELL=26;
       g.appendChild(el("rect",{x:12,y:bt+12,width:WELL,height:WELL,rx:7,fill:hue}));
       g.appendChild(useIc(ICON_FOR(n), 16, bt+16, WELL-8, "#0f1720"));
       let ty=bt+25; L.titleLines.forEach(ln=>{ g.appendChild(txt(TITLE_X,ty,ln,"nlabel")); ty+=LBL_LH; });
+      // inline-edit hit zone helper (editable mode only) — sits over a field, blocks drag, opens an editor on click
+      const zone=(zx,zy,zw,zh,extra,on)=>{ if(!editable()) return;
+        const rr=el("rect",{class:"vedit"+(extra?" "+extra:""),x:zx,y:zy,width:Math.max(24,zw),height:zh,rx:6});
+        rr.addEventListener("mousedown",ev=>ev.stopPropagation());
+        rr.addEventListener("click",ev=>{ ev.stopPropagation(); on(); });
+        if(extra==="pick"){ const tip=el("title"); tip.textContent="Click to cycle: Valued → Necessary → Could remove"; rr.appendChild(tip); }
+        g.appendChild(rr); };
+      // value chip cycles through the three ratings on click (unrated starts at Valued)
+      const cycleValue=nn=>{ const order=["VA","NNVA","NVA"]; nn.classification=order[(order.indexOf(nn.classification)+1)%3]; render(); };
+      // title (all value cards): click to rename in place
+      zone(TITLE_X-6, bt+12, w-TITLE_X, (L.titleLines.length>1?LBL_LH+18:22), "", ()=>editCardField({
+        x:n.x+TITLE_X-6, y:n.y+bt+12, w:w-TITLE_X, h:(L.titleLines.length>1?38:24),
+        value:n.label, placeholder:"Step name", onCommit:v=>{ n.label=v||undefined; } }));
       if(isQ){
-        g.appendChild(txt(12,bt+82,"WAITING — NO VALUE ADDED","",{fill:"var(--wait)","font-size":"10.5","font-weight":"800","letter-spacing":".5"}));
+        g.appendChild(txt(12,bt+61,"WAITING — NO VALUE ADDED","",{fill:"var(--wait)","font-size":"10.5","font-weight":"800","letter-spacing":".5"}));
         { const dwq=r.dw?r.dw[n.id]:null, wv=mt.wait!=null?mt.wait:dwq;
-          g.appendChild(txt(12,bt+102, wv!=null?`Items sit here ${mt.wait==null?"≈":""}${fmt(wv)} ${unit()} on average`:"No wait data yet","nmeta")); }
+          g.appendChild(txt(12,bt+80, wv!=null?`Items sit here ${mt.wait==null?"≈":""}${fmt(wv)} ${unit()} on average`:"No wait data yet","nmeta")); }
       } else if(n.classification){
-        g.appendChild(useIc(VAL_IC[n.classification],12,bt+70,16,bandC));
-        g.appendChild(txt(34,bt+82,T.cls[n.classification].name.toUpperCase(),"",{fill:bandC,"font-size":"11","font-weight":"800","letter-spacing":".5"}));
+        g.appendChild(useIc(VAL_IC[n.classification],12,bt+50,16,bandC));
+        const vname=T.cls[n.classification].name.toUpperCase();
+        g.appendChild(txt(34,bt+61,vname,"",{fill:bandC,"font-size":"11","font-weight":"800","letter-spacing":".5"}));
+        zone(8, bt+47, 26+measure(vname,`800 11px ${FONT_STACK}`), 20, "pick", ()=>cycleValue(n));
         const note=(n.valueNote||"").trim();
-        const lines=note?wrapText(note, w-24, F_META).slice(0,2):[];
-        if(lines.length){ let ny=bt+100; lines.forEach(l=>{ g.appendChild(txt(12,ny,l,"nmeta")); ny+=14; }); }
-        else g.appendChild(txt(12,bt+100,"No details yet","nmeta",{"font-style":"italic"}));
+        const lines=note?wrapText(note, w-24, F_META).slice(0,3):[];
+        if(lines.length){ let ny=bt+80; lines.forEach(l=>{ g.appendChild(txt(12,ny,l,"nmeta")); ny+=14; }); }
+        else g.appendChild(txt(12,bt+80,"No details yet","nmeta",{"font-style":"italic"}));
+        zone(8, bt+70, w-16, L.h-84, "", ()=>editCardField({
+          x:n.x+8, y:n.y+bt+70, w:w-16, h:L.h-84, multiline:true,
+          value:n.valueNote, placeholder:"Add details — what happens in this step", onCommit:v=>{ n.valueNote=v||undefined; } }));
       } else {
-        g.appendChild(txt(12,bt+82,"⚠ UNRATED","",{fill:"var(--warn)","font-size":"11","font-weight":"800","letter-spacing":".5"}));
-        g.appendChild(txt(12,bt+100,"Not yet rated","nmeta"));
+        g.appendChild(txt(12,bt+61,"⚠ UNRATED","",{fill:"var(--warn)","font-size":"11","font-weight":"800","letter-spacing":".5"}));
+        g.appendChild(txt(12,bt+80,"Click to rate this step","nmeta"));
+        zone(8, bt+47, 90, 20, "pick", ()=>cycleValue(n));
       }
       const tstr = isQ ? (mt.wait!=null?`${fmt(mt.wait)} ${unit()}`:"") : (mt.touch!=null?`${fmt(mt.touch)} ${unit()}`:"");
       if(tstr) g.appendChild(txt(w-12,bt+L.h-10,tstr,"nmeta",{"text-anchor":"end"}));
@@ -2518,6 +2561,38 @@ function renderCanvas(r){
     const WELL=26;
     g.appendChild(el("rect",{x:12,y:bt+12,width:WELL,height:WELL,rx:7,fill:hue}));
     g.appendChild(useIc("ic-group", 16, bt+16, WELL-8, "#0f1720"));
+    if(view()==="value"){
+      // Value lens: a step-like value card — derived value (read-only) + editable group details
+      const gv=groupValue(grp), bandC = gv.key ? VAL_COLOR[gv.key] : "var(--faint)";
+      const titleLines=wrapText(grp.label||"Group", w-TITLE_X-14, F_LABEL).slice(0,2);
+      let ty=bt+25; titleLines.forEach(ln=>{ g.appendChild(txt(TITLE_X,ty,ln,"nlabel")); ty+=LBL_LH; });
+      if(gv.key){
+        g.appendChild(useIc(VAL_IC[gv.key],12,bt+50,16,bandC));
+        const vname=T.cls[gv.key].name.toUpperCase();
+        const vt=txt(34,bt+61,vname,"",{fill:bandC,"font-size":"11","font-weight":"800","letter-spacing":".5"});
+        const tip=el("title"); tip.textContent=Object.entries(gv.counts).map(([k,c])=>`${c} ${T.cls[k].name}`).join(" · "); vt.appendChild(tip);
+        g.appendChild(vt);
+        // faint origin note so it's clear the value is derived (not pickable) from the steps inside
+        g.appendChild(txt(34+measure(vname,`800 11px ${FONT_STACK}`)+8, bt+61, "· from steps inside","",{fill:"var(--faint)","font-size":"9","font-style":"italic"}));
+      } else {
+        g.appendChild(txt(12,bt+61,"⚠ UNRATED","",{fill:"var(--warn)","font-size":"11","font-weight":"800","letter-spacing":".5"}));
+      }
+      const note=(grp.valueNote||"").trim();
+      const lines=note?wrapText(note, w-24, F_META).slice(0,3):[];
+      if(lines.length){ let ny=bt+80; lines.forEach(l=>{ g.appendChild(txt(12,ny,l,"nmeta")); ny+=14; }); }
+      else g.appendChild(txt(12,bt+80, gv.key?"Add details for this group":"Rate the steps inside to set the group's value","nmeta",{"font-style":"italic"}));
+      if(editable()){
+        const zone=(zx,zy,zw,zh,on)=>{ const rr=el("rect",{class:"vedit",x:zx,y:zy,width:Math.max(24,zw),height:zh,rx:6});
+          rr.addEventListener("mousedown",ev=>ev.stopPropagation());
+          rr.addEventListener("click",ev=>{ ev.stopPropagation(); on(); }); g.appendChild(rr); };
+        zone(TITLE_X-6, bt+12, w-TITLE_X, (titleLines.length>1?LBL_LH+18:22), ()=>editCardField({
+          x:grp.cx+TITLE_X-6, y:grp.cy+bt+12, w:w-TITLE_X, h:(titleLines.length>1?38:24),
+          value:grp.label, placeholder:"Group name", onCommit:v=>{ grp.label=v||"Group"; } }));
+        zone(8, bt+70, w-16, L.h-84, ()=>editCardField({
+          x:grp.cx+8, y:grp.cy+bt+70, w:w-16, h:L.h-84, multiline:true,
+          value:grp.valueNote, placeholder:"Add details for this group", onCommit:v=>{ grp.valueNote=v||undefined; } }));
+      }
+    } else {
     // "N steps" count pill, top-right
     g.appendChild(el("rect",{x:w-64,y:bt+13,width:54,height:18,rx:6,fill:hue}));
     g.appendChild(txt(w-37,bt+26,`${gr.count} steps`,"",{fill:"#0f1720","font-size":"9.5","font-weight":"800","text-anchor":"middle"}));
@@ -2550,6 +2625,7 @@ function renderCanvas(r){
       const rx=midX+12;
       dnum(rx,"STEPS",String(gr.count),"","capacity");
       drow(rx,0,"Bottleneck",gr.containsBottleneck?"yes":"—",gr.containsBottleneck?"var(--nva)":null);
+    }
     }
     if(editable()){
       g.appendChild(annoDelHandle(w, bt, ()=>removeAnno("groups",grp.id)));
@@ -3033,6 +3109,11 @@ function renderGroupInspector(){
         <label class="checkrow"><input type="checkbox" data-gshow ${grp.showInfo!==false?"checked":""}/>
           <span class="ck-label">Show title &amp; metrics on canvas</span></label>
       </div>
+      <div class="insp-sec"><h4>${T.classTitle} <span class="h4note">· value derived from members</span></h4>
+        <div class="field"><label>Details</label>
+          <textarea data-gnote placeholder="What this group of steps does">${esc(grp.valueNote||"")}</textarea>
+        </div>
+      </div>
       <div class="insp-sec"><h4>Totals <span class="h4note">· members, flow-weighted</span></h4>
         <table class="gmetrics" style="width:100%">
           <thead><tr><th>Turnaround (${u})</th><th>Touch</th><th>Wait</th></tr></thead>
@@ -3056,6 +3137,7 @@ function wireGroupInspector(grp){
   const gc=insp.querySelector("[data-gcolor]"); if(gc) gc.addEventListener("change",()=>{ grp.color=gc.value; render(); });
   const gcr=insp.querySelector("[data-gcolorreset]"); if(gcr) gcr.addEventListener("click",()=>{ delete grp.color; render(); });
   const gs=insp.querySelector("[data-gshow]"); if(gs) gs.addEventListener("change",()=>{ grp.showInfo=gs.checked; render(); });
+  const gn=insp.querySelector("[data-gnote]"); if(gn) gn.addEventListener("change",()=>{ grp.valueNote=gn.value.trim()||undefined; render(); });
   const cl=insp.querySelector("#inspClose"); if(cl) cl.addEventListener("click",()=>selectNode(null));
   const del=insp.querySelector("#delGroup"); if(del) del.addEventListener("click",()=>{ removeAnno("groups",grp.id); selectNode(null); });
 }
@@ -3419,6 +3501,25 @@ function editGroupLabel(grp){ const svg=$("#canvas");
   inp.addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); inp.blur(); }
     else if(e.key==="Escape"){ inp.value=grp.label||""; inp.blur(); } }); }
 
+/* transient inline editor spawned over a value-card field (title single-line / details multiline).
+   Coords are absolute canvas units; commit → onCommit(trimmed) + render() (which removes the editor). */
+function editCardField({x,y,w,h,value,multiline,placeholder,onCommit}){
+  const svg=$("#canvas");
+  const fo=el("foreignObject",{x,y,width:Math.max(60,w),height:Math.max(20,h)});
+  const inp=document.createElement(multiline?"textarea":"input");
+  if(!multiline) inp.type="text";
+  inp.value=value||""; inp.className=multiline?"gnote-edit":"glabel-edit";
+  if(placeholder) inp.placeholder=placeholder;
+  fo.appendChild(inp); svg.appendChild(fo); inp.focus(); if(!multiline) inp.select();
+  let done=false;
+  const finish=save=>{ if(done) return; done=true; if(save) onCommit(inp.value.trim()); render(); };
+  inp.addEventListener("blur",()=>finish(true));
+  inp.addEventListener("mousedown",e=>e.stopPropagation());
+  inp.addEventListener("keydown",e=>{ e.stopPropagation();
+    if(e.key==="Enter" && (!multiline || !e.shiftKey)){ e.preventDefault(); finish(true); }
+    else if(e.key==="Escape"){ e.preventDefault(); finish(false); } });
+}
+
 /* ---------- animated layout moves: rAF tween of model coords (nodes, groups, comments) ---------- */
 let _anim=null;
 function animateNodes(targets, ms=280, done){
@@ -3738,6 +3839,7 @@ function buildExportSVG(){
     line:cssVar("--line")||"#2b3a4d", ink:cssVar("--ink")||"#e8eef5", muted:cssVar("--muted")||"#9fb0c3",
     faint:cssVar("--faint")||"#6b7d92", accent:cssVar("--accent")||"#4cc9f0", grid:cssVar("--grid")||"#1b2738",
     va:cssVar("--va")||"#34c38f", nva:cssVar("--nva")||"#f06548", warn:cssVar("--warn")||"#f7b84b",
+    nnva:cssVar("--nnva")||"#5a8dee", vmixed:cssVar("--vmixed")||"#9b8cff", wait:cssVar("--wait")||"#7b8aa0",
     tq:cssVar("--t-queue"), th:cssVar("--t-human"), tb:cssVar("--t-bot"),
     term:cssVar("--term")||"#2a3543", termLine:cssVar("--term-line")||"#cdd9e6" };
   const symbols=document.querySelector("body>svg[aria-hidden]").innerHTML;   // inline the icon library
@@ -3788,7 +3890,7 @@ function buildExportSVG(){
     lx+=16+lab.length*6.6+22; });
   g+=`</g>`;
 
-  const styleVars=`--bg:${C.bg};--panel:${C.panel};--panel2:${C.panel2};--line:${C.line};--ink:${C.ink};--muted:${C.muted};--faint:${C.faint};--accent:${C.accent};--grid:${C.grid};--va:${C.va};--nva:${C.nva};--warn:${C.warn};--t-queue:${C.tq};--t-human:${C.th};--t-bot:${C.tb};--term:${C.term};--term-line:${C.termLine}`;
+  const styleVars=`--bg:${C.bg};--panel:${C.panel};--panel2:${C.panel2};--line:${C.line};--ink:${C.ink};--muted:${C.muted};--faint:${C.faint};--accent:${C.accent};--grid:${C.grid};--va:${C.va};--nva:${C.nva};--nnva:${C.nnva};--vmixed:${C.vmixed};--wait:${C.wait};--warn:${C.warn};--t-queue:${C.tq};--t-human:${C.th};--t-bot:${C.tb};--term:${C.term};--term-line:${C.termLine}`;
   const css=`text{font-family:${FONT_STACK};fill:var(--ink);font-variant-numeric:tabular-nums}
     .nlabel{font-weight:600;font-size:13px}.nmeta{fill:var(--muted);font-size:11px}.elabel{fill:var(--muted);font-size:11px}
     .eflow{font-size:10.5px;font-weight:600;paint-order:stroke;stroke:var(--bg);stroke-width:3.5px;stroke-linejoin:round}
