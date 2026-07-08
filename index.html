@@ -531,6 +531,10 @@
   .note-picker .np-plate{fill:var(--panel);stroke:var(--line);filter:drop-shadow(0 3px 8px rgba(0,0,0,.3))}
   .note-picker .np-chip{cursor:pointer}
   .note-picker .np-chip:hover rect{filter:brightness(1.08)}
+  .note-badge{cursor:pointer}
+  .note-badge text{pointer-events:none}
+  /* dragging a note over a step: attach affordance */
+  .node.drop-target .nbox{stroke-width:3}
   .glabel-edit{width:100%;box-sizing:border-box;background:var(--panel2);border:1px solid var(--accent);color:var(--ink);
     border-radius:5px;font-family:var(--font);font-size:13px;font-weight:700;padding:2px 6px;outline:none}
   /* on-card inline editors (title / details) — transient, spawned only while editing */
@@ -2041,7 +2045,12 @@ const WASTE_SUBS={
   inventory:      {label:"Backlog",        ic:"ic-nt-inventory"},
   motion:         {label:"Motion",         ic:"ic-nt-motion"}
 };
+const NOTE_SEV  = {frustration:3, waste:2, idea:1, note:0};   // badge tie-break: louder pain wins
 const noteType  = c => NOTE_TYPES[c.type||"note"] || NOTE_TYPES.note;
+function dominantNoteType(notes){
+  const counts={}; notes.forEach(c=>{ const t=NOTE_TYPES[c.type]?c.type:"note"; counts[t]=(counts[t]||0)+1; });
+  return Object.keys(counts).sort((a,b)=>(counts[b]-counts[a])||(NOTE_SEV[b]-NOTE_SEV[a]))[0]||"note";
+}
 const noteIc    = c => c.type==="waste" && WASTE_SUBS[c.subtype] ? WASTE_SUBS[c.subtype].ic : noteType(c).ic;
 const noteLabel = c => c.type==="waste" && WASTE_SUBS[c.subtype]
   ? `WASTE · ${WASTE_SUBS[c.subtype].label.toUpperCase()}` : noteType(c).label.toUpperCase();
@@ -2310,6 +2319,10 @@ function renderCanvas(r){
       bg.appendChild(tip); g.appendChild(bg);
     }
   };
+
+  // attached notes indexed once per render (badge + stack lookups stay O(1) per node)
+  const notesByNode=new Map();
+  (m.comments||[]).forEach(c=>{ if(c.nodeId){ const a=notesByNode.get(c.nodeId)||[]; a.push(c); notesByNode.set(c.nodeId,a); } });
 
   m.nodes.forEach(n=>{
     if(hidden.has(n.id)) return;   // member of a collapsed group — not drawn while collapsed
@@ -2700,6 +2713,12 @@ function renderCanvas(r){
         chip.addEventListener("click",ev=>{ ev.stopPropagation(); toggleExpand(n.id); });
         g.appendChild(chip);
       }
+    }
+
+    // attached-notes badge — top-left corner, every lens; NOT editable-gated (viewers open stacks)
+    if(L.kind==="card" && showNotes()){
+      const ns=notesByNode.get(n.id);
+      if(ns && ns.length) g.appendChild(noteBadgeEl(n,L,ns));
     }
 
     // connection handles (4 dots) — editing only; sub-steps carry no arrows of their own
@@ -3346,6 +3365,10 @@ function deleteNode(id){ const m=state.model, n=m.nodes.find(x=>x.id===id);
   if(n && n.parentId){ const p=m.nodes.find(x=>x.id===n.parentId);   // a sub-step signs out of its parent
     if(p && p.children){ p.children=p.children.filter(c=>c!==id);
       if(!p.children.length){ delete p.children; delete p.expanded; } } }
+  // notes on a deleted step detach and land where the step was — the observation outlives the step
+  (m.comments||[]).forEach(c=>{ if(doomed.has(c.nodeId)){ const dn=m.nodes.find(x=>x.id===c.nodeId);
+    if(dn){ c.x=dn.x; c.y=dn.y; } delete c.nodeId; } });
+  doomed.forEach(did=>state._notesOpen.delete(did));
   m.nodes=m.nodes.filter(x=>!doomed.has(x.id));
   m.edges=m.edges.filter(e=>!doomed.has(e.from)&&!doomed.has(e.to)); selectNode(null); }
 function duplicateNode(id){
@@ -3648,12 +3671,12 @@ function noteCardEl(cm, x, y, w, h, opts){
     ph.style.fill=NT.ink; ph.style.opacity=".55"; ph.textContent="Click to type…"; g.appendChild(ph);
   }
   if(editable()){
-    box.addEventListener("mousedown",ev=> opts.mini ? startNoteDetach(ev,cm) : startAnnoMove(ev,cm));
-    box.addEventListener("dblclick",ev=>{ ev.stopPropagation(); editNoteText(cm,x,y,w,h,headH); });
+    // drag anywhere on the card (the group, so edit zones don't block it); a clean click edits
+    g.addEventListener("mousedown",ev=> opts.mini ? startNoteDetach(ev,cm) : startAnnoMove(ev,cm));
+    g.addEventListener("dblclick",ev=>{ ev.stopPropagation(); editNoteText(cm,x,y,w,h,headH); });
     const zone=(zx,zy,zw,zh,tip,cls,on)=>{
       const r=el("rect",{class:"vedit"+(cls?" "+cls:""),x:zx,y:zy,width:zw,height:zh,rx:5,fill:"transparent"});
-      r.addEventListener("mousedown",ev=>ev.stopPropagation());
-      r.addEventListener("click",ev=>{ ev.stopPropagation(); on(); });
+      r.addEventListener("click",ev=>{ ev.stopPropagation(); if(_annoMoved) return; on(); });
       const t=el("title"); t.textContent=tip; r.appendChild(t);
       g.appendChild(r); };
     zone(x+4,y+headH+2,w-8,h-headH-6,"Edit note",null,()=>editNoteText(cm,x,y,w,h,headH));
@@ -3674,9 +3697,12 @@ function editNoteText(cm,x,y,w,h,headH){
     placeholder:"Type a note…",onCommit:v=>{ cm.text=v; scheduleSave(); }});
 }
 
-/* COMMENT: click to drop a note → type-picker chips appear, then the text editor */
+/* COMMENT: click to drop a note → type-picker chips appear, then the text editor.
+   Dropping on a step attaches the note to it (badge + stack) instead of floating. */
 function placeComment(ev){ ev.preventDefault(); const p=svgPt(ev);
   const c={id:uid("cmt"), x:Math.max(0,p.x-100), y:Math.max(0,p.y-60), w:200, h:120, text:"", type:"note"};
+  const hit=groupHits(p.x,p.y,p.x,p.y).find(n=>n.type==="touch"||n.type==="wait");
+  if(hit){ c.nodeId=hit.id; state._notesOpen.add(hit.id); }
   state.model.comments.push(c); setTool(null);
   state._notePick={cid:c.id, stage:"type", thenEdit:true};
   annoDone(); render(); }
@@ -3723,7 +3749,8 @@ function finishNotePick(cm){
 /* shared move / resize for both annotation kinds (groups move independently of nodes) */
 let annoDrag=null, _annoMoved=false;   // _annoMoved distinguishes a drag from a click-to-select
 function startAnnoMove(ev, ent){ if(!editable()) return; ev.preventDefault(); ev.stopPropagation(); const p=svgPt(ev);
-  _annoMoved=false; annoDrag={ent, mode:"move", ox:p.x-ent.x, oy:p.y-ent.y, grp:Array.isArray(ent.members)};
+  _annoMoved=false; annoDrag={ent, mode:"move", ox:p.x-ent.x, oy:p.y-ent.y, grp:Array.isArray(ent.members),
+    note:!Array.isArray(ent.members) && (state.model.comments||[]).includes(ent)};
   window.addEventListener("mousemove",onAnnoMove); window.addEventListener("mouseup",onAnnoUp); }
 function startAnnoResize(ev, ent){ if(!editable()) return; ev.preventDefault(); ev.stopPropagation(); const p=svgPt(ev);
   _annoMoved=true; annoDrag={ent, mode:"resize", ox:p.x-(ent.x+ent.w), oy:p.y-(ent.y+ent.h), grp:Array.isArray(ent.members)};
@@ -3735,7 +3762,11 @@ function onAnnoMove(ev){ if(!annoDrag) return; _annoMoved=true; const p=svgPt(ev
   if(annoDrag.mode==="move"){ e.x=Math.max(0,sn(p.x-annoDrag.ox)); e.y=Math.max(0,sn(p.y-annoDrag.oy)); }
   else { e.w=Math.max(60,sn(p.x-annoDrag.ox-e.x)); e.h=Math.max(40,sn(p.y-annoDrag.oy-e.y)); }
   render();
-  if(annoDrag.grp) highlightGroupCandidates(annoDrag.ent, annoDrag.mode); }
+  if(annoDrag.grp) highlightGroupCandidates(annoDrag.ent, annoDrag.mode);
+  if(annoDrag.note && annoDrag.mode==="move"){ annoDrag.px=p.x; annoDrag.py=p.y;
+    // dragging a note over a step lights it up — drop to attach
+    const hit=groupHits(p.x,p.y,p.x,p.y).find(n=>n.type==="touch"||n.type==="wait");
+    $("#canvas").querySelectorAll("g.node[data-id]").forEach(g=>g.classList.toggle("drop-target", !!hit&&g.dataset.id===hit.id)); } }
 /* while a group box is dragged/resized, dim the map and light up the steps it will contain.
    move is additive (current members stay lit); resize is authoritative — only steps the box
    actually covers light up, so shrinking past a step visibly drops it. */
@@ -3759,6 +3790,13 @@ function onAnnoUp(){ window.removeEventListener("mousemove",onAnnoMove); window.
     }
     const changed=grp.members.length!==before.length||grp.members.some(id=>!before.includes(id));
     if(changed){ fitGroupBox(grp); render(); }   // re-hug to wrap the current members with header room
+  }
+  // a note dropped on a step attaches to it; the stack opens so it visibly isn't lost
+  if(d && d.note && d.mode==="move" && _annoMoved && d.px!=null){
+    const hit=groupHits(d.px,d.py,d.px,d.py).find(n=>n.type==="touch"||n.type==="wait");
+    if(hit){ d.ent.nodeId=hit.id; state._notesOpen.add(hit.id);
+      toast(`Note attached to “${hit.label||"step"}”`); annoDone(); }
+    render();
   } }
 function removeAnno(kind,id){ const a=state.model[kind]; const i=a.findIndex(x=>x.id===id); if(i>=0)a.splice(i,1); render(); }
 function annoDelHandle(cx,cy,onDel){ const dh=el("g",{class:"del-handle"});
@@ -3767,6 +3805,30 @@ function annoDelHandle(cx,cy,onDel){ const dh=el("g",{class:"del-handle"});
   dh.appendChild(el("line",{x1:cx+3.5,y1:cy-3.5,x2:cx-3.5,y2:cy+3.5}));
   dh.addEventListener("mousedown",ev=>ev.stopPropagation());
   dh.addEventListener("click",ev=>{ ev.stopPropagation(); onDel(); }); return dh; }
+/* corner badge on a step carrying attached notes — dominant-type icon + count sitting on the
+   top-left corner like a notification dot; click fans the note stack out (works in viewer too) */
+function noteBadgeEl(n, L, notes){
+  const bt=L.bt||0, tk=dominantNoteType(notes), NT=NOTE_TYPES[tk];
+  const many=notes.length>1, bw=many?34:20;
+  const g=el("g",{class:"note-badge"});
+  const r=el("rect",{x:-10,y:bt-10,width:bw,height:20,rx:10});
+  r.style.fill=NT.line; r.style.stroke="rgba(0,0,0,.3)";
+  g.appendChild(r);
+  g.appendChild(useIc(NT.ic, -8, bt-7, 14, "#fff"));
+  if(many){ const t=el("text",{x:9,y:bt+3.8,"font-size":"10","font-weight":"800"});
+    t.style.fill="#fff"; t.textContent=String(notes.length); g.appendChild(t); }
+  const counts={}; notes.forEach(c=>{ const k=NOTE_TYPES[c.type]?c.type:"note"; counts[k]=(counts[k]||0)+1; });
+  const tip=el("title");
+  tip.textContent=`${notes.length} note${many?"s":""} — `+
+    Object.keys(counts).map(k=>`${counts[k]} ${NOTE_TYPES[k].label.toLowerCase()}`).join(", ")+" (click to open)";
+  g.appendChild(tip);
+  g.addEventListener("mousedown",ev=>ev.stopPropagation());
+  g.addEventListener("click",ev=>{ ev.stopPropagation();
+    if(state._notesOpen.has(n.id)) state._notesOpen.delete(n.id); else state._notesOpen.add(n.id);
+    render(); });
+  return g;
+}
+
 /* a "+" corner control (bottom-right of a card): convert a step into a group, or expand/collapse one */
 function plusHandle(cx,cy,onClick){ const h=el("g",{class:"plus-handle"});
   h.appendChild(el("circle",{cx,cy,r:9}));
