@@ -494,6 +494,9 @@
   body.has-selection:not(.anno-grouping) .node[data-id].multi{opacity:1}
   /* ---- canvas cursors (select box / hand pan) ---- */
   body.tool-select #stage, body.tool-select #stage *{cursor:crosshair}
+  /* hovering an already-selected step in Select mode → move affordance (drag to reposition) */
+  body.tool-select #stage .node.selected, body.tool-select #stage .node.selected *,
+  body.tool-select #stage .node.multi, body.tool-select #stage .node.multi *{cursor:move}
   body.tool-pan #stage, body.tool-pan #stage *{cursor:grab}
   body.tool-pan.panning #stage, body.tool-pan.panning #stage *{cursor:grabbing}
   .group .gbox{fill:var(--accent);fill-opacity:.05;stroke:var(--accent);stroke-opacity:.55;stroke-width:1.5;stroke-dasharray:6 4;rx:14}
@@ -1990,11 +1993,26 @@ function useIc(id, x, y, size, color){
   return u;
 }
 
+/* the key number on a terminal pill: Start = requests arriving per day (editable input),
+   End = cases actually completed per day (min of demand and the flow's ceiling). */
+function pillMetric(n, r){
+  const cap=(r&&r.cap)||{};
+  if(n.type==="start"){
+    const d=state.model.settings&&state.model.settings.demand;
+    return {eyebrow:"REQUESTS IN", value:(d!=null&&d!=="")?+d:null, unit:"/day", editable:true};
+  }
+  const demand=cap.demand, flowCap=cap.flowCap;
+  let v=null;
+  if(demand!=null && flowCap!=null) v=Math.min(demand,flowCap);
+  else if(flowCap!=null) v=flowCap;
+  else if(demand!=null) v=demand;
+  return {eyebrow:"COMPLETED", value:v, unit:"/day", editable:false};
+}
 /* every work/queue node is the SAME uniform card; start/end stay terminal pills */
 function nodeLayout(n){
   if(n.type==="start"||n.type==="end"){
     const lines=wrapText(n.label, 150-20, F_LABEL);
-    const h=Math.max(NODE_H, 18+lines.length*LBL_LH);
+    const h=Math.max(NODE_H+22, 14+lines.length*LBL_LH+42);   // extra room for the key-metric row
     return {w:150, h, lines, kind:"pill"};
   }
   const mt=metricFor(n), VD=VIEW_DIMS[view()];
@@ -2258,9 +2276,36 @@ function renderCanvas(r){
       chip.addEventListener("click",ev=>{ ev.stopPropagation(); toggleExpand(n.id); });
       g.appendChild(chip);
     } else if(L.kind==="pill"){
-      g.appendChild(el("rect",{class:"nbox",x:0,y:bt,width:w,height:L.h,rx:Math.min(L.h,NODE_H)/2,fill:col.fill,stroke:col.stroke,"stroke-width":1.5}));
-      let by=bt+L.h/2 - (L.lines.length*LBL_LH)/2 + 12;
+      g.appendChild(el("rect",{class:"nbox",x:0,y:bt,width:w,height:L.h,rx:24,fill:col.fill,stroke:col.stroke,"stroke-width":1.5}));
+      let by=bt+22;   // label sits at the top; the key metric anchors the base
       L.lines.forEach(ln=>{ g.appendChild(txt(w/2,by,ln,"nlabel",{"text-anchor":"middle"})); by+=LBL_LH; });
+      // key metric: Start = requests in / day (editable), End = cases completed / day (derived)
+      const pm=pillMetric(n,r);
+      const divY=bt+14+L.lines.length*LBL_LH+4;
+      g.appendChild(el("line",{x1:24,y1:divY,x2:w-24,y2:divY,stroke:col.stroke,"stroke-opacity":"0.35","stroke-width":1}));
+      g.appendChild(txt(w/2,divY+14,pm.eyebrow,"nowner",{"text-anchor":"middle"}));
+      const NUMF=`800 16px ${FONT_STACK}`, UF=`600 10px ${FONT_STACK}`;
+      const numY=divY+31;
+      if(pm.value!=null){
+        const vs=fmt(pm.value), nw=measure(vs,NUMF), uw=pm.unit?measure(pm.unit,UF)+3:0, sx=w/2-(nw+uw)/2;
+        g.appendChild(txt(sx+nw/2,numY,vs,"",{"font-size":"16","font-weight":"800","text-anchor":"middle",fill:"var(--ink)"}));
+        if(uw) g.appendChild(txt(sx+nw+3,numY,pm.unit,"nmeta",{"font-size":"10"}));
+      } else {
+        g.appendChild(txt(w/2,numY,editable()&&pm.editable?"＋ set":"—","nmeta",
+          {"text-anchor":"middle","font-size":"12",fill:"var(--faint)"}));
+      }
+      // inline editor for the Start requests figure
+      if(editable() && pm.editable){
+        const zy=divY+4, zh=28;
+        const rr=el("rect",{class:"vedit",x:14,y:zy,width:w-28,height:zh,rx:8});
+        rr.addEventListener("mousedown",ev=>ev.stopPropagation());
+        rr.addEventListener("click",ev=>{ ev.stopPropagation();
+          editCardField({x:n.x+14,y:n.y+zy,w:w-28,h:zh,value:pm.value!=null?String(pm.value):"",placeholder:"e.g. 40",
+            onCommit:val=>{ if(!state.model.settings) state.model.settings={};
+              state.model.settings.demand = val===""?undefined:(isNaN(+val)?state.model.settings.demand:+val); }}); });
+        const tip=el("title"); tip.textContent="Requests arriving per day — click to edit"; rr.appendChild(tip);
+        g.appendChild(rr);
+      }
     } else if(L.kind==="card" && view()==="compact"){ // compact lens: icon + name only
       const isQ=n.type==="wait", hue=typeHue(n);
       g.appendChild(el("rect",{class:"nbox",x:0,y:bt,width:w,height:L.h,rx:12,fill:col.fill,stroke:hue,"stroke-width":1.5}));
