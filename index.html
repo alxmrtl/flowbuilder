@@ -944,7 +944,7 @@ const METRICS_SPEC = {
     wip:         {l:"In queue",          c:"capacity", u:"cases",   d:"Items sitting in a queue right now."},
     capacity:    {l:"Capacity",          c:"capacity", u:"/day",    d:"The most a step could complete in a day."},
     effCapacity: {l:"Effective capacity",c:"capacity", u:"/day",    d:"Capacity after rework takes its bite."},
-    pace:        {l:"Pace",              c:"capacity", u:"/day",    d:"Cases a step actually completes per day."},
+    pace:        {l:"Output",            c:"capacity", u:"/day",    d:"Cases a step actually completes per day."},
     load:        {l:"Load",              c:"capacity", u:"%",       d:"Demand on a step ÷ its effective capacity."},
     flowCap:     {l:"Can deliver",       c:"capacity", u:"/day",    d:"The whole flow’s ceiling — the slowest step sets it."},
     ownerLoad:   {l:"Load by role",      c:"capacity", u:"%",       d:"Hours of work each role faces vs hours they’re staffed."},
@@ -2422,47 +2422,73 @@ function renderCanvas(r){
         g.appendChild(el("rect",{x:tx,y:ty,width:TW,height:TW,rx:7,fill:"#ffffff",stroke:"var(--line)","stroke-width":1}));
         g.appendChild(useIc(TOOL_IC[n.tool], tx+3, ty+3, TW-6));
       }
-      // owner eyebrow (small all-caps, above the title) — all card types
+      // inline-edit hit zone (editable mode only) — mirrors the Value lens: a .vedit rect that
+      // blocks drag and opens an editor / tooltip on click
+      const zone=(zx,zy,zw,zh,on,tip)=>{ if(!editable()) return;
+        const rr=el("rect",{class:"vedit",x:zx,y:zy,width:Math.max(24,zw),height:zh,rx:6});
+        rr.addEventListener("mousedown",ev=>ev.stopPropagation());
+        rr.addEventListener("click",ev=>{ ev.stopPropagation(); on(); });
+        if(tip){ const t=el("title"); t.textContent=tip; rr.appendChild(t); }
+        g.appendChild(rr); };
+      const editField=(zx,zy,zw,zh,value,onCommit,ph,ml)=>zone(zx,zy,zw,zh,()=>editCardField({
+        x:n.x+zx, y:n.y+zy, w:zw, h:zh, value, multiline:ml, placeholder:ph, onCommit }), "Click to edit");
+      // owner eyebrow (small all-caps, above the title) — editable, with a "+ owner" hint when empty
       const ownerStr=(n.owner||"").trim();
       if(ownerStr){ const ot=truncToWidth(ownerStr.toUpperCase(), w-TITLE_X-30, F_META);
         g.appendChild(txt(TITLE_X,bt+20,ot,"nowner")); }
-      // title (max 2 lines) — nudged down when an owner eyebrow is present
-      let ty = ownerStr ? bt+34 : bt+25;
+      else if(editable()){ g.appendChild(txt(TITLE_X,bt+20,"+ OWNER","nowner",{"fill-opacity":"0.5"})); }
+      editField(TITLE_X-4, bt+10, Math.min(w-TITLE_X, 150), 13, n.owner||"", v=>{ n.owner=v||undefined; }, "Owner / team");
+      // title (max 2 lines) — nudged down when an owner eyebrow is present (always in edit mode, for the hint)
+      let ty = (ownerStr||editable()) ? bt+34 : bt+25;
       L.titleLines.forEach(ln=>{ g.appendChild(txt(TITLE_X,ty,ln,"nlabel")); ty+=LBL_LH; });
+      editField(TITLE_X-6, bt+24, w-TITLE_X, (L.titleLines.length>1?LBL_LH+18:22), n.label||"", v=>{ n.label=v||undefined; }, "Step name");
 
       // ---- two metric columns: a primary number + the minor metrics that explain where it comes from ----
       const NUMF=`800 21px ${FONT_STACK}`;
       const padL=12, midX=Math.round(w/2), colTop=bt+64, colW=midX-padL-12;
       g.appendChild(el("line",{x1:midX,y1:colTop-2,x2:midX,y2:bt+L.h-12,stroke:"var(--line)","stroke-width":1}));
-      // primary: tiny Speed/Capacity/Quality glyph + all-caps eyebrow + 21px number (+ unit)
-      const drawNum=(x,label,numStr,unitStr,numColor,cat)=>{
+      // primary: tiny Speed/Capacity/Quality glyph + all-caps eyebrow + 21px number (+ unit).
+      // `calc` (tooltip text) marks a derived, read-only number — rendered quieter (lighter
+      // weight + reduced opacity) than the editable inputs, with a hover explainer.
+      const drawNum=(x,label,numStr,unitStr,numColor,cat,calc)=>{
         let lx=x;
         if(cat){ g.appendChild(useIc(METRICS_SPEC.categories[cat].icon, x, colTop-4.5, 9, `var(--cat-${cat})`)); lx=x+13; }
         g.appendChild(txt(lx,colTop+4,truncToWidth(label,midX-padL-(cat?28:14),F_META),"nowner"));
-        g.appendChild(txt(x,colTop+26,numStr,"",{"font-size":"21","font-weight":"800",fill:numColor||"var(--ink)"}));
+        const num=txt(x,colTop+26,numStr,"",{"font-size":"21","font-weight":calc?"600":"800",fill:numColor||"var(--ink)","fill-opacity":calc?"0.72":"1"});
+        if(calc){ const t=el("title"); t.textContent=calc; num.appendChild(t); }
+        g.appendChild(num);
         if(unitStr){ const nw=measure(numStr,NUMF);
           g.appendChild(txt(x+nw+5,colTop+26,unitStr,"nmeta",{"font-size":"10"})); }
       };
       // minor "key ···· value" row beneath a primary — the driver metrics, small, with a faint dotted leader
       const F_ROW=`10px ${FONT_STACK}`, F_ROWB=`700 10px ${FONT_STACK}`, rowY0=colTop+44, rowH=12.5;
-      const drawRow=(colX,i,key,val,valColor)=>{
-        const y=rowY0+i*rowH, vs=String(val);
+      // opts.edit={value,ph,commit} → value becomes inline-editable; opts.calc=tooltip → derived,
+      // shown quieter (regular weight + reduced opacity) with a hover explainer
+      const drawRow=(colX,i,key,val,valColor,opts)=>{
+        const y=rowY0+i*rowH, vs=String(val), o=opts||{}, vw=measure(vs, o.calc?F_ROW:F_ROWB);
         g.appendChild(txt(colX,y,key,"",{"font-size":"10",fill:"var(--faint)"}));
-        g.appendChild(txt(colX+colW,y,vs,"",{"font-size":"10","font-weight":"700","text-anchor":"end",fill:valColor||"var(--muted)"}));
-        const x1=colX+measure(key,F_ROW)+4, x2=colX+colW-measure(vs,F_ROWB)-4;
+        const vt=txt(colX+colW,y,vs,"",{"font-size":"10","font-weight":o.calc?"400":"700","text-anchor":"end",fill:valColor||"var(--muted)","fill-opacity":o.calc?"0.68":"1"});
+        if(o.calc){ const t=el("title"); t.textContent=o.calc; vt.appendChild(t); }
+        g.appendChild(vt);
+        const x1=colX+measure(key,F_ROW)+4, x2=colX+colW-vw-4;
         if(x2-x1>6) g.appendChild(el("line",{x1,y1:y-3,x2,y2:y-3,stroke:"var(--line)","stroke-width":1,"stroke-dasharray":"1 2.5"}));
+        if(o.edit) editField(colX, y-10, colW, 13, o.edit.value, o.edit.commit, o.edit.ph);
       };
       const rowPct = p => p==null?"—":(p<1?"<1%":Math.round(p)+"%");
+      // an inline numeric editor for a raw input field (blank when unset; ignores non-numeric)
+      const numEdit=(field,ph)=>({value:n[field]!=null?String(n[field]):"", ph, commit:v=>{ n[field]=v===""?undefined:(isNaN(+v)?n[field]:+v); }});
+      const measured = !!(n.stepId && rowsFor(n.stepId).length);   // backed by imported data → inputs are read-only
 
       // LEFT = primary quantity/rate + its drivers
       if(isQ){
-        drawNum(padL,ML("wip").toUpperCase(), mt.wip!=null?fmt(mt.wip):"—","cases", mt.wip!=null?null:"var(--faint)","capacity");
+        drawNum(padL,ML("wip").toUpperCase(), mt.wip!=null?fmt(mt.wip):"—","cases", mt.wip!=null?null:"var(--faint)","capacity", measured?"Averaged from imported data — edit at the source":null);
+        if(!measured) editField(padL-4, colTop-8, colW, 34, n.wip!=null?String(n.wip):"", v=>{ n.wip=v===""?undefined:(isNaN(+v)?n.wip:+v); }, "Items in queue");
         const dmd=(state.model.settings&&state.model.settings.demand);
         const vv=(r.visits&&r.visits[n.id])||1;
         const arriving=dmd!=null?dmd*vv:null;
         const clears=(r.qOut&&r.qOut[n.id]!=null)?r.qOut[n.id]:null;
-        drawRow(padL,0,"Arriving",arriving!=null?fmt(arriving)+"/d":"—");
-        drawRow(padL,1,"Clears",clears!=null?fmt(clears)+"/d":"—",clears!=null?"var(--ink)":"var(--muted)");
+        drawRow(padL,0,"Arriving",arriving!=null?fmt(arriving)+"/d":"—",null,{calc:"Cases reaching this queue each day — incoming work × how often a case passes here."});
+        drawRow(padL,1,"Clears",clears!=null?fmt(clears)+"/d":"—",clears!=null?"var(--ink)":"var(--muted)",{calc:"How fast the next step can drain this queue."});
       } else {
         // pace + load come from the metric web when it can derive them (demand × visits ÷ people × hours)
         const pc=(r.cap&&r.cap.per&&r.cap.per[n.id])||null;
@@ -2470,7 +2496,7 @@ function renderCanvas(r){
         const capV=mt.effCapacity!=null?mt.effCapacity:mt.capacity;
         const load=pc&&pc.load!=null?Math.max(0,pc.load):((tp!=null&&capV!=null&&capV>0)?Math.max(0,tp/capV):null);
         const lc=load==null?"var(--faint)":SEVC[load>=0.8?"hot":load>=0.6?"warn":"calm"].c;
-        drawNum(padL, ML("pace").toUpperCase(), tp!=null?fmt(tp):"—","/day", tp!=null?null:"var(--faint)","capacity");
+        drawNum(padL, ML("pace").toUpperCase(), tp!=null?fmt(tp):"—","/day", tp!=null?null:"var(--faint)","capacity", METRICS_SPEC.metrics.pace.d);
         // loops & branch-backs multiply demand — flag when a case passes through more than once
         const vv=(r.visits&&r.visits[n.id])||0;
         if(vv>1.15){
@@ -2478,12 +2504,12 @@ function renderCanvas(r){
           const vt=el("title"); vt.textContent=`Each case passes through here ≈${fmt(vv)}× — loop-backs multiply this step's demand`;
           vm.appendChild(vt); g.appendChild(vm);
         }
-        const capRow=(i)=>drawRow(padL,i,"Capacity",capV!=null?fmt(capV)+"/d":"—",capV!=null?"var(--ink)":"var(--muted)");
-        const loadRow=(i)=>drawRow(padL,i,"Load",load!=null?Math.round(load*100)+"%":"—",lc);
+        const capRow=(i)=>drawRow(padL,i,"Capacity",capV!=null?fmt(capV)+"/d":"—",capV!=null?"var(--ink)":"var(--muted)",{calc:METRICS_SPEC.metrics.capacity.d});
+        const loadRow=(i)=>drawRow(padL,i,"Load",load!=null?Math.round(load*100)+"%":"—",lc,{calc:METRICS_SPEC.metrics.load.d});
         if(isBot){ capRow(0); loadRow(1); }
         else {
-          drawRow(padL,0,"People",n.people!=null?fmt(n.people):"—");
-          drawRow(padL,1,"Hours/day",fmt(n.hoursPerDay!=null?n.hoursPerDay:AVAIL_HRS)+"h");
+          drawRow(padL,0,"People",n.people!=null?fmt(n.people):"—",null,{edit:numEdit("people","People")});
+          drawRow(padL,1,"Hours/day",fmt(n.hoursPerDay!=null?n.hoursPerDay:AVAIL_HRS)+"h",null,{edit:numEdit("hoursPerDay","Hours per day")});
           capRow(2); loadRow(3);
         }
       }
@@ -2493,10 +2519,13 @@ function renderCanvas(r){
       const time=isQ?(mt.wait!=null?mt.wait:dwv):mt.touch;
       const approx=isQ&&mt.wait==null&&dwv!=null;
       const info=tl[n.id]||{start:0,pct:0}, pct = time!=null ? info.pct : null;
-      drawNum(rx, (isQ?ML("wait"):ML("touch")).toUpperCase(), time!=null?(approx?"≈"+fmt(time):fmt(time)):"—", unit(), time!=null?null:"var(--faint)","speed");
-      drawRow(rx,0,"of turnaround",rowPct(pct),pct!=null?"var(--ink)":"var(--muted)");
-      if(isQ) drawRow(rx,1,"Basis",time==null?"—":(approx?"≈ estimate":"measured"));
-      else drawRow(rx,1,"Rework",mt.rework!=null?fmt(mt.rework)+"%":"—");
+      const primCalc = measured ? "Averaged from imported data — edit at the source" : null;
+      drawNum(rx, (isQ?ML("wait"):ML("touch")).toUpperCase(), time!=null?(approx?"≈"+fmt(time):fmt(time)):"—", unit(), time!=null?null:"var(--faint)","speed", primCalc);
+      if(!measured){ const field=isQ?"waitTimeManual":"touchTimeManual";
+        editField(rx-4, colTop-8, colW, 34, n[field]!=null?String(n[field]):"", v=>{ n[field]=v===""?undefined:(isNaN(+v)?n[field]:+v); }, `${isQ?"Wait":"Touch"} time (${unit()})`); }
+      drawRow(rx,0,"of turnaround",rowPct(pct),pct!=null?"var(--ink)":"var(--muted)",{calc:`${isQ?"Wait":"Touch"} time here as a share of the whole flow's turnaround.`});
+      if(isQ) drawRow(rx,1,"Basis",time==null?"—":(approx?"≈ estimate":"measured"),null,{calc:approx?"Estimated from queue size ÷ the next step's pace (Little's Law).":"Taken straight from the wait time you set."});
+      else drawRow(rx,1,"Rework",mt.rework!=null?fmt(mt.rework)+"%":"—",null, measured?{calc:"Averaged from imported data — edit at the source"}:{edit:numEdit("reworkPct","Rework %")});
 
       // bottleneck flag — only the single biggest bottleneck
       if(r.flag && r.flag.node.id===n.id){
@@ -3445,8 +3474,11 @@ function startAnnoResize(ev, ent){ if(!editable()) return; ev.preventDefault(); 
   _annoMoved=true; annoDrag={ent, mode:"resize", ox:p.x-(ent.x+ent.w), oy:p.y-(ent.y+ent.h), grp:Array.isArray(ent.members)};
   window.addEventListener("mousemove",onAnnoMove); window.addEventListener("mouseup",onAnnoUp); }
 function onAnnoMove(ev){ if(!annoDrag) return; _annoMoved=true; const p=svgPt(ev), e=annoDrag.ent;
-  if(annoDrag.mode==="move"){ e.x=Math.max(0,p.x-annoDrag.ox); e.y=Math.max(0,p.y-annoDrag.oy); }
-  else { e.w=Math.max(60,p.x-annoDrag.ox-e.x); e.h=Math.max(40,p.y-annoDrag.oy-e.y); }
+  // snap group/comment boxes to the grid like steps (Alt-drag or snap-off bypasses)
+  const snapping = !ev.altKey && (!state.model.settings || state.model.settings.snap!==false);
+  const sn = v => snapping ? snapG(v) : v;
+  if(annoDrag.mode==="move"){ e.x=Math.max(0,sn(p.x-annoDrag.ox)); e.y=Math.max(0,sn(p.y-annoDrag.oy)); }
+  else { e.w=Math.max(60,sn(p.x-annoDrag.ox-e.x)); e.h=Math.max(40,sn(p.y-annoDrag.oy-e.y)); }
   render();
   if(annoDrag.grp) highlightGroupCandidates(annoDrag.ent, annoDrag.mode); }
 /* while a group box is dragged/resized, dim the map and light up the steps it will contain.
@@ -3607,8 +3639,11 @@ function fitGroupBox(g){
     bx0=Math.min(bx0,n.x); by0=Math.min(by0,ny0); bx1=Math.max(bx1,n.x+L.w); by1=Math.max(by1,ny0+L.h); });
   if(bx0===Infinity) return;
   const top = g.showInfo!==false ? HEAD : PAD;   // header needs vertical room; hidden = tight
-  g.x=Math.max(0,bx0-PAD); g.y=Math.max(0,by0-top);
-  g.w=Math.max((bx1+PAD)-g.x, g.showInfo!==false?MINW:0); g.h=(by1+PAD)-g.y;
+  // grid-align the box: floor the top-left, ceil the bottom-right so members always fit inside
+  const x0=Math.max(0,bx0-PAD), y0=Math.max(0,by0-top), x1=bx1+PAD, y1=by1+PAD;
+  g.x=Math.floor(x0/GRID)*GRID; g.y=Math.floor(y0/GRID)*GRID;
+  g.w=Math.max(Math.ceil(x1/GRID)*GRID-g.x, g.showInfo!==false?MINW:0);
+  g.h=Math.ceil(y1/GRID)*GRID-g.y;
 }
 function tidyGroups(){
   const m=state.model; if(!m.groups||!m.groups.length) return;
@@ -3620,16 +3655,35 @@ function autoArrange(){
   if(!editable()||!state.model||!state.model.nodes.length) return;
   const m=state.model;
   const start=m.nodes.find(n=>n.type==="start")||m.nodes[0];
-  // column = shortest edge-distance from start (BFS); the spine order comes from flowWeights()
-  const col={}; const q=[start.id]; col[start.id]=0;
-  while(q.length){ const id=q.shift(); m.edges.filter(e=>e.from===id).forEach(e=>{
-    if(col[e.to]==null){ col[e.to]=col[id]+1; q.push(e.to); } }); }
-  // disconnected nodes get parked in trailing columns so nothing is lost (sub-steps travel inside their parent)
+  const byIdNode=Object.fromEntries(m.nodes.map(n=>[n.id,n]));
+  // collapsed groups fold into one card unit: members are hidden and travel with the card,
+  // so the flow treats the group as a single step rather than laying its members out invisibly
+  const collapsedGroups=(m.groups||[]).filter(g=>g.collapsed && (g.members||[]).length && _lay[g.id]);
+  const collapsedOf={}; collapsedGroups.forEach(g=>g.members.forEach(id=>{ if(collapsedOf[id]==null) collapsedOf[id]=g.id; }));
+  const resolve=id=> collapsedOf[id]!=null ? collapsedOf[id] : id;   // member id → its collapsed group card id
+  const collUnit={}; collapsedGroups.forEach(g=>{ collUnit[g.id]={ id:g.id,
+    get x(){return g.cx||0}, set x(v){g.cx=v}, get y(){return g.cy||0}, set y(v){g.cy=v} }; });
+  const unitOf=id=>{ const r=resolve(id); return collUnit[r] || (byIdNode[r] && !byIdNode[r].parentId ? byIdNode[r] : null); };
+  // column = shortest edge-distance from start (BFS over the resolved graph); spine order from flowWeights()
+  const col={}; const s0=resolve(start.id); const q=[s0]; col[s0]=0;
+  while(q.length){ const id=q.shift(); m.edges.forEach(e=>{ if(resolve(e.from)!==id) return;
+    const to=resolve(e.to); if(to!==id && col[to]==null){ col[to]=col[id]+1; q.push(to); } }); }
+  // disconnected units get parked in trailing columns so nothing is lost (sub-steps travel inside their parent)
   let extra=Math.max(-1,...Object.values(col));
   const {order}=flowWeights();
-  const spine=(order.length?order.slice():m.nodes.slice()).filter(n=>!n.parentId);
-  m.nodes.forEach(n=>{ if(!n.parentId && !spine.find(s=>s.id===n.id)) spine.push(n); });
-  spine.forEach(n=>{ if(col[n.id]==null) col[n.id]=++extra; });
+  const seen=new Set(), spine=[];
+  const pushUnit=u=>{ if(u && !seen.has(u.id)){ seen.add(u.id); spine.push(u); } };
+  (order.length?order:m.nodes).forEach(n=>{ if(!n.parentId) pushUnit(unitOf(n.id)); });
+  m.nodes.forEach(n=>{ if(!n.parentId) pushUnit(unitOf(n.id)); });
+  collapsedGroups.forEach(g=>pushUnit(collUnit[g.id]));
+  spine.forEach(u=>{ if(col[u.id]==null) col[u.id]=++extra; });
+  // keep each expanded group's members in a contiguous column block: evict any non-member
+  // sitting in the group's column span by pushing it (and everything downstream) to the right
+  const expGroups=(m.groups||[]).filter(g=>!g.collapsed && (g.members||[]).length);
+  expGroups.map(g=>({g, cols:g.members.map(id=>col[id]).filter(c=>c!=null)}))
+    .filter(o=>o.cols.length).sort((a,b)=>Math.min(...a.cols)-Math.min(...b.cols))
+    .forEach(({g,cols})=>{ const lo=Math.min(...cols), hi=Math.max(...cols), span=hi-lo+1, mset=new Set(g.members);
+      spine.forEach(u=>{ if(!mset.has(u.id) && col[u.id]>=lo) col[u.id]+=span; }); });
   // real card sizes drive the spacing, so wide frames / different views always get room
   const GAPX=64, GAPY=44, MARGIN_X=40, MARGIN_Y=60;
   const layOf=n=>{ const L=_lay[n.id]||nodeLayout(n); if(L.bt==null) L.bt=NODE_H/2-L.h/2; return L; };
@@ -3645,6 +3699,13 @@ function autoArrange(){
     if(yCur[c]==null) yCur[c]=MARGIN_Y+(maxH-colH[c])/2;   // short columns centre vertically
     const top=yCur[c]; yCur[c]+=L.h+GAPY;
     targets.push({ent:n, x:snapG(colXs[c]), y:snapG(top-L.bt)}); });
+  // compact each expanded group into a top-aligned block so its box hugs a clean rectangle
+  expGroups.forEach(g=>{ const mset=new Set(g.members);
+    const mem=targets.filter(t=>mset.has(t.ent.id)); if(mem.length<2) return;
+    const topY=Math.min(...mem.map(t=>t.y+layOf(t.ent).bt));   // shared visual top for the whole block
+    const byC={}; mem.forEach(t=>{ const c=col[t.ent.id]; (byC[c]=byC[c]||[]).push(t); });
+    Object.values(byC).forEach(list=>{ list.sort((a,b)=>a.y-b.y); let vy=topY;
+      list.forEach(t=>{ const L=layOf(t.ent); t.y=snapG(vy-L.bt); vy+=L.h+GAPY; }); }); });
   // widen inter-column gaps so case-flow labels fit between boxes — same measure the
   // Case-flow view uses, so Tidy no longer collapses room the labels need (avoids overlap)
   { const needs=flowLabelNeeds();
@@ -3667,8 +3728,15 @@ function autoArrange(){
     const minTop=Math.min(...tops);
     if(minTop<HEAD_ROOM){ const dy=snapG(HEAD_ROOM-minTop); targets.forEach(t=>t.y+=dy); }
   }
+  // a collapsed card moves as one; carry its hidden members by the same delta so an expand still lines up
+  const collShifts=[];
+  collapsedGroups.forEach(g=>{ const t=targets.find(x=>x.ent.id===g.id); if(!t) return;
+    const dx=t.x-(g.cx||0), dy=t.y-(g.cy||0); if(!dx&&!dy) return;
+    g.members.forEach(id=>{ const n=byIdNode[id]; if(n) collShifts.push({node:n,dx,dy}); }); });
   // custom arrow sides survive — Tidy repositions boxes, it never re-routes connections
-  animateNodes(targets, 320, ()=>{ tidyGroups(); render(); });
+  animateNodes(targets, 320, ()=>{
+    collShifts.forEach(s=>{ s.node.x=Math.max(0,s.node.x+s.dx); s.node.y=Math.max(0,s.node.y+s.dy); });
+    tidyGroups(); render(); });
   toast("Layout tidied");
 }
 
