@@ -520,10 +520,12 @@
   .gmetrics th:first-child,.gmetrics td:first-child{text-align:left}
   .comment .cbox{fill:#f4d77a;stroke:#caa83f;stroke-width:1;rx:8}
   .build .comment .cbox{pointer-events:all;cursor:grab}
-  .comment .ctext{width:100%;height:100%;box-sizing:border-box;border:0;background:transparent;resize:none;
-    font-family:var(--font);font-size:12.5px;line-height:1.35;color:#3a2f12;padding:8px;outline:none;pointer-events:none}
-  .comment .ctext::placeholder{color:#9a8443}
-  .build .comment .ctext.editing{pointer-events:auto;cursor:text}
+  .comment text{font-family:var(--font);pointer-events:none}
+  /* invisible click-to-edit zones on note cards (mirrors the card .vedit affordance) */
+  .build .comment .vedit{fill:#000;fill-opacity:0;cursor:text;transition:fill-opacity .1s}
+  .build .comment:hover .vedit{fill-opacity:.04}
+  .build .comment .vedit:hover{fill-opacity:.09}
+  .build .comment .vedit.pick{cursor:pointer}
   .glabel-edit{width:100%;box-sizing:border-box;background:var(--panel2);border:1px solid var(--accent);color:var(--ink);
     border-radius:5px;font-family:var(--font);font-size:13px;font-weight:700;padding:2px 6px;outline:none}
   /* on-card inline editors (title / details) — transient, spawned only while editing */
@@ -2143,7 +2145,8 @@ function renderCanvas(r){
       k.x=n.x+SUB_PADF+i*(viewW()+SUB_GAP); k.y=topY+SUB_HEAD-KL.bt; });
   }});
 
-  const anno=[...(m.groups||[]),...(m.comments||[])];
+  // attached notes have no live geometry — only floating (visible) ones stretch the canvas
+  const anno=[...(m.groups||[]),...(showNotes()?(m.comments||[]).filter(c=>!c.nodeId):[])];
   const maxX=Math.max(600,...m.nodes.map(n=>n.x+lay[n.id].w+80),...anno.map(a=>a.x+a.w+80));
   const maxY=Math.max(440,...m.nodes.map(n=>n.y+lay[n.id].bt+lay[n.id].h+160),...anno.map(a=>a.y+a.h+120));
   const z=Z(), P=CANVAS_PAD;
@@ -2817,29 +2820,9 @@ function renderCanvas(r){
   svg.appendChild(labelLayer);   // edge pills above the cards — never hidden
   svg.appendChild(endLayer);     // connector endpoint handles on top so they're grabbable
 
-  // comments render last so they float above the flow
-  (m.comments||[]).forEach(cm=>{
-    const g=el("g",{class:"comment"}); g.dataset.cid=cm.id;
-    const box=el("rect",{class:"cbox",x:cm.x,y:cm.y,width:cm.w,height:cm.h,rx:8});
-    g.appendChild(box);
-    const fo=el("foreignObject",{x:cm.x,y:cm.y,width:cm.w,height:cm.h});
-    const ta=document.createElement("textarea");
-    ta.className="ctext"; ta.value=cm.text||""; ta.placeholder="Type a note…"; ta.readOnly=true;
-    if(editable()){
-      box.addEventListener("mousedown",ev=>startAnnoMove(ev,cm));
-      box.addEventListener("dblclick",ev=>{ ev.stopPropagation(); ta.readOnly=false; ta.classList.add("editing"); ta.focus(); });
-      ta.addEventListener("mousedown",ev=>ev.stopPropagation());
-      ta.addEventListener("input",()=>{ cm.text=ta.value; scheduleSave(); });
-      ta.addEventListener("blur",()=>{ ta.readOnly=true; ta.classList.remove("editing"); });
-    }
-    fo.appendChild(ta); g.appendChild(fo);
-    if(editable()){
-      const rh=el("rect",{class:"anno-resize",x:cm.x+cm.w-7,y:cm.y+cm.h-7,width:12,height:12,rx:3});
-      rh.addEventListener("mousedown",ev=>startAnnoResize(ev,cm)); g.appendChild(rh);
-      g.appendChild(annoDelHandle(cm.x+cm.w, cm.y, ()=>removeAnno("comments",cm.id)));
-    }
-    svg.appendChild(g);
-    if(state._editComment===cm.id){ state._editComment=null; ta.readOnly=false; ta.classList.add("editing"); setTimeout(()=>ta.focus(),0); }
+  // notes render last so they float above the flow (attached ones live in their step's badge/stack)
+  if(showNotes()) (m.comments||[]).filter(c=>!c.nodeId).forEach(cm=>{
+    svg.appendChild(noteCardEl(cm, cm.x, cm.y, cm.w, cm.h, {resizable:true}));
   });
 
   // gentle hint on a fresh flow (start/end only, nothing connected)
@@ -3618,6 +3601,61 @@ function onGroupSelUp(ev){ window.removeEventListener("mousemove",onGroupSelMove
   fitGroupBox(g);   // header + margins right on creation, same as a post-Tidy fit
   state.model.groups.push(g); annoDone(); render(); }
 
+/* typed note card — shared by floating post-its and (later) pop-out minis on a step.
+   Body is real SVG text (wrapText) so raster exports stay faithful — the old permanent
+   <foreignObject><textarea> often failed to rasterize; editing spawns editCardField instead. */
+function noteCardEl(cm, x, y, w, h, opts){
+  opts=opts||{};
+  const NT=noteType(cm), plain=(cm.type||"note")==="note";
+  const g=el("g",{class:"comment"}); g.dataset.cid=cm.id;
+  const box=el("rect",{class:"cbox",x,y,width:w,height:h,rx:8});
+  box.style.fill=NT.fill; box.style.stroke=NT.line;
+  g.appendChild(box);
+  const headH = plain?0:20;
+  if(!plain){
+    g.appendChild(useIc(noteIc(cm), x+8, y+6, 14, NT.ink));
+    const hd=el("text",{x:x+27,y:y+17,"font-size":"9","font-weight":"800","letter-spacing":".5"});
+    hd.style.fill=NT.ink; hd.style.opacity=".75"; hd.textContent=noteLabel(cm);
+    g.appendChild(hd);
+  }
+  const padX=9, LH=15, bodyF=`12px ${FONT_STACK}`, textTop=y+headH+6;
+  const maxLines=Math.max(1,Math.floor((h-headH-12)/LH));
+  let lines=cm.text?wrapText(cm.text,w-2*padX,bodyF):[];
+  if(lines.length>maxLines){ const rest=lines.slice(maxLines-1).join(" ");
+    lines=lines.slice(0,maxLines-1); lines.push(truncToWidth(rest,w-2*padX,bodyF)); }
+  lines.forEach((ln,i)=>{ const t=el("text",{x:x+padX,y:textTop+11+i*LH,"font-size":"12"});
+    t.style.fill=NT.ink; t.textContent=ln; g.appendChild(t); });
+  if(!cm.text && editable()){
+    const ph=el("text",{x:x+padX,y:textTop+11,"font-size":"12","font-style":"italic"});
+    ph.style.fill=NT.ink; ph.style.opacity=".55"; ph.textContent="Click to type…"; g.appendChild(ph);
+  }
+  if(editable()){
+    box.addEventListener("mousedown",ev=> opts.mini ? startNoteDetach(ev,cm) : startAnnoMove(ev,cm));
+    box.addEventListener("dblclick",ev=>{ ev.stopPropagation(); editNoteText(cm,x,y,w,h,headH); });
+    const zone=(zx,zy,zw,zh,tip,cls,on)=>{
+      const r=el("rect",{class:"vedit"+(cls?" "+cls:""),x:zx,y:zy,width:zw,height:zh,rx:5,fill:"transparent"});
+      r.addEventListener("mousedown",ev=>ev.stopPropagation());
+      r.addEventListener("click",ev=>{ ev.stopPropagation(); on(); });
+      const t=el("title"); t.textContent=tip; r.appendChild(t);
+      g.appendChild(r); };
+    zone(x+4,y+headH+2,w-8,h-headH-6,"Edit note",null,()=>editNoteText(cm,x,y,w,h,headH));
+    zone(x+2,y+2,plain?24:110,plain?24:18,"Change note type","pick",
+      ()=>{ state._notePick={cid:cm.id,stage:"type"}; render(); });
+    if(opts.resizable){
+      const rh=el("rect",{class:"anno-resize",x:x+w-7,y:y+h-7,width:12,height:12,rx:3});
+      rh.addEventListener("mousedown",ev=>startAnnoResize(ev,cm)); g.appendChild(rh);
+    }
+    g.appendChild(annoDelHandle(x+w, y, ()=>removeAnno("comments",cm.id)));
+    if(state._editComment===cm.id){ state._editComment=null;
+      setTimeout(()=>editNoteText(cm,x,y,w,h,headH),0); }
+  }
+  return g;
+}
+function editNoteText(cm,x,y,w,h,headH){
+  editCardField({x:x+4,y:y+headH+3,w:w-8,h:Math.max(24,h-headH-8),value:cm.text,multiline:true,
+    placeholder:"Type a note…",onCommit:v=>{ cm.text=v; scheduleSave(); }});
+}
+
 /* COMMENT: click to drop a note, then double-click it to type */
 function placeComment(ev){ ev.preventDefault(); const p=svgPt(ev);
   const c={id:uid("cmt"), x:Math.max(0,p.x-100), y:Math.max(0,p.y-60), w:200, h:120, text:""};
@@ -4262,7 +4300,7 @@ function buildExportSVG(){
     .eflow tspan{stroke:var(--bg);stroke-width:3.5px;paint-order:stroke}
     .nowner{fill:var(--faint);font-size:9px;letter-spacing:.6px;font-weight:700}
     .edge{fill:none;stroke:var(--faint);stroke-width:2}.edge.hot{stroke:var(--nva)}
-    .anchor,.edge-hit,.temp-edge,.del-handle,.guide,.canvas-hint{display:none}
+    .anchor,.edge-hit,.temp-edge,.del-handle,.guide,.canvas-hint,.vedit,.anno-resize,.note-picker{display:none}
     #simLayer,.sim-dot,.sim-rim,.sim-count{display:none}
     .nbox{filter:none}`;
   const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="${styleVars}">
