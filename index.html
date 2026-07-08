@@ -2177,14 +2177,13 @@ function renderCanvas(r){
   }});
 
   // attached notes have no live geometry — only floating (visible) ones stretch the canvas,
-  // plus any fanned-out stacks (so exports don't clip them)
+  // plus any open stacks dropping below their step (so exports don't clip them)
   const anno=[...(m.groups||[]),...(showNotes()?(m.comments||[]).filter(c=>!c.nodeId):[])];
-  let stackX=0, stackY=0;
+  let stackY=0;
   if(showNotes()) state._notesOpen.forEach(nid=>{ const sn=m.nodes.find(x=>x.id===nid), SL=sn&&lay[nid]; if(!sn||!SL) return;
     const ns=(m.comments||[]).filter(c=>c.nodeId===nid); if(!ns.length) return;
-    stackX=Math.max(stackX, sn.x+SL.w+18+NOTE_MINI_W+80);
-    stackY=Math.max(stackY, sn.y+(SL.bt||0)-4+ns.reduce((a,c)=>a+noteMiniH(c)+NOTE_MINI_GAP,0)+120); });
-  const maxX=Math.max(600,stackX,...m.nodes.map(n=>n.x+lay[n.id].w+80),...anno.map(a=>a.x+a.w+80));
+    stackY=Math.max(stackY, sn.y+(SL.bt||0)+SL.h+10+ns.reduce((a,c)=>a+noteCardH(c,SL.w)+NOTE_STACK_GAP,0)+80); });
+  const maxX=Math.max(600,...m.nodes.map(n=>n.x+lay[n.id].w+80),...anno.map(a=>a.x+a.w+80));
   const maxY=Math.max(440,stackY,...m.nodes.map(n=>n.y+lay[n.id].bt+lay[n.id].h+160),...anno.map(a=>a.y+a.h+120));
   const z=Z(), P=CANVAS_PAD;
   _canvasExtent={w:maxX,h:maxY};   // record unpadded bounds for the image export
@@ -2221,8 +2220,8 @@ function renderCanvas(r){
       const rh=el("rect",{class:"anno-resize",x:grp.x+grp.w-7,y:grp.y+grp.h-7,width:12,height:12,rx:3});
       rh.addEventListener("mousedown",ev=>startAnnoResize(ev,grp)); g.appendChild(rh);
       g.appendChild(annoDelHandle(grp.x+grp.w, grp.y, ()=>removeAnno("groups",grp.id)));
-      // collapse toggle (bottom-left, clear of the resize grip) — fold the group into one card
-      g.appendChild(iconHandle(grp.x+16, grp.y+grp.h, "ic-collapse", ()=>toggleCollapse(grp)));
+      // collapse toggle (top-left corner, just outside the header card) — fold the group into one card
+      g.appendChild(iconHandle(grp.x, grp.y, "ic-collapse", ()=>toggleCollapse(grp)));
     }
     svg.appendChild(g);
   });
@@ -2758,8 +2757,8 @@ function renderCanvas(r){
       dh.addEventListener("mousedown",ev=>ev.stopPropagation());
       dh.addEventListener("click",ev=>{ ev.stopPropagation(); deleteNode(n.id); });
       g.appendChild(dh);
-      // "+" (bottom-right) — turn this step into a group container
-      if(L.kind==="card") g.appendChild(plusHandle(w, bt+L.h, ()=>wrapInGroup(n.id)));
+      // "+" (top-left) — turn this step into a group container
+      if(L.kind==="card") g.appendChild(plusHandle(0, bt, ()=>wrapInGroup(n.id)));
     }
 
     g.dataset.id=n.id;
@@ -2858,7 +2857,7 @@ function renderCanvas(r){
     }
     if(editable()){
       g.appendChild(annoDelHandle(w, bt, ()=>removeAnno("groups",grp.id)));
-      g.appendChild(iconHandle(16, bt+L.h, "ic-expand", ()=>toggleCollapse(grp)));   // bottom-left → expand back in place
+      g.appendChild(iconHandle(0, bt, "ic-expand", ()=>toggleCollapse(grp)));   // top-left → expand back in place
     }
     g.addEventListener("mousedown",ev=>startAnnoMove(ev,groupPos(grp)));
     g.addEventListener("click",ev=>{ ev.stopPropagation(); if(!_annoMoved) selectGroup(grp.id); });
@@ -3733,26 +3732,38 @@ function editNoteText(cm,x,y,w,h,headH){
 }
 
 /* pop-out stack: a step's attached notes fanned out to its right as mini cards */
-const NOTE_MINI_W=176, NOTE_MINI_GAP=8;
-function noteMiniH(cm){
+const NOTE_STACK_GAP=8;
+function noteCardH(cm, w){
   const headH=(cm.type||"note")==="note"?0:20;
-  const lines=cm.text?Math.min(6,wrapText(cm.text,NOTE_MINI_W-18,`12px ${FONT_STACK}`).length):1;
-  return Math.max(40, headH+12+lines*15);
+  const lines=cm.text?Math.min(8,wrapText(cm.text,(w||176)-18,`12px ${FONT_STACK}`).length):1;
+  return Math.max(38, headH+12+lines*15);
 }
 function noteStackEl(n, L, notes){
   const g=el("g",{class:"note-stack"});
-  const bt=L.bt||0, sx=n.x+L.w+18; let sy=n.y+bt-4;
-  // leader arcs from the card's top-right corner to the first mini card
-  g.appendChild(el("path",{class:"note-leader",
-    d:`M${n.x+L.w},${n.y+bt+6} C${n.x+L.w+9},${n.y+bt+6} ${sx-9},${sy+14} ${sx},${sy+14}`}));
-  notes.forEach(cm=>{ const h=noteMiniH(cm);
-    g.appendChild(noteCardEl(cm, sx, sy, NOTE_MINI_W, h, {mini:true}));
-    sy+=h+NOTE_MINI_GAP; });
+  const bt=L.bt||0, sx=n.x; let sy=n.y+bt+L.h+10;   // directly under the card, same left edge + width
+  // short spine from the badge (bottom-left corner) down into the stack
+  g.appendChild(el("line",{class:"note-leader",x1:n.x+10,y1:n.y+bt+L.h,x2:n.x+10,y2:sy}));
+  notes.forEach(cm=>{ const h=noteCardH(cm, L.w);
+    g.appendChild(noteCardEl(cm, sx, sy, L.w, h, {mini:true}));
+    sy+=h+NOTE_STACK_GAP; });
   return g;
 }
 
-/* drag a popped-out mini card: past a small threshold it turns into a floating note following
-   the cursor; drop on a step (re-)anchors it, drop on empty canvas detaches it for good */
+/* reorder a note among its step-mates by rewriting only the sibling slots in m.comments */
+function reorderNote(cm, newIdx){
+  const arr=state.model.comments, sibs=arr.filter(c=>c.nodeId===cm.nodeId);
+  const old=sibs.indexOf(cm); if(old<0) return;
+  sibs.splice(old,1); sibs.splice(Math.max(0,Math.min(newIdx,sibs.length)),0,cm);
+  let k=0; for(let i=0;i<arr.length;i++){ if(arr[i].nodeId===cm.nodeId) arr[i]=sibs[k++]; }
+}
+/* the origin step's stack column geometry (for the reorder/detach hit test) */
+function noteColumn(from){ const nd=state.model.nodes.find(n=>n.id===from), L=_lay[from];
+  if(!nd||!L) return null; const bt=L.bt||0, top=nd.y+bt+L.h+10;
+  let h=0; state.model.comments.forEach(c=>{ if(c.nodeId===from) h+=noteCardH(c,L.w)+NOTE_STACK_GAP; });
+  return {nd, L, bt, x0:nd.x, x1:nd.x+L.w, top, bottom:top+h}; }
+
+/* drag a stacked note card: inside the step's column it reorders live; dragged out it turns into
+   a floating note — drop on a step (re-)anchors it, drop on empty canvas detaches it for good */
 let noteDetach=null;
 function startNoteDetach(ev, cm){ if(!editable()) return; ev.preventDefault(); ev.stopPropagation();
   const p=svgPt(ev); _annoMoved=false;
@@ -3761,13 +3772,26 @@ function startNoteDetach(ev, cm){ if(!editable()) return; ev.preventDefault(); e
 function onNoteDetachMove(ev){ if(!noteDetach) return; const p=svgPt(ev), d=noteDetach;
   if(!d.live && Math.hypot(p.x-d.sx,p.y-d.sy)<6) return;   // clean click stays an edit, not a drag
   d.live=true; _annoMoved=true;
-  delete d.cm.nodeId;   // render as floating while the drag lasts — the card itself is the ghost
-  d.cm.x=Math.max(0,p.x-d.cm.w/2); d.cm.y=Math.max(0,p.y-16); d.px=p.x; d.py=p.y;
-  render();
-  const hit=groupHits(p.x,p.y,p.x,p.y).find(n=>n.type==="touch"||n.type==="wait");
-  $("#canvas").querySelectorAll("g.node[data-id]").forEach(g=>g.classList.toggle("drop-target", !!hit&&g.dataset.id===hit.id)); }
+  const col=d.from?noteColumn(d.from):null;
+  const inCol=col && p.x>col.x0-40 && p.x<col.x1+40 && p.y>col.top-24 && p.y<col.bottom+40;
+  if(inCol){
+    if(d.cm.nodeId!==d.from) d.cm.nodeId=d.from;   // re-attach if it had drifted off, then reorder
+    const sibs=state.model.comments.filter(c=>c.nodeId===d.from);
+    let y=col.top, slot=0; for(const c of sibs){ const h=noteCardH(c,col.L.w); if(p.y>y+h/2) slot++; y+=h+NOTE_STACK_GAP; }
+    slot=Math.min(slot, sibs.length-1);
+    if(slot!==sibs.indexOf(d.cm)){ reorderNote(d.cm, slot); render(); }
+    d.px=p.x; d.py=p.y;
+    $("#canvas").querySelectorAll("g.node.drop-target").forEach(g=>g.classList.remove("drop-target"));
+  } else {
+    delete d.cm.nodeId;   // render as floating while the drag lasts — the card itself is the ghost
+    d.cm.x=Math.max(0,p.x-d.cm.w/2); d.cm.y=Math.max(0,p.y-16); d.px=p.x; d.py=p.y;
+    render();
+    const hit=groupHits(p.x,p.y,p.x,p.y).find(n=>n.type==="touch"||n.type==="wait");
+    $("#canvas").querySelectorAll("g.node[data-id]").forEach(g=>g.classList.toggle("drop-target", !!hit&&g.dataset.id===hit.id));
+  } }
 function onNoteDetachUp(){ window.removeEventListener("mousemove",onNoteDetachMove); window.removeEventListener("mouseup",onNoteDetachUp);
   const d=noteDetach; noteDetach=null; if(!d||!d.live) return;
+  if(d.cm.nodeId){ annoDone(); render(); return; }   // ended inside a stack → already reordered
   const hit=groupHits(d.px,d.py,d.px,d.py).find(n=>n.type==="touch"||n.type==="wait");
   if(hit){ d.cm.nodeId=hit.id; state._notesOpen.add(hit.id);
     if(hit.id!==d.from) toast(`Note moved to “${hit.label||"step"}”`); }
@@ -3886,14 +3910,14 @@ function annoDelHandle(cx,cy,onDel){ const dh=el("g",{class:"del-handle"});
 /* corner badge on a step carrying attached notes — dominant-type icon + count sitting on the
    top-left corner like a notification dot; click fans the note stack out (works in viewer too) */
 function noteBadgeEl(n, L, notes){
-  const bt=L.bt||0, tk=dominantNoteType(notes), NT=NOTE_TYPES[tk];
+  const bt=L.bt||0, cy=bt+L.h, tk=dominantNoteType(notes), NT=NOTE_TYPES[tk];   // bottom-left corner
   const many=notes.length>1, bw=many?34:20;
   const g=el("g",{class:"note-badge"});
-  const r=el("rect",{x:-10,y:bt-10,width:bw,height:20,rx:10});
+  const r=el("rect",{x:-10,y:cy-10,width:bw,height:20,rx:10});
   r.style.fill=NT.line; r.style.stroke="rgba(0,0,0,.3)";
   g.appendChild(r);
-  g.appendChild(useIc(NT.ic, -8, bt-7, 14, "#fff"));
-  if(many){ const t=el("text",{x:9,y:bt+3.8,"font-size":"10","font-weight":"800"});
+  g.appendChild(useIc(NT.ic, -8, cy-7, 14, "#fff"));
+  if(many){ const t=el("text",{x:9,y:cy+3.8,"font-size":"10","font-weight":"800"});
     t.style.fill="#fff"; t.textContent=String(notes.length); g.appendChild(t); }
   const counts={}; notes.forEach(c=>{ const k=NOTE_TYPES[c.type]?c.type:"note"; counts[k]=(counts[k]||0)+1; });
   const tip=el("title");
@@ -3907,7 +3931,7 @@ function noteBadgeEl(n, L, notes){
   return g;
 }
 
-/* a "+" corner control (bottom-right of a card): convert a step into a group, or expand/collapse one */
+/* a "+" corner control (top-left of a step card): convert a step into a group */
 function plusHandle(cx,cy,onClick){ const h=el("g",{class:"plus-handle"});
   h.appendChild(el("circle",{cx,cy,r:9}));
   h.appendChild(el("line",{x1:cx-3.5,y1:cy,x2:cx+3.5,y2:cy}));
@@ -3915,7 +3939,7 @@ function plusHandle(cx,cy,onClick){ const h=el("g",{class:"plus-handle"});
   h.addEventListener("mousedown",ev=>ev.stopPropagation());
   h.addEventListener("click",ev=>{ ev.stopPropagation(); onClick(); }); return h; }
 /* a circular corner control carrying an icon glyph (reuses the .plus-handle hover styling) —
-   used for the group collapse/expand toggle, always drawn bottom-left */
+   used for the group collapse/expand toggle, drawn at the top-left corner */
 function iconHandle(cx,cy,iconId,onClick){ const h=el("g",{class:"plus-handle"});
   h.appendChild(el("circle",{cx,cy,r:9}));
   h.appendChild(useIc(iconId, cx-6, cy-6, 12, "#fff"));
