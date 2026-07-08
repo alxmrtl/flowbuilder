@@ -885,6 +885,7 @@
     <div class="themepop wide" id="themePop"></div>
   </div>
   <button id="flowToggle" title="Show case volume and branch splits on the arrows — line thickness follows the flow"><svg class="t-ic"><use href="#ic-flow"/></svg>Case flow</button>
+  <button id="notesToggle" title="Show notes, frustrations and waste flags on the map"><svg class="t-ic"><use href="#ic-nt-note"/></svg>Notes</button>
   <button id="autoArrange" title="Snap boxes into neat columns — never touches your arrows"><svg class="t-ic"><use href="#ic-tidy"/></svg>Tidy</button>
   <button id="simBtn" title="Watch a simulated day — cases flow through the map, pile up in queues, and overloads glow"><svg class="t-ic"><use href="#ic-play"/></svg>Simulate</button>
   <div class="pb-zoom">
@@ -1486,6 +1487,7 @@ function render(){
   document.body.classList.toggle("has-selection",(state.selectedIds||[]).length>0);
   document.querySelectorAll("[data-cardview]").forEach(b=>b.classList.toggle("tool-on",b.dataset.cardview===view()));
   { const ft=$("#flowToggle"); if(ft) ft.classList.toggle("tool-on",(state.model.settings&&state.model.settings.showFlow)!==false); }
+  { const nt=$("#notesToggle"); if(nt) nt.classList.toggle("tool-on",showNotes()); }
   { const t=$("#flowTitle"); if(t){ t.readOnly=state.viewer; if(document.activeElement!==t) t.value=state.model.name||""; fitTitle(t); } }
   const r=rollup();
   { const sb=$("#simBtn"); if(sb){
@@ -4819,6 +4821,10 @@ $("#flowToggle").onclick=()=>{ if(!state.model) return;
   const on=!(state.model.settings.showFlow!==false);
   state.model.settings.showFlow=on; render();
   if(on&&editable()) ensureFlowSpacing();   // make room for the labels inside their bands
+};
+$("#notesToggle").onclick=()=>{ if(!state.model) return;
+  state.model.settings=state.model.settings||{};
+  state.model.settings.showNotes=!showNotes(); render();
 };
 $("#simBtn").onclick=()=>{ state.simming?stopSim():startSim(0); };
 $("#simViewerBtn").onclick=()=>{ state.simming?stopSim():startSim(0); };
