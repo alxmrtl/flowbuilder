@@ -533,6 +533,7 @@
   .note-picker .np-chip:hover rect{filter:brightness(1.08)}
   .note-badge{cursor:pointer}
   .note-badge text{pointer-events:none}
+  .note-leader{stroke:var(--faint);stroke-width:1;stroke-dasharray:2 3;fill:none;opacity:.7}
   /* dragging a note over a step: attach affordance */
   .node.drop-target .nbox{stroke-width:3}
   .glabel-edit{width:100%;box-sizing:border-box;background:var(--panel2);border:1px solid var(--accent);color:var(--ink);
@@ -1249,6 +1250,7 @@ function loadModel(m){
   migrateComments(m);           // default untyped comments to plain notes, drop dangling anchors
   state.data = Array.isArray(m.data) ? m.data : [];   // imported stats are stored on the model
   state.selected=null; state.linkingFrom=null;
+  state._notesOpen=new Set(); state._notePick=null; state._editComment=null;   // per-flow transients
   undoStack=[]; redoStack=[]; _undoBase=JSON.stringify(m);   // undo history is per open flow
   rebuildSegPer(); render();
 }
@@ -2159,10 +2161,16 @@ function renderCanvas(r){
       k.x=n.x+SUB_PADF+i*(viewW()+SUB_GAP); k.y=topY+SUB_HEAD-KL.bt; });
   }});
 
-  // attached notes have no live geometry — only floating (visible) ones stretch the canvas
+  // attached notes have no live geometry — only floating (visible) ones stretch the canvas,
+  // plus any fanned-out stacks (so exports don't clip them)
   const anno=[...(m.groups||[]),...(showNotes()?(m.comments||[]).filter(c=>!c.nodeId):[])];
-  const maxX=Math.max(600,...m.nodes.map(n=>n.x+lay[n.id].w+80),...anno.map(a=>a.x+a.w+80));
-  const maxY=Math.max(440,...m.nodes.map(n=>n.y+lay[n.id].bt+lay[n.id].h+160),...anno.map(a=>a.y+a.h+120));
+  let stackX=0, stackY=0;
+  if(showNotes()) state._notesOpen.forEach(nid=>{ const sn=m.nodes.find(x=>x.id===nid), SL=sn&&lay[nid]; if(!sn||!SL) return;
+    const ns=(m.comments||[]).filter(c=>c.nodeId===nid); if(!ns.length) return;
+    stackX=Math.max(stackX, sn.x+SL.w+18+NOTE_MINI_W+80);
+    stackY=Math.max(stackY, sn.y+(SL.bt||0)-4+ns.reduce((a,c)=>a+noteMiniH(c)+NOTE_MINI_GAP,0)+120); });
+  const maxX=Math.max(600,stackX,...m.nodes.map(n=>n.x+lay[n.id].w+80),...anno.map(a=>a.x+a.w+80));
+  const maxY=Math.max(440,stackY,...m.nodes.map(n=>n.y+lay[n.id].bt+lay[n.id].h+160),...anno.map(a=>a.y+a.h+120));
   const z=Z(), P=CANVAS_PAD;
   _canvasExtent={w:maxX,h:maxY};   // record unpadded bounds for the image export
   // pad the canvas on every side with empty space so it can be panned into open area (incl. up/left)
@@ -2848,13 +2856,24 @@ function renderCanvas(r){
   if(showNotes()) (m.comments||[]).filter(c=>!c.nodeId).forEach(cm=>{
     svg.appendChild(noteCardEl(cm, cm.x, cm.y, cm.w, cm.h, {resizable:true}));
   });
+  // open note stacks — above floating notes, below the picker
+  if(showNotes()) [...state._notesOpen].forEach(nid=>{
+    const sn=m.nodes.find(x=>x.id===nid), SL=sn&&lay[nid];
+    if(!sn||!SL){ state._notesOpen.delete(nid); return; }
+    const ns=notesByNode.get(nid);
+    if(ns && ns.length) svg.appendChild(noteStackEl(sn, SL, ns));
+  });
+
   // transient type-picker chips (edit-only; .note-picker is hidden in exports)
   if(state._notePick && editable() && showNotes()){
     const pc=(m.comments||[]).find(c=>c.id===state._notePick.cid);
     if(!pc){ state._notePick=null; }
     else{
+      // anchor above the note's rendered card (floating or mini); fall back to its step
       let ax=pc.x, ay=pc.y;
-      if(pc.nodeId){ const an=m.nodes.find(n=>n.id===pc.nodeId), aL=an&&lay[an.id];
+      const cb=svg.querySelector(`g.comment[data-cid="${pc.id}"] .cbox`);
+      if(cb){ ax=+cb.getAttribute("x"); ay=+cb.getAttribute("y"); }
+      else if(pc.nodeId){ const an=m.nodes.find(n=>n.id===pc.nodeId), aL=an&&lay[an.id];
         if(an&&aL){ ax=an.x+aL.w+18; ay=an.y+(aL.bt||0); } }
       svg.appendChild(notePickerEl(pc, ax, ay));
     }
@@ -2873,6 +2892,7 @@ function renderCanvas(r){
 
   svg.onclick=()=>{ if(state.linkingFrom){ cancelLink(); }
     else if(state._notePick && !_annoJustFinished){ state._notePick=null; render(); }   // close picker, keep whatever type is set
+    else if(state._notesOpen.size && !_annoJustFinished){ state._notesOpen.clear(); render(); }   // click-away folds open stacks
     else if(!_connectJustFinished && !_marqueeJustFinished && !_annoJustFinished && !_panJustFinished){ state.selectedIds=[]; selectNode(null); } };
   svg.onmousedown=ev=>{ if(ev.target!==svg) return;
     if(state.tool==="group"){ startGroupSel(ev); return; }
@@ -3696,6 +3716,49 @@ function editNoteText(cm,x,y,w,h,headH){
   editCardField({x:x+4,y:y+headH+3,w:w-8,h:Math.max(24,h-headH-8),value:cm.text,multiline:true,
     placeholder:"Type a note…",onCommit:v=>{ cm.text=v; scheduleSave(); }});
 }
+
+/* pop-out stack: a step's attached notes fanned out to its right as mini cards */
+const NOTE_MINI_W=176, NOTE_MINI_GAP=8;
+function noteMiniH(cm){
+  const headH=(cm.type||"note")==="note"?0:20;
+  const lines=cm.text?Math.min(6,wrapText(cm.text,NOTE_MINI_W-18,`12px ${FONT_STACK}`).length):1;
+  return Math.max(40, headH+12+lines*15);
+}
+function noteStackEl(n, L, notes){
+  const g=el("g",{class:"note-stack"});
+  const bt=L.bt||0, sx=n.x+L.w+18; let sy=n.y+bt-4;
+  // leader arcs from the card's top-right corner to the first mini card
+  g.appendChild(el("path",{class:"note-leader",
+    d:`M${n.x+L.w},${n.y+bt+6} C${n.x+L.w+9},${n.y+bt+6} ${sx-9},${sy+14} ${sx},${sy+14}`}));
+  notes.forEach(cm=>{ const h=noteMiniH(cm);
+    g.appendChild(noteCardEl(cm, sx, sy, NOTE_MINI_W, h, {mini:true}));
+    sy+=h+NOTE_MINI_GAP; });
+  return g;
+}
+
+/* drag a popped-out mini card: past a small threshold it turns into a floating note following
+   the cursor; drop on a step (re-)anchors it, drop on empty canvas detaches it for good */
+let noteDetach=null;
+function startNoteDetach(ev, cm){ if(!editable()) return; ev.preventDefault(); ev.stopPropagation();
+  const p=svgPt(ev); _annoMoved=false;
+  noteDetach={cm, from:cm.nodeId, sx:p.x, sy:p.y, live:false};
+  window.addEventListener("mousemove",onNoteDetachMove); window.addEventListener("mouseup",onNoteDetachUp); }
+function onNoteDetachMove(ev){ if(!noteDetach) return; const p=svgPt(ev), d=noteDetach;
+  if(!d.live && Math.hypot(p.x-d.sx,p.y-d.sy)<6) return;   // clean click stays an edit, not a drag
+  d.live=true; _annoMoved=true;
+  delete d.cm.nodeId;   // render as floating while the drag lasts — the card itself is the ghost
+  d.cm.x=Math.max(0,p.x-d.cm.w/2); d.cm.y=Math.max(0,p.y-16); d.px=p.x; d.py=p.y;
+  render();
+  const hit=groupHits(p.x,p.y,p.x,p.y).find(n=>n.type==="touch"||n.type==="wait");
+  $("#canvas").querySelectorAll("g.node[data-id]").forEach(g=>g.classList.toggle("drop-target", !!hit&&g.dataset.id===hit.id)); }
+function onNoteDetachUp(){ window.removeEventListener("mousemove",onNoteDetachMove); window.removeEventListener("mouseup",onNoteDetachUp);
+  const d=noteDetach; noteDetach=null; if(!d||!d.live) return;
+  const hit=groupHits(d.px,d.py,d.px,d.py).find(n=>n.type==="touch"||n.type==="wait");
+  if(hit){ d.cm.nodeId=hit.id; state._notesOpen.add(hit.id);
+    if(hit.id!==d.from) toast(`Note moved to “${hit.label||"step"}”`); }
+  else{ const sn=v=>(!state.model.settings||state.model.settings.snap!==false)?snapG(v):v;
+    d.cm.x=sn(d.cm.x); d.cm.y=sn(d.cm.y); toast("Note detached"); }
+  annoDone(); render(); }
 
 /* COMMENT: click to drop a note → type-picker chips appear, then the text editor.
    Dropping on a step attaches the note to it (badge + stack) instead of floating. */
@@ -4815,6 +4878,7 @@ document.addEventListener("keydown",e=>{
     if(state._notePick){ state._notePick=null; render(); return; }    // close the type picker first
     if(state.tool==="group"||state.tool==="comment") setTool(null);   // cancel a one-shot tool → back to base
     else if(state.selectedIds.length) selectNode(null);               // else drop a held marquee selection
+    else if(state._notesOpen.size){ state._notesOpen.clear(); render(); }   // then fold open note stacks
     const ov=document.querySelector(".overlay.show"); if(ov) ov.classList.remove("show"); return; }
   const t=e.target;
   const typing = t && (t.tagName==="INPUT"||t.tagName==="TEXTAREA"||t.tagName==="SELECT"||t.isContentEditable);
