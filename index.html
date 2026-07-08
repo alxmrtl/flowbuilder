@@ -106,6 +106,17 @@
   .modal code{background:var(--panel2);border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-size:12px}
   .modal .steps{margin-top:14px}
   .modal.wide{width:min(900px,94vw)}
+  /* ---- bottleneck-threshold modal ---- */
+  .bn-row{display:flex;align-items:center;justify-content:space-between;gap:14px;margin:14px 0 4px}
+  .bn-row label{font-weight:600;white-space:nowrap}
+  .bn-thr{display:flex;align-items:center;gap:10px;flex:1;justify-content:flex-end}
+  .bn-thr input[type=range]{flex:1;max-width:220px;accent-color:var(--accent)}
+  .bn-thr output{font-variant-numeric:tabular-nums;font-weight:700;font-size:16px;min-width:46px;text-align:right;color:var(--nva)}
+  .bn-check{display:flex;align-items:flex-start;gap:9px;margin:14px 0 4px;cursor:pointer;line-height:1.4}
+  .bn-check input{margin-top:2px;accent-color:var(--accent)}
+  .bn-now{margin-top:14px;padding:10px 12px;background:var(--panel2);border:1px solid var(--line);
+    border-radius:9px;font-size:13px}
+  .bn-now b{color:var(--nva)}
   /* ---- "Metrics explained" overlay (rendered from METRICS_SPEC) ---- */
   .mx-intro{color:var(--muted);font-size:13.5px;line-height:1.55;margin:8px 0 16px}
   .mx-cats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:18px}
@@ -768,6 +779,14 @@
   </div>
 </div>
 
+<!-- Bottleneck flag settings — threshold + "always show weakest" toggle -->
+<div class="overlay" id="bnOverlay">
+  <div class="modal">
+    <div class="modal-h"><h3>What counts as a bottleneck</h3><button class="x" id="bnClose">✕</button></div>
+    <div id="bnBody"></div>
+  </div>
+</div>
+
 <!-- Metrics-system explainer (rendered from METRICS_SPEC) -->
 <div class="overlay" id="metricsOverlay">
   <div class="modal wide">
@@ -877,7 +896,7 @@
 <script id="egp-model" type="application/json">
 {
   "name": "Start here — what each block means",
-  "settings": { "timeUnit": "hrs", "bottleneckMode": "relative", "demand": 6 },
+  "settings": { "timeUnit": "hrs", "bottleneckMode": "absolute", "demand": 6 },
   "nodes": [
     { "id": "start", "type": "start", "label": "Start — a request arrives", "x": 40,  "y": 220 },
     { "id": "q1", "type": "wait", "label": "Queue — pure waiting", "stepId": "q1", "x": 240, "y": 220, "wip": 8 },
@@ -944,7 +963,7 @@ const METRICS_SPEC = {
     wip:         {l:"In queue",          c:"capacity", u:"cases",   d:"Items sitting in a queue right now."},
     capacity:    {l:"Capacity",          c:"capacity", u:"/day",    d:"The most a step could complete in a day."},
     effCapacity: {l:"Effective capacity",c:"capacity", u:"/day",    d:"Capacity after rework takes its bite."},
-    pace:        {l:"Output",            c:"capacity", u:"/day",    d:"Cases a step actually completes per day."},
+    pace:        {l:"Output",            c:"capacity", u:"/day",    d:"Cases a step actually completes per day, based on incoming work and capped by the step’s capacity."},
     load:        {l:"Load",              c:"capacity", u:"%",       d:"Demand on a step ÷ its effective capacity."},
     flowCap:     {l:"Can deliver",       c:"capacity", u:"/day",    d:"The whole flow’s ceiling — the slowest step sets it."},
     ownerLoad:   {l:"Load by role",      c:"capacity", u:"%",       d:"Hours of work each role faces vs hours they’re staffed."},
@@ -971,8 +990,8 @@ const METRICS_SPEC = {
       chips:["Measured — imported sheet","Observed — typed override","Modelled — people × hours"],
       d:"When more than one source exists for the same number, the more real one wins." },
     bottleneckFlag:{ title:"Who gets the bottleneck flag",
-      chips:["A step running at ≥ 80% load","The longest queue","The busiest step"],
-      d:"One flag across the whole tool — a genuinely hot step beats a long queue." }
+      chips:["A step at or above the load threshold (default 80%)","The longest queue","(optional) the weakest link"],
+      d:"One flag across the whole tool — a loaded step beats a long queue. Set the threshold on the Biggest bottleneck card, or turn on “always show the weakest step.”" }
   },
   explainer:{
     title:"Metrics explained",
@@ -1129,7 +1148,7 @@ function openFlow(id, mode){
 }
 function newFlow(){
   const id=uid("flow_");
-  const model={ name:"New flow", settings:{timeUnit:"hrs",bottleneckMode:"relative"},
+  const model={ name:"New flow", settings:{timeUnit:"hrs",bottleneckMode:"absolute"},
     nodes:[ {id:"start",type:"start",label:"Customer request",x:60,y:200},
             {id:"end",type:"end",label:"Value delivered",x:560,y:200} ], edges:[] };
   state.library.flows[id]={id,name:model.name,model,updatedAt:Date.now()};
@@ -1333,10 +1352,14 @@ function rollup(){
         waits.push({node:n, wait:wt, wip:mt.wip, visits:v, derived}); } } });
   const turnaround=touch+wait; const eff=turnaround>0? touch/turnaround : null;
   let bottleneck=null; if(waits.length) bottleneck=waits.slice().sort((a,b)=>b.wait-a.wait)[0];
-  /* one flagged bottleneck everywhere: a genuinely hot step (load ≥ 80%) beats the longest queue */
-  const flag = (busiest && busiest.load>=0.8) ? {kind:"load", node:busiest.node, load:busiest.load}
+  /* one flagged bottleneck everywhere: a genuinely hot step (load ≥ 80%) beats the longest queue.
+     "absolute" (default): only flag a real constraint — a hot step or a real queue; a step with
+     plenty of headroom gets no flag. "relative": also surface the weakest link when nothing is hot. */
+  const bnMode=(state.model.settings&&state.model.settings.bottleneckMode)||"absolute";
+  const bnThr=(state.model.settings&&state.model.settings.bottleneckThreshold!=null)?state.model.settings.bottleneckThreshold:0.8;
+  const flag = (busiest && busiest.load>=bnThr) ? {kind:"load", node:busiest.node, load:busiest.load}
              : bottleneck ? {kind:"wait", node:bottleneck.node, wait:bottleneck.wait, derived:bottleneck.derived}
-             : busiest ? {kind:"load", node:busiest.node, load:busiest.load} : null;
+             : (bnMode==="relative" && busiest) ? {kind:"load", node:busiest.node, load:busiest.load} : null;
   /* owner load + quality — leaf steps only (sub-steps inherit the parent's spot on the flow) */
   const owners={}; let lost=0, rft=null, worst=null, rcount=0;
   state.model.nodes.forEach(n=>{ if(n.type!=="touch" || hasSubs(n)) return;
@@ -1485,13 +1508,14 @@ function renderStats(r){
       title:"Set incoming work on the Start step to see whether the flow keeps up"});
   }
   if(r.flag){
-    capCards+=card({cls:"bottleneck",k:ML("bottleneck"),
+    capCards+=card({cls:"bottleneck clickable bn-open",k:`${ML("bottleneck")} <span class="info">ⓘ</span>`,
       v: r.flag.kind==="load" ? `${esc(r.flag.node.label)} · ${Math.round(r.flag.load*100)}% <small>load</small>`
                               : `${r.flag.derived?"≈ ":""}${esc(r.flag.node.label)} · ${fmt(r.flag.wait)} ${u}`,
-      title: r.flag.kind==="load" ? "The most loaded step — it sets the pace of the whole flow"
-                                  : "The queue holding items the longest"});
+      title: r.flag.kind==="load" ? "The most loaded step — it sets the pace of the whole flow · click to set the threshold"
+                                  : "The queue holding items the longest · click to set the threshold"});
   } else {
-    capCards+=card({cls:"bottleneck",k:ML("bottleneck"),v:"none"});
+    capCards+=card({cls:"bottleneck clickable bn-open",k:`${ML("bottleneck")} <span class="info">ⓘ</span>`,v:"none",
+      title:"No step reaches the bottleneck threshold · click to change it"});
   }
   if(cap.byOwner && cap.byOwner.length){
     const lc=l=>l==null?"":l>=0.8?"hot":l>=0.6?"warn":"calm";
@@ -1529,6 +1553,7 @@ function renderStats(r){
     <div class="pillar">${pHead("quality")}<div class="p-cards">${qualCards}</div></div>`;
   const effCard=$("#stats .stat.eff.clickable:not(.dash-open)"); if(effCard) effCard.onclick=()=>showEffModal(r);
   const kuCard=$("#stats .stat.dash-open"); if(kuCard) kuCard.onclick=()=>showDashboard();
+  const bnCard=$("#stats .stat.bn-open"); if(bnCard) bnCard.onclick=()=>showBottleneckModal(r);
 }
 
 /* plain-language breakdown of how flow efficiency is calculated, with this flow's live numbers */
@@ -1553,6 +1578,38 @@ function showEffModal(r){
     <p class="mut small">Higher is better. Most real value streams sit well under 25% — the rest is waiting.
        Cutting queue/wait time usually raises this number far more than making the work itself faster.</p>`;
   $("#effOverlay").classList.add("show");
+}
+
+/* the bottleneck flag rule — set the load threshold, or opt into "always show the weakest step" */
+function showBottleneckModal(r){
+  const s=state.model.settings||(state.model.settings={});
+  const thrOf=()=>Math.round(((s.bottleneckThreshold!=null?s.bottleneckThreshold:0.8))*100);
+  const nowLine=rr=>{
+    if(rr.flag) return rr.flag.kind==="load"
+        ? `Flagged: <b>${esc(rr.flag.node.label)}</b> at ${Math.round(rr.flag.load*100)}% load.`
+        : `Flagged: <b>${esc(rr.flag.node.label)}</b> — longest queue (${rr.flag.derived?"≈":""}${fmt(rr.flag.wait)} ${unit()}).`;
+    return `Nothing flagged — every step sits below the threshold${s.bottleneckMode==="relative"?"":" (and “always show weakest” is off)"}.`;
+  };
+  $("#bnBody").innerHTML=`
+    <p>A step is flagged as the <b>bottleneck</b> when its <b>load</b> — the work arriving versus what
+       it can handle — reaches the line you set here. Only the single most-loaded step gets the flag.
+       (A genuinely long queue is flagged too, regardless of this number.)</p>
+    <div class="bn-row">
+      <label for="bnThr">Flag a step at or above</label>
+      <div class="bn-thr"><input type="range" id="bnThr" min="50" max="120" step="5" value="${thrOf()}">
+        <output id="bnThrOut">${thrOf()}%</output></div>
+    </div>
+    <p class="mut small">80% is the usual danger line — above it, waiting starts to build up well before a
+       step is technically full. 100% means it can no longer keep up with the incoming work.</p>
+    <label class="bn-check"><input type="checkbox" id="bnRel" ${s.bottleneckMode==="relative"?"checked":""}>
+      <span>Always show the weakest step, even when nothing reaches the threshold — useful for spotting the
+        relative weak link in a flow that has plenty of headroom.</span></label>
+    <div class="bn-now" id="bnNow">${nowLine(r)}</div>`;
+  const refresh=()=>{ render(); const rr=rollup(); const el=$("#bnNow"); if(el) el.innerHTML=nowLine(rr); };
+  const thr=$("#bnThr"), out=$("#bnThrOut"), rel=$("#bnRel");
+  thr.oninput=()=>{ out.textContent=thr.value+"%"; s.bottleneckThreshold=(+thr.value)/100; refresh(); };
+  rel.onchange=()=>{ s.bottleneckMode=rel.checked?"relative":"absolute"; refresh(); };
+  $("#bnOverlay").classList.add("show");
 }
 
 /* ============================================================
@@ -2497,13 +2554,6 @@ function renderCanvas(r){
         const load=pc&&pc.load!=null?Math.max(0,pc.load):((tp!=null&&capV!=null&&capV>0)?Math.max(0,tp/capV):null);
         const lc=load==null?"var(--faint)":SEVC[load>=0.8?"hot":load>=0.6?"warn":"calm"].c;
         drawNum(padL, ML("pace").toUpperCase(), tp!=null?fmt(tp):"—","/day", tp!=null?null:"var(--faint)","capacity", METRICS_SPEC.metrics.pace.d);
-        // loops & branch-backs multiply demand — flag when a case passes through more than once
-        const vv=(r.visits&&r.visits[n.id])||0;
-        if(vv>1.15){
-          const vm=txt(midX-14,colTop+4,`×${fmt(vv)}/case`,"",{"text-anchor":"end","font-size":"9","font-weight":"800",fill:"var(--warn)"});
-          const vt=el("title"); vt.textContent=`Each case passes through here ≈${fmt(vv)}× — loop-backs multiply this step's demand`;
-          vm.appendChild(vt); g.appendChild(vm);
-        }
         const capRow=(i)=>drawRow(padL,i,"Capacity",capV!=null?fmt(capV)+"/d":"—",capV!=null?"var(--ink)":"var(--muted)",{calc:METRICS_SPEC.metrics.capacity.d});
         const loadRow=(i)=>drawRow(padL,i,"Load",load!=null?Math.round(load*100)+"%":"—",lc,{calc:METRICS_SPEC.metrics.load.d});
         if(isBot){ capRow(0); loadRow(1); }
@@ -2891,7 +2941,7 @@ function renderInspector(){
         <input type="number" data-setbind="demand" value="${(state.model.settings&&state.model.settings.demand)!=null?esc(state.model.settings.demand):""}" />
         <div class="sub" style="margin:4px 0 0">What arrives each day — powers the Capacity pillar and every step's load.</div></div>
       ${settingsSelect("Time unit","timeUnit",u,["hrs","days","min"])}
-      ${settingsSelect("Bottleneck mode","bottleneckMode",(state.model.settings&&state.model.settings.bottleneckMode)||"relative",["relative","absolute"])}
+      <div class="sub" style="margin:4px 0 0">Bottleneck threshold lives on the <b>Biggest bottleneck</b> card (bottom analysis) — click it to set the % or always show the weakest step.</div>
       <div class="sub" style="margin-top:2px">Theme &amp; colours live in <b>🎨 Appearance</b> (top bar).</div>
     </div>`;
   }
@@ -4463,6 +4513,8 @@ $("#howClose").onclick=()=>$("#howOverlay").classList.remove("show");
 $("#howOverlay").onclick=e=>{ if(e.target.id==="howOverlay") $("#howOverlay").classList.remove("show"); };
 $("#effClose").onclick=()=>$("#effOverlay").classList.remove("show");
 $("#effOverlay").onclick=e=>{ if(e.target.id==="effOverlay") $("#effOverlay").classList.remove("show"); };
+$("#bnClose").onclick=()=>$("#bnOverlay").classList.remove("show");
+$("#bnOverlay").onclick=e=>{ if(e.target.id==="bnOverlay") $("#bnOverlay").classList.remove("show"); };
 $("#metricsHelp").onclick=()=>showMetricsModal();
 $("#metricsClose").onclick=()=>$("#metricsOverlay").classList.remove("show");
 $("#metricsOverlay").onclick=e=>{ if(e.target.id==="metricsOverlay") $("#metricsOverlay").classList.remove("show"); };
