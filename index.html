@@ -227,7 +227,6 @@
   #paletteBar button:hover{border-color:var(--accent)}
   #paletteBar .swatch{display:inline-block;width:10px;height:10px;border-radius:3px}
   #paletteBar .swatch-group{background:transparent;border:1.5px solid var(--accent);border-radius:3px}
-  #paletteBar .swatch-comment{background:#f4d77a;border-radius:2px}
   #paletteBar .pb-sep{width:1px;align-self:stretch;background:var(--line);margin:2px 4px}
   #paletteBar button.tool-on{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 18%,var(--panel2));box-shadow:0 0 0 1px var(--accent) inset}
   #paletteBar .pb-zoom{display:flex;align-items:center;gap:6px;margin-left:8px}
@@ -482,10 +481,12 @@
   button.addsub{width:100%;background:transparent;border:1px dashed var(--line);border-radius:8px;color:var(--muted);padding:8px;cursor:pointer}
   button.addsub:hover{border-color:var(--accent);color:var(--accent)}
   .backparent{background:transparent;border:none;color:var(--accent);cursor:pointer;padding:0 6px 0 0;font-size:12px}
-  /* ---- annotation tools (group / comment) ---- */
+  /* ---- annotation tools (group / note) ---- */
   body.tool-group #stage, body.tool-comment #stage{cursor:crosshair}
-  body.tool-group .node, body.tool-comment .node{opacity:.5;transition:opacity .08s}
+  body.tool-group .node{opacity:.5;transition:opacity .08s}
   body.tool-group .node.in-group{opacity:1}
+  /* note tool armed: hovering a step signals "drop here to attach" */
+  body.tool-comment .node:hover .nbox{stroke-width:2.5}
   /* dragging/resizing a group box over steps → same "include" affordance as drawing a group */
   body.anno-grouping .node[data-id]{opacity:.5;transition:opacity .08s}
   body.anno-grouping .node[data-id].in-group{opacity:1}
@@ -526,6 +527,10 @@
   .build .comment:hover .vedit{fill-opacity:.04}
   .build .comment .vedit:hover{fill-opacity:.09}
   .build .comment .vedit.pick{cursor:pointer}
+  /* transient type-picker chips */
+  .note-picker .np-plate{fill:var(--panel);stroke:var(--line);filter:drop-shadow(0 3px 8px rgba(0,0,0,.3))}
+  .note-picker .np-chip{cursor:pointer}
+  .note-picker .np-chip:hover rect{filter:brightness(1.08)}
   .glabel-edit{width:100%;box-sizing:border-box;background:var(--panel2);border:1px solid var(--accent);color:var(--ink);
     border-radius:5px;font-family:var(--font);font-size:13px;font-weight:700;padding:2px 6px;outline:none}
   /* on-card inline editors (title / details) — transient, spawned only while editing */
@@ -862,7 +867,7 @@
   <button data-tool="select" title="Selection box — drag across steps to select several, then drag one to move them together"><svg class="t-ic"><use href="#ic-select"/></svg>Select</button>
   <button data-tool="connect" title="Connect — shows every connection point; drag a dot to wire two steps, or drag an arrow's end to re-attach it"><svg class="t-ic"><use href="#ic-connect"/></svg>Connect</button>
   <button data-tool="group" title="Draw a box around several steps to group and label them"><span class="swatch swatch-group"></span>Group</button>
-  <button data-tool="comment" title="Drop a note anywhere on the map"><span class="swatch swatch-comment"></span>Comment</button>
+  <button data-tool="comment" title="Drop a note, frustration, waste flag or idea — on a step or anywhere on the map"><svg class="t-ic"><use href="#ic-nt-note"/></svg>Note</button>
   <span class="pb-sep"></span>
   <span class="pb-label">Views</span>
   <button data-cardview="value" title="Value lens — classify each step as value / necessary / waste"><svg class="t-ic"><use href="#ic-val-value"/></svg>Value</button>
@@ -2824,6 +2829,17 @@ function renderCanvas(r){
   if(showNotes()) (m.comments||[]).filter(c=>!c.nodeId).forEach(cm=>{
     svg.appendChild(noteCardEl(cm, cm.x, cm.y, cm.w, cm.h, {resizable:true}));
   });
+  // transient type-picker chips (edit-only; .note-picker is hidden in exports)
+  if(state._notePick && editable() && showNotes()){
+    const pc=(m.comments||[]).find(c=>c.id===state._notePick.cid);
+    if(!pc){ state._notePick=null; }
+    else{
+      let ax=pc.x, ay=pc.y;
+      if(pc.nodeId){ const an=m.nodes.find(n=>n.id===pc.nodeId), aL=an&&lay[an.id];
+        if(an&&aL){ ax=an.x+aL.w+18; ay=an.y+(aL.bt||0); } }
+      svg.appendChild(notePickerEl(pc, ax, ay));
+    }
+  }
 
   // gentle hint on a fresh flow (start/end only, nothing connected)
   if(editable() && !(m.edges||[]).length && !m.nodes.some(n=>n.type==="touch"||n.type==="wait")){
@@ -2836,7 +2852,9 @@ function renderCanvas(r){
   // a running simulation survives re-renders: its layer rides on top, paths are re-cached lazily
   if(_sim&&_sim.layer){ svg.appendChild(_sim.layer); _sim.pathsDirty=true; }
 
-  svg.onclick=()=>{ if(state.linkingFrom){ cancelLink(); } else if(!_connectJustFinished && !_marqueeJustFinished && !_annoJustFinished && !_panJustFinished){ state.selectedIds=[]; selectNode(null); } };
+  svg.onclick=()=>{ if(state.linkingFrom){ cancelLink(); }
+    else if(state._notePick && !_annoJustFinished){ state._notePick=null; render(); }   // close picker, keep whatever type is set
+    else if(!_connectJustFinished && !_marqueeJustFinished && !_annoJustFinished && !_panJustFinished){ state.selectedIds=[]; selectNode(null); } };
   svg.onmousedown=ev=>{ if(ev.target!==svg) return;
     if(state.tool==="group"){ startGroupSel(ev); return; }
     if(state.tool==="comment"){ placeComment(ev); return; }
@@ -3656,10 +3674,51 @@ function editNoteText(cm,x,y,w,h,headH){
     placeholder:"Type a note…",onCommit:v=>{ cm.text=v; scheduleSave(); }});
 }
 
-/* COMMENT: click to drop a note, then double-click it to type */
+/* COMMENT: click to drop a note → type-picker chips appear, then the text editor */
 function placeComment(ev){ ev.preventDefault(); const p=svgPt(ev);
-  const c={id:uid("cmt"), x:Math.max(0,p.x-100), y:Math.max(0,p.y-60), w:200, h:120, text:""};
-  state.model.comments.push(c); setTool(null); state._editComment=c.id; annoDone(); render(); }
+  const c={id:uid("cmt"), x:Math.max(0,p.x-100), y:Math.max(0,p.y-60), w:200, h:120, text:"", type:"note"};
+  state.model.comments.push(c); setTool(null);
+  state._notePick={cid:c.id, stage:"type", thenEdit:true};
+  annoDone(); render(); }
+
+/* transient type-picker: a chip row floating above the note — stage "type" offers the four
+   note types; picking Waste reveals the subtype row (leading plain-waste chip = skip) */
+function notePickerEl(cm, ax, ay){
+  const g=el("g",{class:"note-picker"});
+  const CH=24, GAP=5;
+  const sub=state._notePick.stage==="subtype";
+  const chips = sub
+    ? [["waste",null], ...Object.keys(WASTE_SUBS).map(k=>["waste",k])]
+    : Object.keys(NOTE_TYPES).map(k=>[k,null]);
+  const W=chips.length*(CH+GAP)-GAP+12, H=CH+12;
+  const px=Math.max(4,ax), py=Math.max(4,ay-H-8);
+  g.appendChild(el("rect",{class:"np-plate",x:px,y:py,width:W,height:H,rx:8}));
+  chips.forEach(([tk,sk],i)=>{
+    const NT=NOTE_TYPES[tk], cx=px+6+i*(CH+GAP), cy=py+6;
+    const on = sub ? (cm.type==="waste" && (cm.subtype||null)===sk) : cm.type===tk;
+    const c=el("g",{class:"np-chip"});
+    const r=el("rect",{x:cx,y:cy,width:CH,height:CH,rx:6});
+    r.style.fill=NT.fill; r.style.stroke=on?NT.ink:NT.line; r.style.strokeWidth=on?"2":"1";
+    c.appendChild(r);
+    c.appendChild(useIc(sk?WASTE_SUBS[sk].ic:NT.ic, cx+4, cy+4, 16, NT.ink));
+    const t=el("title");
+    t.textContent = sub ? (sk?`Waste · ${WASTE_SUBS[sk].label}`:"Waste (no flavour)")
+                        : (tk==="waste"?"Waste — pick a flavour next":NT.label);
+    c.appendChild(t);
+    c.addEventListener("mousedown",ev=>ev.stopPropagation());
+    c.addEventListener("click",ev=>{ ev.stopPropagation();
+      if(sub){ cm.type="waste"; if(sk) cm.subtype=sk; else delete cm.subtype; finishNotePick(cm); }
+      else if(tk==="waste"){ cm.type="waste"; delete cm.subtype; state._notePick.stage="subtype"; render(); }
+      else { cm.type=tk; delete cm.subtype; finishNotePick(cm); } });
+    g.appendChild(c);
+  });
+  return g;
+}
+function finishNotePick(cm){
+  const p=state._notePick; state._notePick=null;
+  if(p && p.thenEdit && !cm.text) state._editComment=cm.id;   // fresh note → straight into typing
+  render();
+}
 
 /* shared move / resize for both annotation kinds (groups move independently of nodes) */
 let annoDrag=null, _annoMoved=false;   // _annoMoved distinguishes a drag from a click-to-select
@@ -4691,6 +4750,7 @@ function deleteSelection(){
 document.addEventListener("keydown",e=>{
   if(e.key==="Escape"){ if(state.simming){ stopSim(); return; }
     closeMenus();
+    if(state._notePick){ state._notePick=null; render(); return; }    // close the type picker first
     if(state.tool==="group"||state.tool==="comment") setTool(null);   // cancel a one-shot tool → back to base
     else if(state.selectedIds.length) selectNode(null);               // else drop a held marquee selection
     const ov=document.querySelector(".overlay.show"); if(ov) ov.classList.remove("show"); return; }
