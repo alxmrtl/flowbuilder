@@ -1855,6 +1855,19 @@ function deriveInsights(r){
       nodeId:biggest?biggest.node.id:null});
   }
 
+  { // logged pain points (frustration + waste notes) — the qualitative layer analytics can't see
+    const pain=(state.model.comments||[]).filter(c=>(c.text||"").trim() && (c.type==="frustration"||c.type==="waste"));
+    if(pain.length>=2){
+      const byNode={}; pain.forEach(c=>{ if(c.nodeId) byNode[c.nodeId]=(byNode[c.nodeId]||0)+1; });
+      const topId=Object.keys(byNode).sort((a,b)=>byNode[b]-byNode[a])[0];
+      const topNode=topId&&state.model.nodes.find(n=>n.id===topId);
+      out.push({id:"painpoints",cat:"quality",tier:2,sev:"warn",score:pain.length,
+        headline:`${pain.length} <small>pain points logged</small>`,
+        line:`Frustrations and waste flagged on the map${topNode?` — ${esc(topNode.label)} carries the most (${byNode[topId]})`:""}. Read them alongside the numbers; they point where the friction actually bites.`,
+        why:`frustration + waste notes`, nodeId:topNode?topNode.id:null});
+    }
+  }
+
   if(r.eff!=null) out.push({id:"eff",cat:"speed",tier:2,sev:r.eff<0.05?"hot":r.eff<0.15?"warn":"calm",score:(1-r.eff)*100-1,
     headline:`${Math.round(r.eff*100)}% <small>${ML("eff").toLowerCase()}</small>`,
     line:`${r.eff<0.15?"Low, and normal — 15% is respectable for most flows.":"Respectable — most flows sit well under 15%."} Cutting queues moves this far more than working faster.`,
@@ -4280,6 +4293,10 @@ function buildFlowText(){
   const byId=Object.fromEntries(m.nodes.map(n=>[n.id,n]));
   const num=v=>(v==null||isNaN(v))?null:fmt(v);          // formatted number, or null to drop the field
   const L=[];
+  const allNotes=(m.comments||[]).filter(c=>(c.text||"").trim());
+  const notesByNode={}; allNotes.forEach(c=>{ if(c.nodeId){ (notesByNode[c.nodeId]=notesByNode[c.nodeId]||[]).push(c); } });
+  const noteTally={frustration:0,waste:0,idea:0,note:0};
+  allNotes.forEach(c=>{ noteTally[NOTE_TYPES[c.type]?c.type:"note"]++; });
 
   L.push(`# ${m.name||"Untitled flow"} — value stream (text export)`);
   L.push(`A lean value-stream map: the "work" steps and "queues" (waits) an item passes through`);
@@ -4310,6 +4327,12 @@ function buildFlowText(){
   if(q.rft!=null) L.push(`- Right first time: ${Math.round(q.rft*100)}%`);
   if(cap.lostToRework!=null) L.push(`- Lost to rework: ${num(cap.lostToRework)} hrs/day`);
   if(r.unclassified>0) L.push(`- Unrated steps (no value set): ${r.unclassified}`);
+  { const parts=[];
+    if(noteTally.frustration) parts.push(`${noteTally.frustration} frustration${noteTally.frustration>1?"s":""}`);
+    if(noteTally.waste) parts.push(`${noteTally.waste} waste flag${noteTally.waste>1?"s":""}`);
+    if(noteTally.idea) parts.push(`${noteTally.idea} idea${noteTally.idea>1?"s":""}`);
+    if(noteTally.note) parts.push(`${noteTally.note} note${noteTally.note>1?"s":""}`);
+    if(parts.length) L.push(`- Logged observations: ${parts.join(", ")}`); }
   L.push("");
 
   /* ---- steps, in flow order ---- */
@@ -4341,6 +4364,7 @@ function buildFlowText(){
       if(seg.length) L.push(`     ${seg.join(" · ")}`);
     }
     if((n.valueNote||"").trim()) L.push(`     details: ${n.valueNote.trim()}`);
+    (notesByNode[n.id]||[]).forEach(c=> L.push(`     note [${noteLabel(c)}]: ${c.text.trim()}`));
   });
   L.push("");
 
@@ -4371,13 +4395,22 @@ function buildFlowText(){
     L.push("");
   }
 
+  /* ---- floating notes (not tied to a step) ---- */
+  const floating=allNotes.filter(c=>!c.nodeId);
+  if(floating.length){
+    L.push("OBSERVATIONS (notes across the map)");
+    floating.forEach(c=> L.push(`- [${noteLabel(c)}] ${c.text.trim()}`));
+    L.push("");
+  }
+
   /* ---- built-in analysis prompt ---- */
   L.push("---");
   L.push("ANALYSIS TASK");
   L.push("You are a lean / operations analyst. The value stream above is described step by");
   L.push("step with its measured numbers. Analyse it and return:");
   L.push("1. The top 1–3 constraints (bottlenecks / overloaded roles) and what each costs.");
-  L.push("2. The biggest sources of waste — waiting, rework, and Could-remove work — with the hours involved.");
+  L.push("2. The biggest sources of waste — waiting, rework, and Could-remove work — with the hours");
+  L.push("   involved, weighing the frustration and waste notes logged on specific steps.");
   L.push("3. Flow-efficiency read: how much of the journey is waiting vs. real work, and where.");
   L.push("4. Three concrete quick wins, each citing the specific step(s) and numbers, with the");
   L.push("   expected impact (e.g. lift to flow efficiency or throughput).");
