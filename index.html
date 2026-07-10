@@ -229,6 +229,10 @@
   #paletteBar .swatch-group{background:transparent;border:1.5px solid var(--accent);border-radius:3px}
   #paletteBar .pb-sep{width:1px;align-self:stretch;background:var(--line);margin:2px 4px}
   #paletteBar button.tool-on{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 18%,var(--panel2));box-shadow:0 0 0 1px var(--accent) inset}
+  /* Cursor is the everyday tool — full size; the specialist tools sit beside it, quieter and smaller */
+  #paletteBar button.pb-mini{padding:6px 9px;font-size:12px;gap:5px;opacity:.85}
+  #paletteBar button.pb-mini .t-ic{width:13px;height:13px}
+  #paletteBar button.pb-mini:hover,#paletteBar button.pb-mini.tool-on{opacity:1}
   #paletteBar .pb-zoom{display:flex;align-items:center;gap:6px;margin-left:8px}
   #paletteBar .pb-zoom button{padding:6px 11px;font-size:15px;font-weight:700;line-height:1;min-width:34px;justify-content:center}
   #paletteBar .pb-zoom span{color:var(--faint);font-size:11px;min-width:40px;text-align:center}
@@ -493,13 +497,17 @@
   /* held marquee selection: chosen steps stay lit, the rest dim until you click empty canvas */
   body.has-selection:not(.anno-grouping) .node[data-id]{opacity:.5;transition:opacity .08s}
   body.has-selection:not(.anno-grouping) .node[data-id].multi{opacity:1}
-  /* ---- canvas cursors (select box / hand pan) ---- */
-  body.tool-select #stage, body.tool-select #stage *{cursor:crosshair}
-  /* hovering an already-selected step in Select mode → move affordance (drag to reposition) */
-  body.tool-select #stage .node.selected, body.tool-select #stage .node.selected *,
-  body.tool-select #stage .node.multi, body.tool-select #stage .node.multi *{cursor:move}
-  body.tool-pan #stage, body.tool-pan #stage *{cursor:grab}
-  body.tool-pan.panning #stage, body.tool-pan.panning #stage *{cursor:grabbing}
+  /* ---- canvas cursors (unified cursor tool) ---- */
+  body.tool-cursor #stage{cursor:default}
+  body.tool-cursor #stage .node, body.tool-cursor #stage .node *{cursor:move}
+  /* interactive bits inside a card keep their own cursor (the .node * move rule is broad) */
+  body.tool-cursor #stage .node .anchor{cursor:crosshair}
+  body.tool-cursor #stage .node .del-handle, body.tool-cursor #stage .node .del-handle *,
+  body.tool-cursor #stage .node .plus-handle, body.tool-cursor #stage .node .plus-handle *,
+  body.tool-cursor #stage .node .vedit.pick{cursor:pointer}
+  body.tool-cursor #stage .node .vedit{cursor:text}
+  body.space-pan #stage, body.space-pan #stage *{cursor:grab}
+  body.panning #stage, body.panning #stage *{cursor:grabbing}
   .group .gbox{fill:var(--accent);fill-opacity:.05;stroke:var(--accent);stroke-opacity:.55;stroke-width:1.5;stroke-dasharray:6 4;rx:14}
   .build .group .gbox{pointer-events:all;cursor:grab}
   .group.selected .gbox{stroke-opacity:1;stroke-width:2;stroke-dasharray:none;fill-opacity:.09}
@@ -533,6 +541,11 @@
   .note-picker .np-chip:hover rect{filter:brightness(1.08)}
   .note-badge{cursor:pointer}
   .note-badge text{pointer-events:none}
+  /* ghost "+ Add note" row at the foot of an open note stack */
+  .note-ghost rect{fill:transparent;stroke:var(--faint);stroke-dasharray:4 4;cursor:pointer}
+  .note-ghost text{fill:var(--faint);font-size:11px;font-family:var(--font);pointer-events:none}
+  .note-ghost:hover rect{stroke:var(--accent)}
+  .note-ghost:hover text{fill:var(--accent)}
   .note-leader{stroke:var(--faint);stroke-width:1;stroke-dasharray:2 3;fill:none;opacity:.7}
   /* dragging a note over a step: attach affordance */
   .node.drop-target .nbox{stroke-width:3}
@@ -547,8 +560,12 @@
   .build .group:hover .del-handle,.build .comment:hover .del-handle{opacity:1;pointer-events:all}
   .edge{fill:none;stroke:var(--faint);stroke-width:2}
   .edge.hot{stroke:var(--nva)}
+  .edge.sel{stroke:var(--accent);stroke-width:2.5}
+  .edge.insert-target{stroke:var(--accent);stroke-width:4}
   .edge-hit{fill:none;stroke:transparent;stroke-width:14;cursor:pointer}
-  .anchor{fill:var(--accent);stroke:#06202a;stroke-width:1.5;opacity:0;cursor:crosshair;transition:opacity .1s}
+  /* port dots: hollow when free, filled when the port already carries an arrow (drag adds another → branch) */
+  .anchor{fill:var(--panel2);stroke:var(--accent);stroke-width:1.5;opacity:0;cursor:crosshair;transition:opacity .1s}
+  .anchor.used{fill:var(--accent);stroke:#06202a}
   .build .node:hover .anchor{opacity:.95}
   body.connecting .anchor{opacity:.85}
   body.tool-connect .node .anchor{opacity:.9}   /* Connect tool: every port visible at once */
@@ -681,6 +698,10 @@
   <symbol id="ic-select" viewBox="0 0 24 24" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
     <rect x="3" y="3" width="18" height="18" rx="2.5" stroke-dasharray="3.2 3"/>
     <path d="M10 10l7 2.6-3 1.1-1.1 3L10 10Z" fill="currentColor" stroke="none"/>
+  </symbol>
+  <symbol id="ic-cursor" viewBox="0 0 24 24" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M5.5 4.5 18 10.2l-5.4 1.9-2.4 5.2L5.5 4.5Z" fill="currentColor" stroke="currentColor"/>
+    <path d="m13.2 13.2 4.6 4.6"/>
   </symbol>
   <symbol id="ic-hand" viewBox="0 0 24 24" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
     <path d="M9 11V5.5a1.5 1.5 0 0 1 3 0V11M12 10.5V4.5a1.5 1.5 0 0 1 3 0V11M15 11V6a1.5 1.5 0 0 1 3 0v7.5c0 3.6-2.6 6.5-6.3 6.5-2.1 0-3.7-.9-4.9-2.5L4 13.5a1.6 1.6 0 0 1 2.6-1.8L9 14.5V8a1.5 1.5 0 0 1 3 0"/>
@@ -868,11 +889,10 @@
   <button data-add="end"><span class="swatch" style="background:#cdd9e6"></span>End</button>
   <span class="pb-sep"></span>
   <span class="pb-label">Tools</span>
-  <button data-tool="pan" title="Move (default) — drag empty canvas to pan the map; drag a step to reposition it"><svg class="t-ic"><use href="#ic-hand"/></svg>Move</button>
-  <button data-tool="select" title="Selection box — drag across steps to select several, then drag one to move them together"><svg class="t-ic"><use href="#ic-select"/></svg>Select</button>
-  <button data-tool="connect" title="Connect — shows every connection point; drag a dot to wire two steps, or drag an arrow's end to re-attach it"><svg class="t-ic"><use href="#ic-connect"/></svg>Connect</button>
-  <button data-tool="group" title="Draw a box around several steps to group and label them"><span class="swatch swatch-group"></span>Group</button>
-  <button data-tool="comment" title="Drop a note, frustration, waste flag or idea — on a step or anywhere on the map"><svg class="t-ic"><use href="#ic-nt-note"/></svg>Note</button>
+  <button data-tool="cursor" class="pb-primary" title="Cursor (V) — click to select, drag steps to move, drag empty canvas to box-select, hold Space to pan; drag a port dot to connect"><svg class="t-ic"><use href="#ic-cursor"/></svg>Cursor</button>
+  <button data-tool="connect" class="pb-mini" title="Connect (C) — power rewiring: every port and arrow-end handle at once; drag a dot to wire, drag an arrow's end to re-attach"><svg class="t-ic"><use href="#ic-connect"/></svg>Connect</button>
+  <button data-tool="group" class="pb-mini" title="Group (G) — draw a box around several steps to group and label them"><span class="swatch swatch-group"></span>Group</button>
+  <button data-tool="comment" class="pb-mini" title="Note (N) — drop a note, frustration, waste flag or idea anywhere on the map"><svg class="t-ic"><use href="#ic-nt-note"/></svg>Note</button>
   <span class="pb-sep"></span>
   <span class="pb-label">Views</span>
   <button data-cardview="value" title="Value lens — classify each step as value / necessary / waste"><svg class="t-ic"><use href="#ic-val-value"/></svg>Value</button>
@@ -1058,12 +1078,14 @@ const state = {
   selectedIds: [],   // ids of marquee multi-selected nodes (for group move)
   zoom: 1,
   viewer: false,
-  tool: "pan",       // "pan" | "select" always-on base mode · "group" | "comment" one-shot tools
-  baseTool: "pan",   // last pan/select chosen — a one-shot tool reverts here when done
+  tool: "cursor",       // "cursor" | "connect" always-on base mode · "group" | "comment" one-shot tools
+  baseTool: "cursor",   // last base mode chosen — a one-shot tool reverts here when done
   ui: { openSecs: {} },   // which drawer sections are expanded — remembered across renders & node switches
   simming: false,    // a day-simulation is running — freezes all editing
   _notesOpen: new Set(),  // node ids with their note stack fanned out (transient, never persisted)
+  _notesAnim: {},         // node id → 0..1 open/close progress while a stack is animating
   _notePick: null,        // {cid, stage:"type"|"subtype", thenEdit} — type-picker chips open on a note
+  _stepPick: null,        // {x, y, fromId, fromSide, append?} — step-type chips after a port drop on empty canvas
 };
 
 /* ---------- helpers ---------- */
@@ -1251,7 +1273,7 @@ function loadModel(m){
   migrateComments(m);           // default untyped comments to plain notes, drop dangling anchors
   state.data = Array.isArray(m.data) ? m.data : [];   // imported stats are stored on the model
   state.selected=null; state.linkingFrom=null;
-  state._notesOpen=new Set(); state._notePick=null; state._editComment=null;   // per-flow transients
+  state._notesOpen=new Set(); state._notesAnim={}; state._notePick=null; state._editComment=null; state._stepPick=null;   // per-flow transients
   undoStack=[]; redoStack=[]; _undoBase=JSON.stringify(m);   // undo history is per open flow
   rebuildSegPer(); render();
 }
@@ -2149,6 +2171,19 @@ function nearestSide(node, L, px, py){
   const d={ top:Math.abs(py-top), bottom:Math.abs(py-bottom), left:Math.abs(px-x), right:Math.abs(px-(x+w)) };
   return SIDES.reduce((a,b)=>d[b]<d[a]?b:a);
 }
+/* nearest edge to a canvas point (both ends real & visible) — used to splice a dragged card into an arrow */
+function edgeAtPoint(px, py, excludeId){
+  const m=state.model; let best=null, bestD=26;
+  (m.edges||[]).forEach(e=>{
+    if(e.from===excludeId||e.to===excludeId) return;
+    const a=m.nodes.find(x=>x.id===e.from), b=m.nodes.find(x=>x.id===e.to);
+    const La=_lay[e.from], Lb=_lay[e.to]; if(!a||!b||!La||!Lb) return;
+    const geo=edgeGeom(portGeo(a,La,e.fromSide||"right"), portGeo(b,Lb,e.toSide||"left"));
+    for(let t=0.05;t<=0.95;t+=0.06){ const p=geo.at(t), d=Math.hypot(p.x-px,p.y-py);
+      if(d<bestD){ bestD=d; best=e; } }
+  });
+  return best;
+}
 let _lay={}; // last layout map, for connection-drag hit-testing
 
 function renderCanvas(r){
@@ -2243,6 +2278,7 @@ function renderCanvas(r){
   const eFlow=r.edgeFlow||{}, eShare=r.edgeShare||{}, demandV=r.cap?r.cap.demand:null;
   const maxEF=Math.max(1e-9,...m.edges.map(e=>eFlow[e.id]||0));
   const outCount={}; m.edges.forEach(e=>outCount[e.from]=(outCount[e.from]||0)+1);
+  const portUse={};  m.edges.forEach(e=>{ portUse[e.from+"|"+(e.fromSide||"right")]=1; portUse[e.to+"|"+(e.toSide||"left")]=1; });
   const labelLayer=el("g",{id:"edgeLabels"});   // appended AFTER the node loop → pills never hide under cards
   const endLayer=el("g",{id:"edgeEnds"});       // Connect-tool endpoint handles, above the cards so they're grabbable
   const placedPills=[], seenBoundary=new Set();
@@ -2267,16 +2303,21 @@ function renderCanvas(r){
       svg.appendChild(el("path",{d:bandD(geo,bw),class:"eband",
         fill:hot?"var(--nva)":"var(--wait)","fill-opacity":hot?"0.16":"0.13","pointer-events":"none"}));
     }
-    const ep=el("path",{d,class:"edge"+(hot?" hot":""),"marker-end":`url(#${hot?'arrowHot':'arrow'})`});
+    const edgeSel = state.selected && state.selected.type==="edge" && state.selected.id===e.id;
+    const ep=el("path",{d,class:"edge"+(hot?" hot":"")+(edgeSel?" sel":""),"marker-end":`url(#${hot?'arrowHot':'arrow'})`});
     ep.dataset.eid=e.id;                         // the simulator finds edge paths by id
     svg.appendChild(ep);
     if(editable()){ const hit=el("path",{d,class:"edge-hit"});
       hit.addEventListener("click",ev=>{ev.stopPropagation(); selectEdge(e.id);}); svg.appendChild(hit); }
-    // Connect tool: grabbable endpoint handles (only when both ends are real, visible nodes)
-    if(editable() && state.tool==="connect" && aReal && bReal){
+    // Grabbable endpoint handles: every edge in Connect mode, or just the selected edge in Cursor mode.
+    // Inset along the curve so they never sit on top of the port dots (dragging a port always adds a NEW arrow).
+    if(editable() && (state.tool==="connect" || edgeSel) && aReal && bReal){
+      const len=Math.max(1,Math.hypot(p2.x-p1.x,p2.y-p1.y));
+      const tIn=Math.min(0.18, 16/len);
       const mkEnd=(pt,which)=>{ const h=el("circle",{class:"edge-end",cx:pt.x,cy:pt.y,r:6});
+        h.appendChild(el("title")).textContent="Drag to re-attach this arrow";
         h.addEventListener("mousedown",ev=>startReconnect(ev,e,which)); endLayer.appendChild(h); };
-      mkEnd(p1,"from"); mkEnd(p2,"to");
+      mkEnd(geo.at(tIn),"from"); mkEnd(geo.at(1-tIn),"to");
     }
 
     /* one uniform label per edge, horizontal, riding inside the band */
@@ -2746,7 +2787,9 @@ function renderCanvas(r){
     // connection handles (4 dots) — editing only; sub-steps carry no arrows of their own
     if(editable()){
       if(!n.parentId) SIDES.forEach(side=>{ const p=portGeo(n,L,side);
-        const dot=el("circle",{class:"anchor",cx:p.x-n.x,cy:p.y-n.y,r:5,"data-side":side});
+        const used=portUse[n.id+"|"+side];
+        const dot=el("circle",{class:"anchor"+(used?" used":""),cx:p.x-n.x,cy:p.y-n.y,r:5,"data-side":side});
+        dot.appendChild(el("title")).textContent=used?"Drag to add another arrow (branch)":"Drag to connect";
         dot.addEventListener("mousedown",ev=>startConnect(ev,n,side));
         g.appendChild(dot); });
       // delete handle (✕ in a circle) — top-right corner, on hover
@@ -2757,6 +2800,18 @@ function renderCanvas(r){
       dh.addEventListener("mousedown",ev=>ev.stopPropagation());
       dh.addEventListener("click",ev=>{ ev.stopPropagation(); deleteNode(n.id); });
       g.appendChild(dh);
+      // "+" (bottom-left) — first note on this step (once notes exist the badge owns that corner)
+      if(L.kind==="card" && !n.parentId && showNotes() && !(notesByNode.get(n.id)||[]).length){
+        const nh=plusHandle(0, bt+L.h, ()=>addNoteToNode(n));
+        nh.appendChild(el("title")).textContent="Add a note, frustration, waste flag or idea";
+        g.appendChild(nh);
+      }
+      // "+" (right edge) — append the next step, pre-connected
+      if(L.kind==="card" && !n.parentId){
+        const ah=plusHandle(w+16, bt+L.h/2, ()=>{ state._stepPick={x:n.x+w+96, y:n.y+NODE_H/2, fromId:n.id, fromSide:"right", append:true}; render(); });
+        ah.appendChild(el("title")).textContent="Add the next step — connected automatically";
+        g.appendChild(ah);
+      }
       // "+" (top-left) — turn this step into a group container
       if(L.kind==="card") g.appendChild(plusHandle(0, bt, ()=>wrapInGroup(n.id)));
     }
@@ -2768,7 +2823,14 @@ function renderCanvas(r){
     g.addEventListener("mousedown",ev=>onNodeDown(ev,n));
     g.addEventListener("click",ev=>{ ev.stopPropagation();
       if(state.linkingFrom){ completeLink(n.id); return; }
-      if(!g._dragged && !_annoJustFinished) selectNode(n.id); });
+      if(g._dragged || _annoJustFinished) return;
+      if(ev.shiftKey && editable()){   // shift-click: build/toggle a multi-selection without a marquee
+        const ids=new Set(state.selectedIds);
+        if(state.selected && state.selected.type==="node") ids.add(state.selected.id);
+        ids.has(n.id) ? ids.delete(n.id) : ids.add(n.id);
+        state.selectedIds=[...ids]; state.selected=null; render(); return;
+      }
+      selectNode(n.id); });
     svg.appendChild(g);
   });
 
@@ -2893,11 +2955,14 @@ function renderCanvas(r){
     }
   }
 
+  // transient step-type chips after a port drag was dropped on empty canvas (edit-only, never exported)
+  if(state._stepPick && editable()) svg.appendChild(stepPickerEl(state._stepPick));
+
   // gentle hint on a fresh flow (start/end only, nothing connected)
   if(editable() && !(m.edges||[]).length && !m.nodes.some(n=>n.type==="touch"||n.type==="wait")){
     const hx=Math.max(320,maxX/2);
     [["Add steps from the bar above — Human, Bot or Queue.",300],
-     ["Hover a box and drag a dot to connect. Everything snaps to the grid.",322]]
+     ["Hover a box and drag a dot to connect — drop on empty space to create the next step.",322]]
       .forEach(([s2,y2])=>{ const h=el("text",{x:hx,y:y2,class:"canvas-hint","text-anchor":"middle"}); h.textContent=s2; svg.appendChild(h); });
   }
 
@@ -2905,14 +2970,15 @@ function renderCanvas(r){
   if(_sim&&_sim.layer){ svg.appendChild(_sim.layer); _sim.pathsDirty=true; }
 
   svg.onclick=()=>{ if(state.linkingFrom){ cancelLink(); }
+    else if(state._stepPick && !_connectJustFinished){ state._stepPick=null; render(); }   // dismiss the step chips, no step made
     else if(state._notePick && !_annoJustFinished){ state._notePick=null; render(); }   // close picker, keep whatever type is set
     else if(state._notesOpen.size && !_annoJustFinished){ state._notesOpen.clear(); render(); }   // click-away folds open stacks
     else if(!_connectJustFinished && !_marqueeJustFinished && !_annoJustFinished && !_panJustFinished){ state.selectedIds=[]; selectNode(null); } };
   svg.onmousedown=ev=>{ if(ev.target!==svg) return;
     if(state.tool==="group"){ startGroupSel(ev); return; }
     if(state.tool==="comment"){ placeComment(ev); return; }
-    if(state.tool==="select"){ startMarquee(ev); return; }
-    startPan(ev); };   // pan is the default base mode — drag empty canvas to move the map
+    if(_spaceDown || ev.button===1 || !editable()){ startPan(ev); return; }   // Space / middle-mouse (or viewer mode) grab-pans
+    startMarquee(ev); };   // cursor default: drag empty canvas to box-select
 }
 
 
@@ -3383,15 +3449,65 @@ function completeLink(toId){ const from=state.linkingFrom; if(!from||from===toId
 function cancelLink(silent){ if(state.linkingFrom&&!silent) toast("Link cancelled"); state.linkingFrom=null; }
 
 /* ---------- add / delete ---------- */
-function addNode(type, performer){
-  const id=uid(type[0]+"_"); const stage=$("#stage"), z=Z();
+function makeNode(type, performer){
+  const id=uid(type[0]+"_");
   const label={touch:(performer==="bot"?"New bot step":"New step"),wait:"New queue",start:"Start",end:"End"}[type];
-  // drop the new node into the visible viewport (map scroll px → logical, through the padded viewBox origin)
-  const n={id,type,label,x:Math.max(0,-CANVAS_PAD+stage.scrollLeft/z+120),y:Math.max(0,-CANVAS_PAD+stage.scrollTop/z+160)};
+  const n={id,type,label,x:0,y:0};
   if(type==="touch"){ n.stepId=id; n.touchTimeManual=null; n.throughputManual=null; n.capacityManual=null;
     n.people=null; n.hoursPerDay=null; n.reworkPct=null; n.performer=performer==="bot"?"bot":"human"; }
   if(type==="wait"){ n.stepId=id; n.waitTimeManual=null; }
-  state.model.nodes.push(n); selectNode(id);
+  return n;
+}
+function addNode(type, performer){
+  const stage=$("#stage"), z=Z();
+  const n=makeNode(type, performer);
+  // drop the new node into the visible viewport (map scroll px → logical, through the padded viewBox origin)
+  n.x=Math.max(0,-CANVAS_PAD+stage.scrollLeft/z+120); n.y=Math.max(0,-CANVAS_PAD+stage.scrollTop/z+160);
+  state.model.nodes.push(n); selectNode(n.id);
+}
+/* quick-create: a port drag dropped on empty canvas (or a card's "+") offered Human/Bot/Queue — build it pre-wired */
+const OPP_SIDE={right:"left",left:"right",top:"bottom",bottom:"top"};
+function quickCreateAt(type, performer){
+  const sp=state._stepPick; state._stepPick=null; if(!sp) return;
+  const m=state.model, from=m.nodes.find(x=>x.id===sp.fromId), FL=_lay[sp.fromId];
+  if(!from||!FL){ render(); return; }
+  const n=makeNode(type, performer);
+  if(sp.append){
+    // "+" on the card edge: slot right next to the source, pushing later steps out of the way first
+    const slotX=snapG(from.x+FL.w+64), slotY=from.y;
+    if(groupHits(slotX, slotY-NODE_H, slotX+NODE_W, slotY+NODE_H*2).length)
+      reflowFrom(slotX, snapG(NODE_W+64), [n.id]);
+    n.x=slotX; n.y=slotY;
+  } else {
+    n.x=snapG(sp.fromSide==="left" ? sp.x-NODE_W : sp.x);
+    n.y=snapG(sp.y-NODE_H/2);
+  }
+  m.nodes.push(n);
+  m.edges.push({id:uid("e"),from:sp.fromId,to:n.id,fromSide:sp.fromSide,toSide:OPP_SIDE[sp.fromSide]||"left"});
+  selectNode(n.id); toast("Step added & connected");
+}
+function stepPickerEl(sp){
+  const g=el("g",{class:"note-picker step-picker"});
+  const CH=24, GAP=5;
+  const chips=[["touch","human","ic-human","var(--t-human)","Human step"],
+               ["touch","bot","ic-bot","var(--t-bot)","Bot step"],
+               ["wait",null,"ic-queue","var(--t-queue)","Queue (wait)"]];
+  const W=chips.length*(CH+GAP)-GAP+12, H=CH+12;
+  const px=Math.max(4,sp.x-W/2), py=Math.max(4,sp.y-H-14);
+  g.appendChild(el("rect",{class:"np-plate",x:px,y:py,width:W,height:H,rx:8}));
+  chips.forEach(([type,perf,ic,fill,tip],i)=>{
+    const cx=px+6+i*(CH+GAP), cy=py+6;
+    const c=el("g",{class:"np-chip"});
+    const r=el("rect",{x:cx,y:cy,width:CH,height:CH,rx:6});
+    r.style.fill=fill; r.style.stroke="rgba(0,0,0,.35)"; r.style.strokeWidth="1";
+    c.appendChild(r);
+    c.appendChild(useIc(ic, cx+4, cy+4, 16, "#06202a"));
+    c.appendChild(el("title")).textContent=tip;
+    c.addEventListener("mousedown",ev=>ev.stopPropagation());
+    c.addEventListener("click",ev=>{ ev.stopPropagation(); quickCreateAt(type, perf); });
+    g.appendChild(c);
+  });
+  return g;
 }
 function deleteNode(id){ const m=state.model, n=m.nodes.find(x=>x.id===id);
   const doomed=new Set([id]);
@@ -3403,6 +3519,12 @@ function deleteNode(id){ const m=state.model, n=m.nodes.find(x=>x.id===id);
   (m.comments||[]).forEach(c=>{ if(doomed.has(c.nodeId)){ const dn=m.nodes.find(x=>x.id===c.nodeId);
     if(dn){ c.x=dn.x; c.y=dn.y; } delete c.nodeId; } });
   doomed.forEach(did=>state._notesOpen.delete(did));
+  // deleting a step in the middle of a simple chain heals the arrow: prev → next
+  const ins=m.edges.filter(e=>e.to===id && !doomed.has(e.from));
+  const outs=m.edges.filter(e=>e.from===id && !doomed.has(e.to));
+  if(ins.length===1 && outs.length===1 && ins[0].from!==outs[0].to
+     && !m.edges.some(e=>e.from===ins[0].from && e.to===outs[0].to))
+    m.edges.push({id:uid("e"),from:ins[0].from,to:outs[0].to,fromSide:ins[0].fromSide,toSide:outs[0].toSide});
   m.nodes=m.nodes.filter(x=>!doomed.has(x.id));
   m.edges=m.edges.filter(e=>!doomed.has(e.from)&&!doomed.has(e.to)); selectNode(null); }
 function duplicateNode(id){
@@ -3537,7 +3659,10 @@ function onNodeDown(ev,n){ if(!editable()||state.linkingFrom) return;
   if(state.selectedIds.length>1 && state.selectedIds.includes(n.id)){
     drag.group=state.selectedIds.map(id=>state.model.nodes.find(x=>x.id===id)).filter(Boolean)
       .map(node=>({node,x0:node.x,y0:node.y}));
-  } else { state.selectedIds=[]; }
+  } else if(!ev.shiftKey){ state.selectedIds=[]; }   // shift-mousedown keeps the set so the shift-click can toggle it
+  // a lone card (no arrows yet) can be dropped onto an arrow to splice into the flow
+  drag.lone = !drag.group && (n.type==="touch"||n.type==="wait") && !n.children
+    && !state.model.edges.some(e=>e.from===n.id||e.to===n.id);
   window.addEventListener("mousemove",onDragMove); window.addEventListener("mouseup",onDragUp); }
 /* ----- snapping: prefer aligning with a neighbour (guides), else fall to the grid ----- */
 const snapG = v => Math.round(v/GRID)*GRID;
@@ -3576,9 +3701,42 @@ function onDragMove(ev){ if(!drag) return; const svg=$("#canvas"),rect=svg.getBo
     if(snapping){ const s=snapDrag(drag.n, px, py); tx=s.x; ty=s.y; guides=s.guides; }
     drag.n.x=Math.max(0,tx); drag.n.y=Math.max(0,ty);
   }
-  drag.moved=true; drag.g._dragged=true; render(); drawGuides(guides); }
+  drag.moved=true; drag.g._dragged=true;
+  // lone card hovering an arrow: after a short dwell the arrow arms — dropping splices the card in
+  if(drag.lone){
+    const L=_lay[drag.n.id], cx=drag.n.x+((L&&L.w)||NODE_W)/2, cy=drag.n.y+NODE_H/2;
+    const hit=edgeAtPoint(cx,cy,drag.n.id), now=performance.now();
+    if(hit && drag.hoverEdge===hit.id){ if(!drag.armedEdge && now-drag.hoverT>400) drag.armedEdge=hit.id; }
+    else { drag.hoverEdge=hit?hit.id:null; drag.hoverT=now; drag.armedEdge=null; }
+  }
+  render(); drawGuides(guides);
+  if(drag && drag.armedEdge){ const tp=$("#canvas").querySelector(`.edge[data-eid="${drag.armedEdge}"]`);
+    if(tp) tp.classList.add("insert-target"); } }
 function onDragUp(){ window.removeEventListener("mousemove",onDragMove); window.removeEventListener("mouseup",onDragUp);
-  const g=drag&&drag.g; drag=null; setTimeout(()=>{ if(g)g._dragged=false; },0); }
+  const d=drag, g=d&&d.g; drag=null; setTimeout(()=>{ if(g)g._dragged=false; },0);
+  if(d && d.armedEdge && d.moved){ const e=state.model.edges.find(x=>x.id===d.armedEdge); if(e) spliceIntoEdge(d.n, e); } }
+/* splice a lone card into an existing arrow: from→card→to, sliding downstream steps right to make room */
+function spliceIntoEdge(node, edge){
+  const m=state.model, from=m.nodes.find(x=>x.id===edge.from), toN=m.nodes.find(x=>x.id===edge.to);
+  const FL=_lay[edge.from], NL=_lay[node.id];
+  if(!from||!toN||!FL||!NL) return;
+  const oldTo=edge.to, oldToSide=edge.toSide;
+  edge.to=node.id; edge.toSide="left";
+  if(!m.edges.some(e2=>e2.from===node.id&&e2.to===oldTo))
+    m.edges.push({id:uid("e"),from:node.id,to:oldTo,fromSide:"right",toSide:oldToSide||"left"});
+  // slot just after the upstream step; shift the old target (and everything beyond) only as far as needed
+  const slotX=snapG(from.x+FL.w+64), slotY=from.y;
+  const dx=Math.max(0, snapG(slotX+NL.w+64-toN.x));
+  const t=[], x0=toN.x;
+  if(dx){
+    (m.nodes||[]).forEach(nn=>{ if(nn.id!==node.id && !nn.parentId && nn.x>=x0) t.push({ent:nn, x:Math.max(0,nn.x+dx)}); });
+    (m.groups||[]).forEach(gp=>{ const gx=gp.collapsed?gp.cx:gp.x; if(gx>=x0) t.push({ent:groupPos(gp), x:Math.max(0,gx+dx)}); });
+    (m.comments||[]).forEach(c=>{ if(c.nodeId==null && c.x>=x0) t.push({ent:c, x:Math.max(0,c.x+dx)}); });
+  }
+  t.push({ent:node, x:slotX, y:slotY});
+  state.selected={type:"node",id:node.id}; state.selectedIds=[];
+  animateNodes(t, 300, ()=>toast("Step spliced into the flow"));
+}
 
 /* ---------- marquee (rubber-band) multi-select ---------- */
 let marquee=null, _marqueeJustFinished=false;
@@ -3603,12 +3761,12 @@ function onMarqueeUp(ev){ window.removeEventListener("mousemove",onMarqueeMove);
   const p=svgPt(ev);
   const rx0=Math.min(m.x0,p.x), ry0=Math.min(m.y0,p.y), rx1=Math.max(m.x0,p.x), ry1=Math.max(m.y0,p.y);
   state.selectedIds=groupHits(rx0,ry0,rx1,ry1).map(n=>n.id); state.selected=null;
-  // Select stays armed — the chosen steps hold full opacity (rest dimmed) until you click empty canvas
+  // the selection stays held — chosen steps keep full opacity (rest dimmed) until you click empty canvas
   _marqueeJustFinished=true; setTimeout(()=>{ _marqueeJustFinished=false; },0); // suppress the trailing svg click
   render(); }
 
-/* ---------- pan (default mode): drag empty canvas to scroll the stage ---------- */
-let pan=null, _panJustFinished=false;
+/* ---------- pan: Space+drag or middle-mouse on empty canvas scrolls the stage ---------- */
+let pan=null, _panJustFinished=false, _spaceDown=false;
 function startPan(ev){ ev.preventDefault();
   const stage=$("#stage");
   pan={x:ev.clientX, y:ev.clientY, sl:stage.scrollLeft, st:stage.scrollTop, moved:false};
@@ -3627,18 +3785,18 @@ function onPanUp(){ window.removeEventListener("mousemove",onPanMove); window.re
 let _annoJustFinished=false;
 function annoDone(){ _annoJustFinished=true; setTimeout(()=>{ _annoJustFinished=false; },0); }
 function setTool(t){
-  // Move (pan) / Select / Connect are persistent base modes — one is always active (Move is default).
+  // Cursor / Connect are persistent base modes — one is always active (Cursor is default).
   // Group & Comment are one-shot tools; passing null (or finishing one) reverts to the base mode.
+  if(t==="pan"||t==="select") t="cursor";   // legacy ids from older call sites
   const prev=state.tool;
-  if(t==="pan"||t==="select"||t==="connect"){ state.tool=t; state.baseTool=t; }
+  if(t==="cursor"||t==="connect"){ state.tool=t; state.baseTool=t; }
   else if(t==="group"||t==="comment"){ state.tool=t; }
-  else { state.tool=state.baseTool||"pan"; }
+  else { state.tool=state.baseTool||"cursor"; }
   $("#paletteBar").querySelectorAll("[data-tool]").forEach(b=>b.classList.toggle("tool-on", b.dataset.tool===state.tool));
   document.body.classList.toggle("tool-group", state.tool==="group");
   document.body.classList.toggle("tool-comment", state.tool==="comment");
-  document.body.classList.toggle("tool-select", state.tool==="select");
   document.body.classList.toggle("tool-connect", state.tool==="connect");
-  document.body.classList.toggle("tool-pan", state.tool==="pan");
+  document.body.classList.toggle("tool-cursor", state.tool==="cursor");
   // Connect/Group/Comment don't use a marquee selection — drop it. Connect also needs a re-render
   // to draw (or, on exit, remove) the per-edge endpoint handles.
   if(state.tool==="group"||state.tool==="comment"||state.tool==="connect"){ state.selectedIds=[]; selectNode(null); return; }
@@ -3740,12 +3898,28 @@ function noteCardH(cm, w){
 }
 function noteStackEl(n, L, notes){
   const g=el("g",{class:"note-stack"});
+  // open/close progress: geometry stays fixed (noteColumn hit-tests rely on it) — motion is fade + slide
+  const p=state._notesAnim[n.id]!=null ? state._notesAnim[n.id] : 1;
+  if(p<1){ g.setAttribute("opacity",String(p)); g.setAttribute("transform",`translate(0 ${-12*(1-p)})`); }
   const bt=L.bt||0, sx=n.x; let sy=n.y+bt+L.h+10;   // directly under the card, same left edge + width
   // short spine from the badge (bottom-left corner) down into the stack
   g.appendChild(el("line",{class:"note-leader",x1:n.x+10,y1:n.y+bt+L.h,x2:n.x+10,y2:sy}));
-  notes.forEach(cm=>{ const h=noteCardH(cm, L.w);
-    g.appendChild(noteCardEl(cm, sx, sy, L.w, h, {mini:true}));
+  notes.forEach((cm,i)=>{ const h=noteCardH(cm, L.w);
+    const card=noteCardEl(cm, sx, sy, L.w, h, {mini:true});
+    if(p<1) card.setAttribute("opacity",String(Math.max(0,Math.min(1,p*notes.length-i))));   // stagger in
+    g.appendChild(card);
     sy+=h+NOTE_STACK_GAP; });
+  // ghost row: one click adds the next note right where the others live
+  if(editable()){
+    const gh=el("g",{class:"note-ghost"});
+    gh.appendChild(el("rect",{x:sx,y:sy,width:L.w,height:26,rx:8}));
+    const t=el("text",{x:sx+L.w/2,y:sy+17,"text-anchor":"middle"}); t.textContent="+ Add note";
+    gh.appendChild(t);
+    if(p<1) gh.setAttribute("opacity",String(Math.max(0,p*2-1)));
+    gh.addEventListener("mousedown",ev=>ev.stopPropagation());
+    gh.addEventListener("click",ev=>{ ev.stopPropagation(); addNoteToNode(n); });
+    g.appendChild(gh);
+  }
   return g;
 }
 
@@ -3806,6 +3980,13 @@ function placeComment(ev){ ev.preventDefault(); const p=svgPt(ev);
   const hit=groupHits(p.x,p.y,p.x,p.y).find(n=>n.type==="touch"||n.type==="wait");
   if(hit){ c.nodeId=hit.id; state._notesOpen.add(hit.id); }
   state.model.comments.push(c); setTool(null);
+  state._notePick={cid:c.id, stage:"type", thenEdit:true};
+  annoDone(); render(); }
+/* the card's "+" note control (and the stack's ghost row): new attached note → type picker → typing */
+function addNoteToNode(n){
+  const c={id:uid("cmt"), x:n.x, y:n.y, w:200, h:120, text:"", type:"note", nodeId:n.id};
+  state.model.comments.push(c);
+  if(!state._notesOpen.has(n.id)) state._notesOpen.add(n.id);
   state._notePick={cid:c.id, stage:"type", thenEdit:true};
   annoDone(); render(); }
 
@@ -3907,17 +4088,25 @@ function annoDelHandle(cx,cy,onDel){ const dh=el("g",{class:"del-handle"});
   dh.appendChild(el("line",{x1:cx+3.5,y1:cy-3.5,x2:cx-3.5,y2:cy+3.5}));
   dh.addEventListener("mousedown",ev=>ev.stopPropagation());
   dh.addEventListener("click",ev=>{ ev.stopPropagation(); onDel(); }); return dh; }
-/* corner badge on a step carrying attached notes — dominant-type icon + count sitting on the
-   top-left corner like a notification dot; click fans the note stack out (works in viewer too) */
+/* corner badge on a step carrying attached notes — the note TYPES present fan out as half-overlapped
+   chips on the bottom-left corner (+ a count); click slides the note stack open (works in viewer too) */
 function noteBadgeEl(n, L, notes){
-  const bt=L.bt||0, cy=bt+L.h, tk=dominantNoteType(notes), NT=NOTE_TYPES[tk];   // bottom-left corner
-  const many=notes.length>1, bw=many?34:20;
+  const bt=L.bt||0, cy=bt+L.h;   // bottom-left corner
+  const present=Object.keys(NOTE_TYPES).filter(k=>notes.some(c=>(NOTE_TYPES[c.type]?c.type:"note")===k)).slice(0,4);
+  const many=notes.length>1;
+  const CH=20, OV=11;                       // chip size · fan step (≈half-overlap)
+  const fanW=CH+(present.length-1)*OV;
+  const bw=fanW+(many?15:0);
   const g=el("g",{class:"note-badge"});
-  const r=el("rect",{x:-10,y:cy-10,width:bw,height:20,rx:10});
-  r.style.fill=NT.line; r.style.stroke="rgba(0,0,0,.3)";
-  g.appendChild(r);
-  g.appendChild(useIc(NT.ic, -8, cy-7, 14, "#fff"));
-  if(many){ const t=el("text",{x:9,y:cy+3.8,"font-size":"10","font-weight":"800"});
+  const plate=el("rect",{x:-10,y:cy-10,width:bw,height:CH,rx:10});
+  plate.style.fill=NOTE_TYPES[dominantNoteType(notes)].line; plate.style.stroke="rgba(0,0,0,.3)";
+  g.appendChild(plate);
+  present.forEach((k,i)=>{ const NT=NOTE_TYPES[k], x=-10+i*OV;
+    const c=el("circle",{cx:x+CH/2,cy:cy,r:CH/2});
+    c.style.fill=NT.line; c.style.stroke="rgba(0,0,0,.3)";
+    g.appendChild(c);
+    g.appendChild(useIc(NT.ic, x+3, cy-7, 14, "#fff")); });
+  if(many){ const t=el("text",{x:-10+fanW+2,y:cy+3.8,"font-size":"10","font-weight":"800"});
     t.style.fill="#fff"; t.textContent=String(notes.length); g.appendChild(t); }
   const counts={}; notes.forEach(c=>{ const k=NOTE_TYPES[c.type]?c.type:"note"; counts[k]=(counts[k]||0)+1; });
   const tip=el("title");
@@ -3925,10 +4114,23 @@ function noteBadgeEl(n, L, notes){
     Object.keys(counts).map(k=>`${counts[k]} ${NOTE_TYPES[k].label.toLowerCase()}`).join(", ")+" (click to open)";
   g.appendChild(tip);
   g.addEventListener("mousedown",ev=>ev.stopPropagation());
-  g.addEventListener("click",ev=>{ ev.stopPropagation();
-    if(state._notesOpen.has(n.id)) state._notesOpen.delete(n.id); else state._notesOpen.add(n.id);
-    render(); });
+  g.addEventListener("click",ev=>{ ev.stopPropagation(); toggleNotesOpen(n.id); });
   return g;
+}
+/* smooth open/close: tween a 0→1 progress scalar per node, re-rendering each frame (the codebase's
+   animateNodes pattern; full teardown per render means CSS enter transitions can't fire) */
+function toggleNotesOpen(id){
+  const cur=state._notesAnim[id];
+  if(state._notesOpen.has(id)){   // slide closed, then drop from the open set
+    animateValue("notes:"+id, cur!=null?cur:1, 0, 150,
+      v=>{ state._notesAnim[id]=v; render(); },
+      ()=>{ state._notesOpen.delete(id); delete state._notesAnim[id]; render(); });
+  } else {                        // add to the open set at progress 0, slide open
+    state._notesOpen.add(id); state._notesAnim[id]=0;
+    animateValue("notes:"+id, cur!=null?cur:0, 1, 180,
+      v=>{ state._notesAnim[id]=v; render(); },
+      ()=>{ delete state._notesAnim[id]; render(); });
+  }
 }
 
 /* a "+" corner control (top-left of a step card): convert a step into a group */
@@ -3975,6 +4177,16 @@ function editCardField({x,y,w,h,value,multiline,placeholder,onCommit}){
 
 /* ---------- animated layout moves: rAF tween of model coords (nodes, groups, comments) ---------- */
 let _anim=null;
+/* generic keyed scalar tween (own handle map — must not cancel node tweens): drives note-stack open/close */
+let _valAnims={};
+function animateValue(key, from, to, ms, onFrame, done){
+  const prev=_valAnims[key]; if(prev) cancelAnimationFrame(prev.raf);
+  const t0=performance.now(), ease=t=>1-Math.pow(1-t,3), a={};
+  const step=now=>{ if(_valAnims[key]!==a) return;
+    const k=ease(Math.min(1,(now-t0)/ms)); onFrame(lerp(from,to,k));
+    if(k<1){ a.raf=requestAnimationFrame(step); } else { delete _valAnims[key]; if(done)done(); } };
+  _valAnims[key]=a; a.raf=requestAnimationFrame(step);
+}
 function animateNodes(targets, ms=280, done){
   if(_anim){ cancelAnimationFrame(_anim.raf); _anim=null; }
   const items=targets.map(t=>({ent:t.ent, x0:t.ent.x, y0:t.ent.y, x1:t.x!=null?t.x:t.ent.x, y1:t.y!=null?t.y:t.ent.y}))
@@ -4170,9 +4382,9 @@ function beginConnectDrag(p){                            // shared temp-edge dra
   window.addEventListener("mousemove",onConnectMove); window.addEventListener("mouseup",onConnectUp);
 }
 function startConnect(ev, n, side){
-  // works in the default Move mode and the dedicated Connect mode (not while select/group/comment are armed)
+  // works in the default Cursor mode and the dedicated Connect mode (not while group/comment are armed)
   if(!editable()) return;
-  if(state.tool==="select"||state.tool==="group"||state.tool==="comment") return;
+  if(state.tool==="group"||state.tool==="comment") return;
   ev.preventDefault(); ev.stopPropagation();             // don't start a node move
   const p=portGeo(n,_lay[n.id],side);
   connectState={kind:"new", fromId:n.id, fromSide:side, p};
@@ -4217,6 +4429,10 @@ function onConnectUp(ev){
       if(cs.which==="to"){ if(toId!==e.from){ e.to=toId; e.toSide=side; toast("Re-connected"); } }
       else               { if(toId!==e.to){   e.from=toId; e.fromSide=side; toast("Re-connected"); } }
     }
+  } else if(cs.kind==="new" && editable()){
+    // dropped on empty canvas: offer to create the next step right here, pre-wired
+    const p=svgPt(ev);
+    state._stepPick={x:p.x, y:p.y, fromId:cs.fromId, fromSide:cs.fromSide};
   }
   _connectJustFinished=true; setTimeout(()=>_connectJustFinished=false,0);
   render();
@@ -4938,6 +5154,7 @@ function deleteSelection(){
 document.addEventListener("keydown",e=>{
   if(e.key==="Escape"){ if(state.simming){ stopSim(); return; }
     closeMenus();
+    if(state._stepPick){ state._stepPick=null; render(); return; }    // dismiss the step-type chips first
     if(state._notePick){ state._notePick=null; render(); return; }    // close the type picker first
     if(state.tool==="group"||state.tool==="comment") setTool(null);   // cancel a one-shot tool → back to base
     else if(state.selectedIds.length) selectNode(null);               // else drop a held marquee selection
@@ -4953,7 +5170,14 @@ document.addEventListener("keydown",e=>{
   else if(e.key==="Delete"||e.key==="Backspace"){ e.preventDefault(); deleteSelection(); }
   else if(e.key==="+"||e.key==="="){ setZoom(Z()+0.1); }
   else if(e.key==="-"){ setZoom(Z()-0.1); }
+  else if(e.code==="Space" && !mod){ if(!e.repeat && !_spaceDown){ _spaceDown=true; document.body.classList.add("space-pan"); } e.preventDefault(); }
+  else if(!mod && k==="v"){ setTool("cursor"); }
+  else if(!mod && k==="c"){ setTool("connect"); }
+  else if(!mod && k==="g"){ setTool("group"); }
+  else if(!mod && k==="n"){ setTool("comment"); }
 });
+document.addEventListener("keyup",e=>{ if(e.code==="Space"){ _spaceDown=false; document.body.classList.remove("space-pan"); } });
+window.addEventListener("blur",()=>{ _spaceDown=false; document.body.classList.remove("space-pan"); });
 
 /* save design / share */
 $("#saveModel").onclick=()=>{ download((state.model.name||"flow-builder").replace(/\s+/g,"-")+".json", JSON.stringify(state.model,null,2),"application/json"); toast("Design backed up (JSON)"); };

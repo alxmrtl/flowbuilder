@@ -110,7 +110,17 @@ collapse. Arrows always attach to the parent, so expanding can never break the f
 different from a **Group**, which is a visual overlay for sectioning the map.)
 
 **Undo & shortcuts:** **⌘Z / Ctrl+Z** undo · **⇧⌘Z / Ctrl+Y** redo · **⌘D** duplicate ·
-**Delete** removes the selection · **+ / −** zoom · **Esc** cancels tools/menus.
+**Delete** removes the selection · **+ / −** zoom · **Esc** cancels tools/menus ·
+**V** cursor · **C** connect · **G** group · **N** note · hold **Space** to grab-pan.
+
+**One cursor does most of it:** the default **Cursor** tool selects (click / shift-click / drag a
+box on empty canvas), moves steps, and wires arrows from the hover dots — a **filled dot** means
+the port already carries an arrow and dragging adds **another branch**. Drop a port drag on empty
+canvas to **create the next step right there** (Human / Bot / Queue picker, pre-connected), or use
+the **+ on a card's right edge**. Drag a **lone box over an arrow** and hold ~half a second — the
+arrow lights up, and dropping **splices the box into the flow** (downstream steps slide over to
+make room). Deleting a mid-chain step **heals the arrow** around it. Connect / Group / Note remain
+as smaller specialist tools.
 
 **Connecting steps (Visio-style):** hover a box and **4 connection dots** appear (one per side).
 **Drag from a dot to another box** (or onto one of its dots) to draw the arrow — it remembers
