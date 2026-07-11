@@ -1251,7 +1251,9 @@ const METRICS_SPEC = {
     intro:"Every number in Flow Builder answers one of three questions: how fast does work move (Speed), can the team keep up (Capacity), and how often is it right first time (Quality). The three are woven together — rework quietly drains capacity, capacity shapes waiting, and the slowest step sets everyone’s pace."
   }
 };
-const ML = id => METRICS_SPEC.metrics[id].l;                       // display label for a metric
+/* display label for a metric — a workspace vocabulary (state.vocab, org-chosen terms) wins over
+   the FB-standard label, so orgs can rename e.g. "Touch time" everywhere without forking the spec */
+const ML = id => (state.vocab && state.vocab[id]) || METRICS_SPEC.metrics[id].l;
 const CAT_OF = id => (METRICS_SPEC.metrics[id]||{}).c || null;     // metric id → category (inputs → null)
 /* small inline category icon (HTML surfaces; canvas cards go through useIc) */
 const catIcHtml = (c,cls) => `<svg class="${cls}" style="--cat:var(--cat-${c})"><use href="#${METRICS_SPEC.categories[c].icon}"/></svg>`;
@@ -1275,6 +1277,7 @@ const state = {
   _notesAnim: {},         // node id → 0..1 open/close progress while a stack is animating
   _notePick: null,        // {cid, stage:"type"|"subtype", thenEdit} — type-picker chips open on a note
   _stepPick: null,        // {x, y, fromId, fromSide, append?} — step-type chips after a port drop on empty canvas
+  vocab: null,            // workspace term overrides {metricId: "Org label"} — resolved by ML(); null = FB standard
 };
 
 /* ---------- helpers ---------- */
@@ -1324,10 +1327,35 @@ function truncToWidth(text, maxW, font){
 }
 
 /* ============================================================
+   PLATFORM FOUNDATIONS (org workspace — phase 0)
+   Every map carries a permanent identity + governance meta so files
+   can be referenced, indexed, linked and rolled up across a shared
+   library. Links/digests always use mapId, never a name or path.
+   ============================================================ */
+const SCHEMA_VERSION = 2;
+const mintMapId = () => "m_" + (window.crypto && crypto.randomUUID ? crypto.randomUUID()
+  : Date.now().toString(36) + Math.random().toString(36).slice(2,10));
+const defaultMeta = () => ({ owner:"", area:"", team:"", status:"draft",
+  reviewedAt:null, reviewCadenceDays:null, tags:[], custom:{}, importedFrom:null });
+/* idempotent, silent: give any model (old or new) identity + meta; never touches nodes.
+   mapId survives rename/move forever — only duplicate/import-copy mints a new one. */
+function migratePlatform(m){
+  if(!m || typeof m!=="object") return m;
+  if(typeof m.mapId!=="string" || !m.mapId) m.mapId = mintMapId();
+  if(!(m.schemaVersion>=SCHEMA_VERSION)) m.schemaVersion = SCHEMA_VERSION;
+  m.meta = Object.assign(defaultMeta(), (m.meta && typeof m.meta==="object") ? m.meta : {});
+  if(!Array.isArray(m.meta.tags)) m.meta.tags = [];
+  if(!m.meta.custom || typeof m.meta.custom!=="object") m.meta.custom = {};
+  return m;
+}
+
+/* ============================================================
    LIBRARY (localStorage)
    ============================================================ */
 function loadLibrary(){
-  try{ const l=JSON.parse(localStorage.getItem(LIB_KEY)); if(l&&l.flows) return l; }catch(e){}
+  try{ const l=JSON.parse(localStorage.getItem(LIB_KEY)); if(l&&l.flows){
+    Object.values(l.flows).forEach(f=>{ if(f&&f.model) migratePlatform(f.model); });
+    return l; } }catch(e){}
   return {flows:{}, lastOpenedId:null};
 }
 function saveLibrary(){ try{ localStorage.setItem(LIB_KEY, JSON.stringify(state.library)); }
@@ -1396,6 +1424,64 @@ function rollupFor(model){
   return r;
 }
 
+/* ---------- platform digest (org workspace — phase 0) ----------
+   The compact cross-map extract of one flow: everything the workspace layer (search,
+   dashboards, links, roll-ups) reads about a map, in a few KB, so the full file only
+   ever opens to edit it. Derived purely from the model — writing it twice is harmless. */
+const DIGEST_VERSION = 1;
+function buildDigest(model){
+  migratePlatform(model);
+  const sm=state.model, sd=state.data, ss=state.segment, sp=state.period;
+  state.model=model; state.data=Array.isArray(model.data)?model.data:[]; state.segment="ALL"; state.period="ALL";
+  let r=null, measured=0, modelled=0;
+  const stepLabels=[], people=new Set(), tools=new Set(); let fte=0, stepN=0, queueN=0;
+  try{
+    try{ r=rollup(); }catch(e){ r=null; }
+    (model.nodes||[]).forEach(n=>{
+      if(n.type==="touch"){ stepN++;
+        if(n.label) stepLabels.push(n.label);
+        if(n.owner && String(n.owner).trim()) people.add(String(n.owner).trim());
+        if(n.people!=null && n.people>0) fte+=n.people;
+        if(n.tool) tools.add(String(n.tool));
+        if(!hasSubs(n) && !n.excludeStats){ const mt=metricFor(n);   // confidence mirrors the insights count
+          if(mt.hasData) measured++; else if(mt.derivedCap) modelled++; } }
+      if(n.type==="wait") queueN++; });
+  } finally { state.model=sm; state.data=sd; state.segment=ss; state.period=sp; }
+  const cap=(r&&r.cap)||{}, qual=(r&&r.qual)||{};
+  const links=[...new Set((model.nodes||[]).filter(n=>n.linksTo && typeof n.linksTo.mapId==="string")
+                                           .map(n=>n.linksTo.mapId))];
+  return {
+    digestVersion: DIGEST_VERSION,
+    mapId: model.mapId, title: model.name||"Untitled",
+    schemaVersion: model.schemaVersion, savedAt: new Date().toISOString(),
+    meta: clone(model.meta),
+    metrics: {
+      steps: stepN, queues: queueN,
+      people: people.size||null, fte: fte>0?fte:null,
+      timeUnit: (model.settings&&model.settings.timeUnit)||"hrs",   // times below are in this unit
+      leadTime:  r&&r.turnaround>0 ? r.turnaround : null,
+      touchTime: r&&r.touch>0      ? r.touch      : null,
+      waitTime:  r&&r.wait>0       ? r.wait       : null,
+      flowEff:   r&&r.eff!=null    ? r.eff        : null,
+      demandPerDay:   cap.demand  !=null ? cap.demand  : null,
+      capacityPerDay: cap.flowCap !=null ? cap.flowCap : null,
+      rftPct: qual.rft!=null ? qual.rft*100 : null,
+      lostToRework: cap.lostToRework!=null ? cap.lostToRework : null,
+      bottleneck: r&&r.flag ? { step: r.flag.node.label||"", why: r.flag.kind } : null,
+      confidence: { measured, modelled }
+    },
+    metricsBySegment: null,   // reserved — per-segment slices land with the dimension engine (R1)
+    links: { out: links },
+    text: {   // the searchable substance of the map, for the workspace full-text index
+      steps: stepLabels,
+      people: [...people],
+      tools: [...tools],
+      groups: (model.groups||[]).map(g=>g.label).filter(Boolean),
+      notes: (model.comments||[]).map(c=>c.text).filter(Boolean)
+    }
+  };
+}
+
 /* ---------- flow CRUD ---------- */
 function openFlow(id, mode){
   if(typeof stopSim==="function"&&state.simming) stopSim();   // never carry a sim across flows
@@ -1406,15 +1492,16 @@ function openFlow(id, mode){
 }
 function newFlow(){
   const id=uid("flow_");
-  const model={ name:"New flow", settings:{timeUnit:"hrs",bottleneckMode:"absolute"},
+  const model=migratePlatform({ name:"New flow", settings:{timeUnit:"hrs",bottleneckMode:"absolute"},
     nodes:[ {id:"start",type:"start",label:"Customer request",x:60,y:200},
-            {id:"end",type:"end",label:"Value delivered",x:560,y:200} ], edges:[] };
+            {id:"end",type:"end",label:"Value delivered",x:560,y:200} ], edges:[] });
   state.library.flows[id]={id,name:model.name,model,updatedAt:Date.now()};
   saveLibrary(); openFlow(id,"build"); toast("New flow created");
 }
 function duplicateFlow(id){
   const f=state.library.flows[id]; if(!f) return;
   const nid=uid("flow_"); const m=clone(f.model); m.name=(f.name||"Flow")+" (copy)";
+  migratePlatform(m); m.mapId=mintMapId();   // a copy is a new map — it gets its own identity
   state.library.flows[nid]={id:nid,name:m.name,model:m,updatedAt:Date.now()};
   saveLibrary(); renderHome(); toast("Duplicated");
 }
@@ -1435,11 +1522,15 @@ function deleteFlow(id){
 }
 function exportFlow(id){
   const f=state.library.flows[id]; if(!f) return;
+  migratePlatform(f.model);   // backups always carry identity + meta
   download((f.name||"flow").replace(/\s+/g,"-")+".json", JSON.stringify(f.model,null,2),"application/json");
 }
 function importFlowFromObj(obj){
   // accepts a single model, or a library export {flows:{...}}
-  const add=m=>{ const id=uid("flow_"); state.library.flows[id]={id,name:m.name||"Imported flow",model:m,updatedAt:Date.now()}; };
+  const add=m=>{ migratePlatform(m);
+    // restoring a backup beside the original would duplicate its identity — the incoming copy re-mints
+    if(Object.values(state.library.flows).some(f=>f.model && f.model.mapId===m.mapId)) m.mapId=mintMapId();
+    const id=uid("flow_"); state.library.flows[id]={id,name:m.name||"Imported flow",model:m,updatedAt:Date.now()}; };
   if(obj && obj.flows && typeof obj.flows==="object"){ Object.values(obj.flows).forEach(f=>add(f.model||f)); }
   else if(obj && obj.nodes){ add(obj); }
   else { toast("Unrecognized file"); return; }
@@ -1482,6 +1573,10 @@ function validateImportModel(obj){
   const m={ name: typeof obj.name==="string"&&obj.name.trim() ? obj.name.trim() : "Converted flow",
             settings: (obj.settings&&typeof obj.settings==="object") ? obj.settings : {timeUnit:"hrs",bottleneckMode:"absolute"},
             nodes:[], edges:[], groups:[], comments:[] };
+  // platform keys ride along when present; migratePlatform() normalizes them at load
+  if(typeof obj.mapId==="string" && obj.mapId) m.mapId=obj.mapId;
+  if(obj.meta && typeof obj.meta==="object" && !Array.isArray(obj.meta)) m.meta=obj.meta;
+  if(obj.segments && typeof obj.segments==="object") m.segments=obj.segments;
 
   const ids=new Set();
   obj.nodes.forEach(raw=>{ if(!raw||typeof raw!=="object") return;
@@ -1493,6 +1588,11 @@ function validateImportModel(obj){
     if(n.classification!=null && !CLASS_OK.includes(n.classification)) delete n.classification;
     if(n.tool!=null && !TOOL_IC[n.tool]) delete n.tool;
     NUM_FIELDS.forEach(f=>{ if(n[f]!=null){ const v=Number(n[f]); if(Number.isFinite(v)) n[f]=v; else delete n[f]; } });
+    // reserved platform keys: cross-map link + per-dimension overrides (segments / roles) —
+    // kept when well-formed so converted/round-tripped files never lose them
+    if(n.linksTo!=null && !(typeof n.linksTo==="object" && typeof n.linksTo.mapId==="string")) delete n.linksTo;
+    if(n.seg!=null  && (typeof n.seg!=="object"  || Array.isArray(n.seg)))  delete n.seg;
+    if(n.role!=null && (typeof n.role!=="object" || Array.isArray(n.role))) delete n.role;
     if(n.x==null) n.x=40; if(n.y==null) n.y=220;
     m.nodes.push(n); });
 
@@ -1527,6 +1627,7 @@ function validateImportModel(obj){
 
 /* ---------- load model into engine ---------- */
 function loadModel(m){
+  migratePlatform(m);   // identity + meta on everything that reaches the engine, old or new
   state.model=m;
   m.groups = m.groups || []; m.comments = m.comments || [];   // visual annotations
   (m.nodes||[]).forEach(n=>{ if(n.x==null)n.x=40; if(n.y==null)n.y=200; });
