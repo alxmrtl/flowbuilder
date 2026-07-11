@@ -1,0 +1,1014 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flow Builder — Organization Platform Plan</title>
+<style>
+  :root{
+    --paper:#F3F6F8; --surface:#FFFFFF; --ink:#1C2B36; --mut:#5B6B77; --faint:#8FA0AC;
+    --line:#D7E0E7; --line-soft:#E7EDF2;
+    --blue:#2456C4; --blue-ink:#173A85; --blue-soft:#EAF0FB; --blue-line:#C4D3F0;
+    --rec:#0E7D6B; --rec-soft:#E4F2EE;
+    --warn:#B3541E; --warn-soft:#FBEFE6;
+    --speed:#C25E1E; --cap:#2456C4; --qual:#7B4FC0;
+    --mono:ui-monospace,"SF Mono",Menlo,monospace;
+    --body:"Charter","Iowan Old Style",Georgia,serif;
+    --disp:"Avenir Next","Helvetica Neue",system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  @media (prefers-reduced-motion: reduce){ html{scroll-behavior:auto} }
+  body{margin:0;background:var(--paper);color:var(--ink);font:17px/1.62 var(--body)}
+  a{color:var(--blue)}
+  ::selection{background:var(--blue-soft)}
+  :focus-visible{outline:2px solid var(--blue);outline-offset:2px;border-radius:2px}
+
+  /* ---------- shell ---------- */
+  .shell{display:flex;min-height:100vh;max-width:1280px;margin:0 auto}
+  nav.toc{width:236px;flex:0 0 236px;padding:28px 8px 40px 20px;position:sticky;top:0;align-self:flex-start;
+    height:100vh;overflow-y:auto;font-family:var(--disp)}
+  nav.toc .wordmark{font:700 15px/1.2 var(--disp);letter-spacing:.01em;margin:0 0 2px}
+  nav.toc .wordmark .sub{display:block;font:500 11px/1.4 var(--mono);color:var(--mut);letter-spacing:.09em;text-transform:uppercase;margin-top:4px}
+  nav.toc ol{list-style:none;margin:20px 0 0;padding:0;border-left:1px solid var(--line)}
+  nav.toc li a{display:block;padding:5px 10px 5px 14px;font:500 13px/1.35 var(--disp);color:var(--mut);text-decoration:none;border-left:2px solid transparent;margin-left:-1.5px}
+  nav.toc li a:hover{color:var(--ink)}
+  nav.toc li a.on{color:var(--blue-ink);border-left-color:var(--blue)}
+  nav.toc li a .dnum{font:600 10px/1 var(--mono);color:var(--blue);letter-spacing:.05em;margin-left:6px}
+  main{flex:1;min-width:0;padding:0 40px 120px 44px;max-width:900px}
+  @media (max-width:900px){
+    .shell{display:block}
+    nav.toc{position:static;width:auto;height:auto;padding:20px 20px 0}
+    nav.toc ol{display:none}
+    main{padding:0 18px 100px}
+  }
+
+  /* ---------- ribbon bar (signature) ---------- */
+  .bar{position:sticky;top:0;z-index:50;background:var(--paper);padding:14px 0 12px;border-bottom:1px solid var(--line);margin-bottom:8px}
+  .bar-in{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  .ribbon{display:flex;flex:1;min-width:220px;height:22px;border:1px solid var(--blue-line);border-radius:5px;overflow:hidden;background:var(--surface)}
+  .ribbon button{flex:1;border:0;padding:0;background:transparent;cursor:pointer;position:relative;border-right:1px solid var(--line-soft);transition:background .15s}
+  .ribbon button:last-child{border-right:0}
+  .ribbon button::after{content:attr(data-n);font:600 10px/22px var(--mono);color:var(--faint);display:block}
+  .ribbon button.done{background:var(--blue)}
+  .ribbon button.done::after{color:#fff}
+  .ribbon button:hover:not(.done){background:var(--blue-soft)}
+  .bar .count{font:600 12px/1 var(--mono);color:var(--mut);white-space:nowrap;letter-spacing:.04em}
+  .bar .acts{display:flex;gap:8px}
+  .btn{font:600 12px/1 var(--disp);letter-spacing:.02em;padding:9px 13px;border-radius:6px;cursor:pointer;
+    border:1px solid var(--blue);background:var(--surface);color:var(--blue-ink)}
+  .btn:hover{background:var(--blue-soft)}
+  .btn.primary{background:var(--blue);color:#fff}
+  .btn.primary:hover{background:var(--blue-ink)}
+
+  /* ---------- typography ---------- */
+  header.hero{padding:44px 0 8px}
+  .eyebrow{font:600 11px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--blue);margin:0 0 14px}
+  h1{font:700 clamp(30px,4.4vw,44px)/1.08 var(--disp);letter-spacing:-.015em;margin:0 0 16px;max-width:15.5em}
+  .lede{font-size:20px;line-height:1.55;color:var(--mut);max-width:34em;margin:0 0 10px}
+  section{margin-top:64px}
+  section>h2{font:700 25px/1.2 var(--disp);letter-spacing:-.01em;margin:0 0 6px;padding-top:18px;border-top:2px solid var(--ink)}
+  section>h2 .sn{font:600 11px/1 var(--mono);letter-spacing:.12em;color:var(--blue);display:block;margin-bottom:10px}
+  h3{font:600 17.5px/1.3 var(--disp);margin:34px 0 8px}
+  p{margin:12px 0;max-width:42em}
+  ul,ol{max-width:42em;padding-left:24px}
+  li{margin:6px 0}
+  b,strong{font-weight:700}
+  .mut{color:var(--mut)}
+  code{font:500 .82em/1 var(--mono);background:var(--blue-soft);border:1px solid var(--blue-line);border-radius:4px;padding:2px 5px;white-space:nowrap}
+  pre{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px 16px;overflow-x:auto;font:12.5px/1.6 var(--mono);max-width:100%}
+  pre code{background:none;border:0;padding:0;white-space:pre}
+  hr{border:0;border-top:1px solid var(--line);margin:34px 0}
+
+  /* ---------- callouts ---------- */
+  .call{border:1px solid var(--blue-line);background:var(--blue-soft);border-radius:8px;padding:14px 18px;margin:18px 0;max-width:46em}
+  .call.warn{border-color:#EBCBB2;background:var(--warn-soft)}
+  .call .tag{font:600 10.5px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--blue-ink);display:block;margin-bottom:6px}
+  .call.warn .tag{color:var(--warn)}
+  .call p{margin:6px 0}
+
+  /* ---------- tables ---------- */
+  .twrap{overflow-x:auto;margin:18px 0;border:1px solid var(--line);border-radius:8px;background:var(--surface)}
+  table{border-collapse:collapse;width:100%;font-size:14.5px;line-height:1.5}
+  th{font:600 11px/1.4 var(--mono);letter-spacing:.07em;text-transform:uppercase;color:var(--mut);text-align:left;padding:10px 14px;border-bottom:2px solid var(--line);background:var(--surface);white-space:nowrap}
+  td{padding:10px 14px;border-bottom:1px solid var(--line-soft);vertical-align:top}
+  tr:last-child td{border-bottom:0}
+  td.good{color:var(--rec);font-weight:600}
+  td.bad{color:var(--warn);font-weight:600}
+  td.mid{color:var(--mut)}
+  .rowlbl{font-weight:700;font-family:var(--disp);font-size:13.5px;white-space:nowrap}
+
+  /* ---------- blueprint diagrams ---------- */
+  .bp{border:1px solid var(--blue-line);border-radius:8px;margin:20px 0;padding:26px 22px;overflow-x:auto;
+    background:var(--surface);
+    background-image:linear-gradient(var(--line-soft) 1px,transparent 1px),linear-gradient(90deg,var(--line-soft) 1px,transparent 1px);
+    background-size:22px 22px}
+  .bp .cap{font:600 10.5px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--blue);margin:0 0 18px}
+  .lane{display:flex;gap:14px;align-items:stretch;flex-wrap:wrap;margin:10px 0}
+  .node{background:var(--surface);border:1.5px solid var(--ink);border-radius:8px;padding:10px 14px;min-width:150px;flex:1;box-shadow:2px 2px 0 var(--line)}
+  .node .nt{font:700 13.5px/1.3 var(--disp);margin:0}
+  .node .nd{font:400 12.5px/1.45 var(--body);color:var(--mut);margin:4px 0 0}
+  .node.accent{border-color:var(--blue);box-shadow:2px 2px 0 var(--blue-line)}
+  .node.dash{border-style:dashed;box-shadow:none}
+  .node.dash .nt{color:var(--mut)}
+  .flowdown{text-align:center;font:600 14px/1 var(--mono);color:var(--faint);padding:4px 0}
+  .lanetag{flex:0 0 84px;display:flex;align-items:center;font:600 10px/1.5 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--blue-ink)}
+  @media (max-width:700px){ .lanetag{flex-basis:100%} }
+
+  /* ---------- decision cards ---------- */
+  .decision{position:relative;background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--blue);
+    border-radius:10px;padding:20px 24px 18px;margin:30px 0;box-shadow:0 1px 3px rgba(28,43,54,.06)}
+  .decision::before{content:"";position:absolute;left:-7px;top:26px;width:10px;height:10px;border-radius:50%;
+    background:var(--blue);border:2px solid var(--surface)}
+  .decision .dhead{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:4px}
+  .decision .dnum{font:700 11px/1 var(--mono);letter-spacing:.13em;color:var(--blue)}
+  .decision h4{font:700 18px/1.25 var(--disp);margin:0}
+  .decision .dctx{color:var(--mut);font-size:15px;margin:6px 0 14px;max-width:44em}
+  .opts{display:flex;flex-direction:column;gap:8px;margin:0 0 14px}
+  .opt{display:flex;gap:12px;align-items:flex-start;border:1px solid var(--line);border-radius:8px;padding:11px 14px;cursor:pointer;transition:border-color .12s, background .12s}
+  .opt:hover{border-color:var(--blue-line);background:var(--blue-soft)}
+  .opt input{margin-top:4px;accent-color:var(--blue);flex:0 0 auto}
+  .opt .ob{min-width:0}
+  .opt .ot{font:600 15px/1.35 var(--disp)}
+  .opt .od{font-size:14px;color:var(--mut);line-height:1.5;margin-top:2px}
+  .opt .badge{display:inline-block;font:700 9.5px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--rec);
+    background:var(--rec-soft);border:1px solid var(--rec);border-radius:99px;padding:3px 8px;margin-left:8px;vertical-align:2px}
+  .opt:has(input:checked){border-color:var(--blue);background:var(--blue-soft);box-shadow:inset 0 0 0 1px var(--blue)}
+  .dnote label{display:block;font:600 10.5px/1 var(--mono);letter-spacing:.11em;text-transform:uppercase;color:var(--mut);margin:0 0 6px}
+  textarea{width:100%;min-height:58px;border:1px solid var(--line);border-radius:7px;padding:9px 11px;
+    font:14.5px/1.55 var(--body);color:var(--ink);background:#FBFDFE;resize:vertical}
+  textarea:focus{border-color:var(--blue);outline:none;box-shadow:0 0 0 2px var(--blue-soft)}
+
+  /* section note */
+  details.secnote{margin:26px 0 0;max-width:46em}
+  details.secnote summary{cursor:pointer;font:600 12px/1 var(--disp);color:var(--mut);list-style:none;display:inline-flex;align-items:center;gap:6px}
+  details.secnote summary::before{content:"✎";color:var(--blue)}
+  details.secnote summary:hover{color:var(--blue-ink)}
+  details.secnote textarea{margin-top:10px}
+
+  /* misc */
+  .kv{display:grid;grid-template-columns:auto 1fr;gap:6px 18px;font-size:15px;max-width:44em;margin:14px 0}
+  .kv dt{font:600 12px/1.7 var(--mono);letter-spacing:.05em;color:var(--blue-ink);white-space:nowrap}
+  .kv dd{margin:0}
+  .pill{display:inline-block;font:700 10px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;border-radius:99px;padding:4px 9px;margin-right:6px;vertical-align:1px}
+  .pill.now{background:var(--blue);color:#fff}
+  .pill.later{background:var(--surface);color:var(--mut);border:1px solid var(--line)}
+  .phase{border:1px solid var(--line);border-radius:10px;background:var(--surface);padding:16px 20px;margin:14px 0}
+  .phase h4{font:700 16px/1.3 var(--disp);margin:0 0 4px}
+  .phase .ph-meta{font:600 11px/1.6 var(--mono);letter-spacing:.05em;color:var(--mut);margin-bottom:8px}
+  .phase ul{margin:8px 0 4px;font-size:15px}
+  .phase .exit{font-size:13.5px;color:var(--rec);font-weight:600;font-family:var(--disp);margin-top:8px}
+  footer{margin-top:80px;padding-top:20px;border-top:2px solid var(--ink);font:500 12px/1.7 var(--mono);color:var(--mut)}
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;
+    font:600 13px/1 var(--disp);padding:12px 18px;border-radius:8px;opacity:0;pointer-events:none;transition:opacity .25s;z-index:99}
+  .toast.show{opacity:1}
+  @media print{ .bar,.toc{display:none} body{background:#fff} }
+</style>
+</head>
+<body>
+
+<script type="application/json" id="fb-review-state">{}</script>
+
+<div class="shell">
+<nav class="toc" aria-label="Contents">
+  <p class="wordmark">Flow Builder<span class="sub">Org platform plan · 2026-07-11</span></p>
+  <ol id="tocList">
+    <li><a href="#s0">Summary &amp; recommendation</a></li>
+    <li><a href="#s1">Where the tool is today</a></li>
+    <li><a href="#s2">Architecture options <span class="dnum">D1</span></a></li>
+    <li><a href="#s3">Recommended architecture <span class="dnum">D2</span></a></li>
+    <li><a href="#s4">File format &amp; metadata <span class="dnum">D3</span></a></li>
+    <li><a href="#s5">Search</a></li>
+    <li><a href="#s6">Hierarchy, links &amp; roll-ups <span class="dnum">D4</span></a></li>
+    <li><a href="#s7">Dashboards &amp; roles <span class="dnum">D5</span></a></li>
+    <li><a href="#s8">Governance</a></li>
+    <li><a href="#s9">Multi-user &amp; conflicts <span class="dnum">D6</span></a></li>
+    <li><a href="#s10">Live data linking</a></li>
+    <li><a href="#s11">Security &amp; identity</a></li>
+    <li><a href="#s12">Risks &amp; challenged assumptions</a></li>
+    <li><a href="#s13">Roadmap <span class="dnum">D7 D8</span></a></li>
+    <li><a href="#s14">Your overall notes</a></li>
+  </ol>
+</nav>
+
+<main>
+  <div class="bar" role="region" aria-label="Review progress">
+    <div class="bar-in">
+      <div class="ribbon" id="ribbon" title="One segment per decision — click to jump"></div>
+      <span class="count" id="countLbl">0 / 8 decided</span>
+      <span class="acts">
+        <button class="btn" id="btnCopy" type="button">Copy summary</button>
+        <button class="btn primary" id="btnSave" type="button">Download reviewed copy</button>
+      </span>
+    </div>
+  </div>
+
+  <header class="hero">
+    <p class="eyebrow">Architecture proposal · for review</p>
+    <h1>From a mapping tool to a map platform — without giving up the single file.</h1>
+    <p class="lede">How Flow Builder can let an organization store, find, connect, govern and roll up
+    a thousand maps — while the editor you have today stays exactly what it is.</p>
+    <div class="call">
+      <span class="tag">How to use this document</span>
+      <p>Read top to bottom or jump via the ribbon above (one segment per decision). Pick an option
+      on each of the <b>8 decision cards</b>, add comments anywhere you like, then hit
+      <b>Download reviewed copy</b> — your choices are written into the downloaded file itself.
+      Send that file back and I'll turn it into a concrete implementation plan.
+      (Your input also autosaves to this browser as you type.)</p>
+    </div>
+  </header>
+
+  <!-- ================================================================ -->
+  <section id="s0">
+    <h2><span class="sn">§ 0</span>Summary &amp; recommendation</h2>
+    <p><b>The short version:</b> keep Flow Builder a static, browser-only app. Don't build a backend,
+    a database, or a proprietary storage layer. Instead, make the <em>folder</em> the platform:</p>
+    <ul>
+      <li><b>Maps become files in a shared folder</b> — a SharePoint document library or OneDrive
+      folder the organization already has, with one <code>.flow.json</code> file per map. Permissions,
+      versioning, backup, retention and audit come free from M365.</li>
+      <li><b>Flow Builder grows a Workspace layer</b> — the existing home gallery evolves from
+      "flows in this browser's localStorage" into "maps in the connected folder": browse, facet,
+      search, open, dashboard. The editor itself is untouched.</li>
+      <li><b>A sidecar index makes it fast</b> — a hidden <code>.flowbuilder/</code> folder inside the
+      library holds a small machine-written catalog: one ~3&nbsp;KB <em>digest</em> per map (metrics,
+      people, metadata, links) plus a search index and precomputed aggregates. Dashboards and search
+      read digests, never the full corpus, so 1,000+ maps stay instant.</li>
+      <li><b>Cross-map structure comes from the format, not a server</b> — stable map IDs, a
+      <em>link node</em> type, and "promote group → sub-map" turn today's groups into real process
+      decomposition with metric roll-ups.</li>
+      <li><b>Dashboards are small JSON specs</b> — a template (role-shaped layout + metrics) bound to
+      a scope (a metadata query like <code>area = "Claims"</code>). They live in the same library, so
+      sharing and permissions are just file sharing.</li>
+    </ul>
+    <p>What I'm explicitly <b>not</b> recommending: a Node/Python service, a database, SPFx/SharePoint-native
+    development, or real-time collaborative editing. Each is evaluated below; none earns its
+    complexity at this stage. The one honest caveat: a browser-only architecture has a scaling
+    ceiling (roughly 2,000–5,000 maps per workspace, single-org search only within libraries a user
+    can read). The design keeps a clean seam so a thin indexing service can be added <em>behind the
+    same file contracts</em> if you ever cross that ceiling — nothing built now gets thrown away.</p>
+  </section>
+
+  <!-- ================================================================ -->
+  <section id="s1">
+    <h2><span class="sn">§ 1</span>Where the tool is today — and what stays intact</h2>
+    <p>Everything below builds <em>around</em> the current tool. Nothing in the editor, the metric
+    engine, the lenses, exports, or the Convert-docs import changes.</p>
+    <dl class="kv">
+      <dt>App</dt><dd>One self-contained <code>index.html</code> (~390 KB), static hosting on Vercel, vendor libs local. No backend, no build step.</dd>
+      <dt>Persistence</dt><dd>All flows autosave to <code>localStorage</code> (per browser, per device). Portable via JSON "Back up design" export / Import.</dd>
+      <dt>Model</dt><dd><code>{nodes, edges, groups, comments}</code> + title/theme. CSV import marks fields <code>measured</code>; Speed / Capacity / Quality metrics, flow efficiency, and the bottleneck are derived client-side.</dd>
+      <dt>Structure</dt><dd>Collapsible Groups inside a map (collapse is render-only). No links <em>between</em> maps, no stable map identity, no shared library.</dd>
+      <dt>Sharing</dt><dd>One-way exports: PNG/JPG/PDF/standalone HTML viewer.</dd>
+    </dl>
+    <p>The three gaps that block organizational use are exactly the three things the plan adds:
+    <b>shared storage</b> (localStorage is a dead end for orgs — per-device, invisible to colleagues,
+    unmanaged), <b>identity</b> (a map has no permanent ID, so nothing can reference it), and
+    <b>a cross-map layer</b> (search, links, roll-ups, dashboards).</p>
+    <div class="call warn">
+      <span class="tag">Assumption challenged</span>
+      <p>The current localStorage library can't remain the source of truth once folders exist —
+      two sources of truth guarantee divergence ("which copy is real?"). The plan keeps localStorage
+      only as an offline cache / scratch space for unconnected users, with a one-time "move my flows
+      into the workspace" migration.</p>
+    </div>
+    <details class="secnote"><summary>Add a note on this section</summary><textarea data-note="sec-1" placeholder="Anything I got wrong about the current state, or must-not-touch areas…"></textarea></details>
+  </section>
+
+  <!-- ================================================================ -->
+  <section id="s2">
+    <h2><span class="sn">§ 2</span>Architecture options, compared honestly</h2>
+    <p>Four realistic ways to give a browser app shared, organization-wide storage. They are not
+    mutually exclusive — the recommendation is a sequence, not a single pick.</p>
+
+    <h3>Option A — SharePoint / OneDrive via Microsoft Graph API</h3>
+    <p>Flow Builder (still a static page) signs the user in with <code>MSAL.js</code> and talks to the
+    Microsoft Graph REST API directly from the browser: list the library, read/write
+    <code>.flow.json</code> files, use <b>delta queries</b> to learn what changed since last visit.
+    Works from any browser, any device, honors SharePoint permissions natively.</p>
+    <p class="mut">Cost: an Entra ID app registration and admin consent — a real IT conversation.
+    With <code>Sites.Selected</code> scoping, IT can grant access to specific sites only, which is the
+    modern, security-friendly ask. Graph throttling (~excess of a few requests/sec sustained) matters
+    only for the first-ever index build.</p>
+
+    <h3>Option B — Local synced folder via the File System Access API</h3>
+    <p>The user clicks "Connect folder" and picks their locally-synced OneDrive/SharePoint folder.
+    The browser (Edge/Chrome) gets direct read/write access — no sign-in, no IT ticket, no consent,
+    works offline, and the OneDrive sync client moves the bytes. This is the zero-friction on-ramp:
+    a team can adopt it this quarter without asking anyone.</p>
+    <p class="mut">Cost: Chromium-only (fine for Edge-standard orgs; Safari/Firefox can't). Permission
+    is re-confirmed per browser profile. Sync lag (seconds–minutes) means "shared" is eventually-consistent.
+    No server-side anything — every client does its own reading.</p>
+
+    <h3>Option C — Thin service (indexer + API)</h3>
+    <p>A small hosted service watches the library (Graph webhooks), maintains the index and aggregates
+    server-side, and serves search/dashboard queries. Solves cold-start, cross-library search, and
+    scheduled aggregation properly.</p>
+    <p class="mut">Cost: hosting, deployment, secrets, monitoring, a second codebase, and — in most
+    enterprises — a security review before anything can touch tenant data. It changes the product's
+    nature from "a file you open" to "a system someone operates". Powerful, premature.</p>
+
+    <h3>Option D — SharePoint-native (SPFx web part, SharePoint Search, Lists)</h3>
+    <p>Rebuild the workspace as a SharePoint Framework web part; push metadata into library columns;
+    lean on SharePoint's own search and Power BI. Deepest M365 integration, and dashboards could
+    partly be Power BI.</p>
+    <p class="mut">Cost: SPFx toolchain and deployment model, tenant app catalog governance, a UI
+    constrained by SharePoint's shell, and hard lock-in. SharePoint Search also can't see <em>inside</em>
+    your JSON meaningfully (steps, people, tools), so you'd still need your own index. Rejected as
+    the platform, though § 7 borrows one cheap idea from it (CSV aggregates Power BI can read).</p>
+
+    <div class="twrap"><table>
+      <tr><th></th><th>A · Graph API</th><th>B · Local folder</th><th>C · Thin service</th><th>D · SPFx native</th></tr>
+      <tr><td class="rowlbl">IT friction to adopt</td><td class="mid">Admin consent</td><td class="good">None</td><td class="bad">Security review</td><td class="bad">Tenant deploy</td></tr>
+      <tr><td class="rowlbl">Works in any browser</td><td class="good">Yes</td><td class="bad">Chromium only</td><td class="good">Yes</td><td class="mid">In SharePoint</td></tr>
+      <tr><td class="rowlbl">Offline editing</td><td class="mid">Cache only</td><td class="good">Full</td><td class="mid">Cache only</td><td class="bad">No</td></tr>
+      <tr><td class="rowlbl">Permissions model</td><td class="good">Native ACLs</td><td class="good">Native ACLs</td><td class="mid">Re-implemented</td><td class="good">Native ACLs</td></tr>
+      <tr><td class="rowlbl">Scale ceiling (maps)</td><td class="mid">~2–5 k</td><td class="mid">~2–5 k</td><td class="good">10 k+</td><td class="mid">Search-limited</td></tr>
+      <tr><td class="rowlbl">New moving parts</td><td class="good">None</td><td class="good">None</td><td class="bad">Service + infra</td><td class="bad">SPFx pipeline</td></tr>
+      <tr><td class="rowlbl">Keeps single-file spirit</td><td class="good">Yes</td><td class="good">Yes</td><td class="bad">No</td><td class="bad">No</td></tr>
+      <tr><td class="rowlbl">Long-term maintainability</td><td class="good">Web standards</td><td class="good">Web standards</td><td class="mid">Ops burden</td><td class="bad">MS toolchain churn</td></tr>
+    </table></div>
+
+    <div class="decision" data-id="d1" id="d1">
+      <div class="dhead"><span class="dnum">DECISION 01</span><h4>Storage connection strategy</h4></div>
+      <p class="dctx">All options keep files in M365 storage; this decides <em>how the browser reaches
+      them</em> and in what order we build the adapters. The storage adapter is a small interface
+      (<code>list / read / write / changedSince</code>), so adding a second mode later is cheap.</p>
+      <div class="opts">
+        <label class="opt"><input type="radio" name="d1" value="b-then-a">
+          <span class="ob"><span class="ot">B first, A second — progressive<span class="badge">Recommended</span></span>
+          <span class="od">Ship the local-folder mode now (zero IT, works this quarter, proves the format and index). Add Graph sign-in as a second adapter when an org wants any-browser/mobile access. Same files, same index, no rework.</span></span></label>
+        <label class="opt"><input type="radio" name="d1" value="a-only">
+          <span class="ob"><span class="ot">A only — Graph API from day one</span>
+          <span class="od">One adapter, works everywhere, but nothing ships until an Entra app registration and admin consent exist. Adoption gated on IT from the very first user.</span></span></label>
+        <label class="opt"><input type="radio" name="d1" value="b-only">
+          <span class="ob"><span class="ot">B only — local folder, revisit later</span>
+          <span class="od">Simplest possible scope; accepts Chromium-only and no web/mobile access indefinitely. Fine if all target users run Edge on managed laptops.</span></span></label>
+        <label class="opt"><input type="radio" name="d1" value="c-now">
+          <span class="ob"><span class="ot">C — build the thin service now</span>
+          <span class="od">Strongest at 5k+ maps and org-wide search, but adds hosting, ops, and an enterprise security review before the first team can use it. I'd hold this as the phase-5 escape hatch, not the start.</span></span></label>
+      </div>
+      <div class="dnote"><label for="n-d1">Your comment</label><textarea id="n-d1" data-note="d1" placeholder="Constraints I should know — browser standard at target orgs, IT appetite, timeline…"></textarea></div>
+    </div>
+  </section>
+
+  <!-- ================================================================ -->
+  <section id="s3">
+    <h2><span class="sn">§ 3</span>The recommended architecture</h2>
+    <p>Three layers, all client-side. The only "new infrastructure" is a hidden folder of small
+    JSON files that Flow Builder itself maintains.</p>
+
+    <div class="bp">
+      <p class="cap">Fig. 1 — Workspace architecture (everything runs in the browser)</p>
+      <div class="lane"><span class="lanetag">App</span>
+        <div class="node"><p class="nt">Editor</p><p class="nd">Today's canvas, lenses, metrics — unchanged. Opens one map at a time.</p></div>
+        <div class="node accent"><p class="nt">Workspace (new)</p><p class="nd">Library browse + facets, search, dashboards, governance views. Evolved from the home gallery.</p></div>
+      </div>
+      <div class="flowdown">▼ reads &amp; writes through ▼</div>
+      <div class="lane"><span class="lanetag">Adapter</span>
+        <div class="node accent"><p class="nt">Storage adapter</p><p class="nd"><code>list · read · write · changedSince</code> — Mode B: File System Access · Mode A: Graph API. IndexedDB cache under both.</p></div>
+      </div>
+      <div class="flowdown">▼ one shared folder ▼</div>
+      <div class="lane"><span class="lanetag">Library</span>
+        <div class="node"><p class="nt">maps/</p><p class="nd">One <code>*.flow.json</code> per map — the source of truth. SharePoint versioning = history.</p></div>
+        <div class="node accent"><p class="nt">.flowbuilder/</p><p class="nd">Sidecar index: <code>catalog.json</code>, <code>digests/</code>, <code>search/</code>, <code>aggregates/</code>, <code>dashboards/</code>, <code>schema.json</code>.</p></div>
+        <div class="node dash"><p class="nt">(later) service / connectors</p><p class="nd">Optional indexer or live-data feeds slot in behind the same file contracts.</p></div>
+      </div>
+    </div>
+
+    <h3>The digest — the load-bearing idea</h3>
+    <p>Opening 1,000 full maps to draw a dashboard is a non-starter (≈300 MB of JSON). So whenever a
+    map is saved, Flow Builder also writes a <b>digest</b>: a ~2–4 KB extract with everything the
+    cross-map layer needs and nothing it doesn't:</p>
+<pre><code>.flowbuilder/digests/&lt;mapId&gt;.json
+{
+  "mapId": "m_7f3a…", "title": "Claims intake", "path": "maps/claims-intake.flow.json",
+  "rev": 41, "savedAt": "2026-07-11T14:02:11Z", "savedBy": "amartel",
+  "meta":   { "area": "Claims", "team": "Intake", "owner": "J. Ortiz",
+              "status": "active", "reviewedAt": "2026-06-02", "tags": ["customer-facing"] },
+  "metrics":{ "steps": 34, "people": 12, "leadTimeH": 86, "touchTimeH": 9.5,
+              "flowEff": 0.11, "capacityPerDay": 41, "rftPct": 78,
+              "bottleneck": { "step": "Adjuster review", "why": "capacity" },
+              "confidence": { "measured": 21, "modelled": 9 } },
+  "links":  { "out": ["m_2c9d…"], "in": [] },
+  "text":   { "steps": ["Receive claim", …], "people": ["Intake clerk", …],
+              "tools": ["Guidewire", …], "notes": ["Rekeying between systems", …] }
+}</code></pre>
+    <p>Everything downstream — search, facets, dashboards, roll-ups, link resolution, governance —
+    reads digests. The full map is only ever opened to <em>edit</em> it. This is the entire
+    performance story, and it's why no server is needed.</p>
+
+    <h3>Scale math (the honest numbers)</h3>
+    <div class="twrap"><table>
+      <tr><th>Thing</th><th>Size at 1,000 large maps</th><th>Feels like</th></tr>
+      <tr><td>Full corpus (all map files)</td><td>~150–400 MB</td><td class="bad">Never loaded wholesale</td></tr>
+      <tr><td><code>catalog.json</code> (id, title, meta, headline metrics per map)</td><td>~1–3 MB (~300 KB gzipped)</td><td class="good">Loads &lt; 1 s; facet/filter/sort is instant in memory</td></tr>
+      <tr><td>Digests (full detail, incl. text fields)</td><td>~3 MB total, fetched per-map or in shards</td><td class="good">Lazy</td></tr>
+      <tr><td>Search index (MiniSearch over extracted fields)</td><td>~5–15 MB, sharded by area, cached in IndexedDB</td><td class="good">First search ~1–2 s, then instant</td></tr>
+      <tr><td>Aggregates (per team/area/org rollups)</td><td>~100 KB</td><td class="good">Dashboards render immediately</td></tr>
+      <tr><td>Cold start (first user ever, building the index from scratch)</td><td>Read every map once</td><td class="mid">Minutes (B: fast, local disk) to ~15 min (A: Graph throttling) — <b>once per org</b>, then incremental</td></tr>
+      <tr><td>Incremental update (per visit)</td><td>Only changed files (mtime / Graph delta)</td><td class="good">Seconds, in the background</td></tr>
+    </table></div>
+
+    <h3>Keeping the index fresh without a server</h3>
+    <p>There is no daemon, so the rule is: <b>writers update what they touched; readers repair the
+    rest.</b> Saving a map writes its digest in the same breath. Opening the Workspace runs a
+    background reconcile — compare file mtimes/etags against the catalog, re-digest anything stale
+    (a few files, typically), rebuild affected aggregates, and bump <code>catalog.json</code> with an
+    optimistic-concurrency check (etag; on conflict, re-read and merge — digest writes are
+    idempotent, derived purely from map content, so merges can't corrupt). Stale-by-minutes is the
+    accepted trade for having no infrastructure, and for operational dashboards over process maps
+    that staleness is invisible.</p>
+
+    <div class="decision" data-id="d2" id="d2">
+      <div class="dhead"><span class="dnum">DECISION 02</span><h4>Where the index lives</h4></div>
+      <p class="dctx">The digests/catalog have to live somewhere every reader can reach.</p>
+      <div class="opts">
+        <label class="opt"><input type="radio" name="d2" value="shared-sidecar">
+          <span class="ob"><span class="ot">Shared sidecar in the library + local cache<span class="badge">Recommended</span></span>
+          <span class="od"><code>.flowbuilder/</code> travels with the maps: one user pays the cold build, everyone else inherits it; permissions ride the library's ACLs; each browser keeps an IndexedDB copy for instant loads. The index is disposable — delete the folder and it rebuilds.</span></span></label>
+        <label class="opt"><input type="radio" name="d2" value="per-user">
+          <span class="ob"><span class="ot">Per-user local index only</span>
+          <span class="od">Nothing written to the shared library (some orgs dislike app-written folders). But every user pays their own cold build and dashboards can't be precomputed for the org — noticeably worse at 1,000 maps.</span></span></label>
+        <label class="opt"><input type="radio" name="d2" value="service">
+          <span class="ob"><span class="ot">Server-side index from the start</span>
+          <span class="od">Freshest possible, but drags Option C's ops/security costs into phase 1. Only justified if real-time freshness is a hard requirement.</span></span></label>
+      </div>
+      <div class="dnote"><label for="n-d2">Your comment</label><textarea id="n-d2" data-note="d2" placeholder="e.g. would target orgs object to an app-managed hidden folder in the library?"></textarea></div>
+    </div>
+  </section>
+
+  <!-- ================================================================ -->
+  <section id="s4">
+    <h2><span class="sn">§ 4</span>File format &amp; metadata foundations</h2>
+    <p>These format changes are the true phase 0 — cheap now, near-impossible to retrofit later.
+    They're worth doing even if everything else in this document changes.</p>
+    <ol>
+      <li><b>Stable identity.</b> Every map gets a permanent <code>mapId</code> (UUID) minted at creation
+      and preserved forever — through rename, move, duplicate ("duplicate" mints a new one; "move"
+      never does). Links, digests, dashboards and roll-ups all reference IDs, never paths, so
+      reorganizing folders breaks nothing.</li>
+      <li><b><code>schemaVersion</code></b> + the migrate-on-load pattern the app already uses
+      (<code>migrateComments</code> et al.), formalized.</li>
+      <li><b>A <code>meta</code> block</b> — the governance/organization spine:
+<pre><code>"meta": {
+  "owner": "J. Ortiz",            // a person, always — unowned maps get flagged
+  "area": "Claims",               // org-defined hierarchy level(s)
+  "team": "Intake",
+  "status": "active",             // draft → active → under-review → retired
+  "reviewedAt": "2026-06-02",
+  "reviewCadenceDays": 180,
+  "tags": ["customer-facing"],
+  "custom": { "riskTier": "2" }   // fields defined by the org schema, below
+}</code></pre></li>
+      <li><b>A <code>link</code> node type</b> — a start/end/step node may carry
+      <code>linksTo: { mapId, nodeId? }</code>. This single field is the whole § 6 hierarchy story's
+      data model.</li>
+      <li><b>Naming:</b> <code>&lt;slug&gt;.flow.json</code> so files are recognizable in SharePoint, and a
+      dedicated icon/preview later.</li>
+    </ol>
+
+    <h3>Custom metadata at scale: a schema the org owns</h3>
+    <p>Free-form tags rot at 1,000 maps ("Claims" vs "claims" vs "CLM"). Fixed fields are too rigid
+    across organizations. The middle path: a tiny <code>.flowbuilder/schema.json</code> per workspace
+    where the org defines its own fields once — name, type (text / choice / person / date), allowed
+    values, required-or-not — and the editor's map-details panel renders them as proper inputs with
+    dropdowns. The Workspace then gets clean facets for free, and validation is gentle: unknown
+    values are flagged in a governance view, never blocked at save time (blocking kills adoption).</p>
+
+    <div class="decision" data-id="d3" id="d3">
+      <div class="dhead"><span class="dnum">DECISION 03</span><h4>Metadata model</h4></div>
+      <p class="dctx">How structured should map metadata be?</p>
+      <div class="opts">
+        <label class="opt"><input type="radio" name="d3" value="core-plus-schema">
+          <span class="ob"><span class="ot">Core fields + org-defined schema file<span class="badge">Recommended</span></span>
+          <span class="od">Owner / area / team / status / review date are universal and hard-coded; everything else comes from <code>schema.json</code>. Consistent facets, flexible per org, no per-map chaos.</span></span></label>
+        <label class="opt"><input type="radio" name="d3" value="tags-only">
+          <span class="ob"><span class="ot">Free-form tags only</span>
+          <span class="od">Zero setup, fastest to ship — but faceting, role dashboards and governance all degrade as vocabulary drifts. Fine for one team, poor at org scale.</span></span></label>
+        <label class="opt"><input type="radio" name="d3" value="sp-columns">
+          <span class="ob"><span class="ot">SharePoint library columns as the metadata store</span>
+          <span class="od">Metadata visible/editable in SharePoint views too — genuinely nice — but it splits truth between file and column, needs Graph writes even in local-folder mode, and breaks when a file is moved between libraries. Could be added later as a one-way <em>sync out</em> instead.</span></span></label>
+      </div>
+      <div class="dnote"><label for="n-d3">Your comment</label><textarea id="n-d3" data-note="d3" placeholder="Fields you already know every org will need…"></textarea></div>
+    </div>
+  </section>
+
+  <!-- ================================================================ -->
+  <section id="s5">
+    <h2><span class="sn">§ 5</span>Search that sees inside the maps</h2>
+    <p>SharePoint's own search treats a <code>.flow.json</code> as an opaque blob — it will never answer
+    "which processes involve the Underwriting team and mention Guidewire?". Ours will, because the
+    digest already extracts exactly the searchable substance of a map:</p>
+    <ul>
+      <li><b>Fielded full-text</b> over titles, step labels, people, tools/systems mentioned, note
+      text (including waste/frustration/idea notes), group names, and metadata — via a MiniSearch-style
+      in-browser index (fuzzy + prefix matching, ~30 KB library, no dependency risk).</li>
+      <li><b>Facets from metadata</b>: area, team, owner, status, tags, custom fields — instant
+      in-memory filtering over the catalog.</li>
+      <li><b>Metric queries as filters</b>, not text: <i>flow efficiency &lt; 10%</i>, <i>bottleneck
+      type = capacity</i>, <i>not reviewed in 12 months</i>. These come straight off digest fields and
+      compose with text search ("<i>rekeying</i> in Claims, active maps, FE &lt; 15%").</li>
+      <li><b>Results that answer, not just point</b>: each hit shows <em>where</em> it matched — the
+      step card, the note, the person — so users rarely need to open the map at all.</li>
+    </ul>
+    <p>Index shards live in <code>.flowbuilder/search/</code> (split by area once large), cached in
+    IndexedDB, patched incrementally when digests change. At the 1,000-map scale this is a 1–2 s
+    first load and instant thereafter — comfortably inside "no noticeable lag". No decision needed
+    here; this design follows from D2.</p>
+    <details class="secnote"><summary>Add a note on this section</summary><textarea data-note="sec-5" placeholder="Queries you most want search to answer…"></textarea></details>
+  </section>
+
+  <!-- ================================================================ -->
+  <section id="s6">
+    <h2><span class="sn">§ 6</span>Hierarchy, links between maps, and roll-ups</h2>
+    <p>This is the hardest design problem in the brief, and the answer starts from something you
+    already built: <b>the collapsible Group is a sub-process viewed from outside.</b> A collapsed
+    group renders as a single step; § 6 extends that idea across file boundaries.</p>
+
+    <h3>Group vs. separate map — a rule of thumb users can hold</h3>
+    <div class="twrap"><table>
+      <tr><th>Keep it a group (same map)</th><th>Make it its own map</th></tr>
+      <tr><td>Same owner and team as the parent flow</td><td>Different owner, or its own review cadence</td></tr>
+      <tr><td>Only meaningful inside this flow</td><td>Referenced by two or more parent flows (shared service, e.g. "Credit check")</td></tr>
+      <tr><td>Edited together with the parent</td><td>Improved/measured independently</td></tr>
+      <tr><td>A handful of steps</td><td>Big enough to be a working session of its own</td></tr>
+    </table></div>
+    <p>The tool enforces nothing here — it just makes moving between the two states effortless:</p>
+    <ul>
+      <li><b>Promote group → map.</b> One action on any group: its members move into a new
+      <code>.flow.json</code> (with meta inherited, ownership prompted), and the group is replaced in the
+      parent by a single <b>linked step</b> — a collapsed-group-style card carrying
+      <code>linksTo: {mapId}</code>. Boundary edges become the child map's start/end.</li>
+      <li><b>Demote map → group</b> is the exact inverse, for when a decomposition turns out to be
+      overkill. Reversibility is what makes people willing to decompose at all.</li>
+    </ul>
+
+    <h3>Linked steps: one continuous flow, not disconnected diagrams</h3>
+    <ul>
+      <li>A linked step renders like today's collapsed group (striped border, lens-sized) but its
+      chip shows the <b>child map's live digest metrics</b> — lead time, capacity, bottleneck — so the
+      parent map is always honest without opening anything.</li>
+      <li><b>Double-click drills in</b>; a breadcrumb (Claims intake ▸ Adjuster review) drills back
+      out. End-of-map link nodes ("continues in: Payments") work the same for peer-to-peer chaining.
+      Navigation resolves <code>mapId → path</code> through the catalog, so renames and moves never break
+      a link.</li>
+      <li><b>Backlinks are computed, not authored.</b> The digest records outbound links; the catalog
+      inverts them. Every map shows "used by: 3 flows" for free, and a shared sub-process knows all
+      its parents.</li>
+    </ul>
+
+    <h3>Metric roll-ups</h3>
+    <p>Roll-ups reuse the existing metric engine's semantics, applied over digests (never full maps):</p>
+    <div class="twrap"><table>
+      <tr><th>Pillar</th><th>Roll-up rule</th></tr>
+      <tr><td class="rowlbl">Speed</td><td>Linked step's touch/lead time = child's totals; parent's lead time and flow efficiency then compute exactly as today.</td></tr>
+      <tr><td class="rowlbl">Capacity</td><td>Linked step's capacity = child's constraint capacity (its bottleneck). Min-propagation matches the unified bottleneck logic already in the app.</td></tr>
+      <tr><td class="rowlbl">Quality</td><td>Right-first-time multiplies through: parent RFT × child RFT.</td></tr>
+      <tr><td class="rowlbl">People</td><td>Sum FTE; count distinct names where named (digest keeps the roster).</td></tr>
+      <tr><td class="rowlbl">Confidence</td><td>Measured/modelled counts carry up, so an exec dashboard can say how much of a number is real data — precedence stays measured &gt; observed &gt; modelled.</td></tr>
+    </table></div>
+    <p>Above the map level, the same digests aggregate by metadata — team → area → org — which is
+    all a § 7 dashboard is. <b>Cycle rule:</b> navigation links may form loops (real processes do);
+    <em>roll-up</em> links must form a DAG. The promote action and the governance view both run cycle
+    detection and flag (not block) offenders, excluding them from roll-ups until resolved.</p>
+
+    <h3>Staying maintainable at hundreds of maps</h3>
+    <ul>
+      <li><b>Broken links can barely happen</b> (ID-based, catalog-resolved); a deleted target shows
+      as a flagged tombstone on the linked step, listed in governance.</li>
+      <li><b>Duplicates</b>: near-duplicate titles and step-set similarity are cheap to compute over
+      digests; surfaced as a governance hint ("these 2 maps look like the same process").</li>
+      <li><b>Orphans &amp; ownership</b>: maps with no owner, no links, or expired reviews surface in
+      the same place. Curation becomes a visible, assignable activity rather than tribal knowledge.</li>
+    </ul>
+
+    <div class="decision" data-id="d4" id="d4">
+      <div class="dhead"><span class="dnum">DECISION 04</span><h4>Decomposition model</h4></div>
+      <p class="dctx">What is the canonical mechanism for parent/child process structure?</p>
+      <div class="opts">
+        <label class="opt"><input type="radio" name="d4" value="promote-group">
+          <span class="ob"><span class="ot">Groups ⇄ maps with linked steps<span class="badge">Recommended</span></span>
+          <span class="od">Decomposition grows out of the existing group feature, is reversible, and needs no new registry. Hierarchy is emergent from links + metadata rather than a second structure to maintain.</span></span></label>
+        <label class="opt"><input type="radio" name="d4" value="registry">
+          <span class="ob"><span class="ot">Explicit process registry / tree first</span>
+          <span class="od">A curated org process taxonomy that maps get filed into (classic BPM style). Cleaner top-down reporting, but it's a second source of truth someone must own, and it front-loads modelling work before value shows up.</span></span></label>
+        <label class="opt"><input type="radio" name="d4" value="links-only">
+          <span class="ob"><span class="ot">Navigation links only, no roll-ups (for now)</span>
+          <span class="od">Ship drill-in/continues-in quickly; defer roll-up math. Lower phase-2 effort, but parent maps show stale hand-typed numbers instead of live child metrics — the thing that makes decomposition trustworthy.</span></span></label>
+      </div>
+      <div class="dnote"><label for="n-d4">Your comment</label><textarea id="n-d4" data-note="d4" placeholder="How do your users think about parent/child processes today?"></textarea></div>
+    </div>
+  </section>
+
+  <!-- ================================================================ -->
+  <section id="s7">
+    <h2><span class="sn">§ 7</span>Dashboards &amp; role-based views</h2>
+    <p>The trap the brief rightly fears is hard-coding an "exec view" and a "manager view". The way
+    out is to make a dashboard a tiny piece of data, not a piece of software:</p>
+<pre><code>.flowbuilder/dashboards/claims-ops.json
+{
+  "template": "ops-health@1",                      // layout + widgets + detail level
+  "scope":    { "area": "Claims", "status": "active" },   // a metadata query
+  "pins":     ["m_7f3a…"],                         // hand-picked additions, optional
+  "overrides":{ "widgets": { "quality": {"hidden": true} } },
+  "sharing":  "file"                               // it's just a file — library ACLs apply
+}</code></pre>
+    <dl class="kv">
+      <dt>Template</dt><dd>Defines layout, widget set, metrics, filters and altitude for a <em>kind</em> of consumer. Versioned; org can add its own.</dd>
+      <dt>Scope</dt><dd>A metadata query resolved against the catalog at render time — new maps tagged <code>area: Claims</code> join the dashboard automatically, no re-configuration.</dd>
+      <dt>Overrides</dt><dd>A small diff on the template. Personal tweaks never fork the template itself.</dd>
+      <dt>Inheritance</dt><dd>Org standards → role template → shared team dashboard → personal overrides. Each layer is a file (or localStorage for purely personal ones); "reset to standard" = delete the diff.</dd>
+    </dl>
+
+    <h3>Standard templates to ship (one per altitude, all from the same digests)</h3>
+    <div class="twrap"><table>
+      <tr><th>Template</th><th>For</th><th>Answers</th><th>Signature widgets</th></tr>
+      <tr><td class="rowlbl">My processes</td><td>Individual contributor</td><td>"What am I part of, and how is it doing?"</td><td>Maps naming me; expectations per step; my flows' health chips</td></tr>
+      <tr><td class="rowlbl">Ops health</td><td>Manager</td><td>"Where is today's constraint?"</td><td>Bottleneck board, capacity vs demand, queue waits, waste/frustration notes feed</td></tr>
+      <tr><td class="rowlbl">Compare teams</td><td>Director</td><td>"Which of my teams needs help?"</td><td>Small-multiple team rows: speed / capacity / quality side by side, improvement activity</td></tr>
+      <tr><td class="rowlbl">Portfolio</td><td>VP / exec</td><td>"Consistent measures across areas + is the estate governed?"</td><td>Area scorecards (people, lead time, FE%, RFT%, top bottlenecks), coverage &amp; review-status meters, data-confidence bar</td></tr>
+    </table></div>
+    <p>Every widget reads digest/aggregate fields — so when the digest gains a field, every dashboard
+    can use it. That's also the seam for the <b>dashboard builder</b> later: the builder is just a UI
+    that composes widgets over the digest schema and writes one of these JSON files. It costs nothing
+    now to keep that door open, and the standard templates prove the widget catalog first.</p>
+    <div class="call">
+      <span class="tag">Cheap borrowed win</span>
+      <p>Because aggregates are plain files, emitting <code>aggregates/*.csv</code> alongside the JSON
+      lets Excel and Power BI consume Flow Builder data with zero integration work — a quiet answer
+      to "why not Power BI?" (answer: you can, on top of us) that execs tend to love.</p>
+    </div>
+
+    <div class="decision" data-id="d5" id="d5">
+      <div class="dhead"><span class="dnum">DECISION 05</span><h4>How dashboards select their maps</h4></div>
+      <p class="dctx">The scope-binding model shapes both the UX and how much metadata discipline orgs need.</p>
+      <div class="opts">
+        <label class="opt"><input type="radio" name="d5" value="query-plus-pins">
+          <span class="ob"><span class="ot">Metadata query + optional pins<span class="badge">Recommended</span></span>
+          <span class="od">Dashboards stay current automatically as maps are added/retagged; pins handle the exceptions. Depends on D3's metadata being decent — which is a feature: dashboards create the incentive to tag well.</span></span></label>
+        <label class="opt"><input type="radio" name="d5" value="explicit-lists">
+          <span class="ob"><span class="ot">Hand-picked map lists only</span>
+          <span class="od">Simplest mental model and no metadata dependency, but every new map means editing every relevant dashboard — at 1,000 maps that's how dashboards silently go stale.</span></span></label>
+        <label class="opt"><input type="radio" name="d5" value="folders">
+          <span class="ob"><span class="ot">Folder structure as scope</span>
+          <span class="od">"This dashboard = this folder." Familiar, but couples org structure to disk layout, breaks on cross-cutting views (e.g. all customer-facing processes), and reorgs move files.</span></span></label>
+      </div>
+      <div class="dnote"><label for="n-d5">Your comment</label><textarea id="n-d5" data-note="d5" placeholder="Which of the four standard templates matters most / first?"></textarea></div>
+    </div>
+  </section>
+
+  <!-- ================================================================ -->
+  <section id="s8">
+    <h2><span class="sn">§ 8</span>Governance without a bureaucracy</h2>
+    <p>Governance data is deliberately <em>derived</em>, not a parallel form to fill in — almost all
+    of it falls out of the meta block and things users already do:</p>
+    <ul>
+      <li><b>Ownership &amp; freshness</b>: owner, status, last edit, last review vs cadence →
+      staleness flags ("review overdue by 40 days"), unowned-map list.</li>
+      <li><b>Coverage</b>: which areas/teams have maps at all, and how much of the estate carries
+      measured (vs modelled) data — the confidence counts the metric engine already tracks.</li>
+      <li><b>Improvement activity</b>: the waste / frustration / idea notes are literally an
+      improvement backlog. Counts, ages, and resolution over time become an activity feed and a
+      widget ("12 wastes logged, 5 addressed this quarter") with zero new authoring.</li>
+      <li><b>Estate integrity</b> (from § 6): broken/tombstoned links, cycles excluded from roll-up,
+      probable duplicates, schema-invalid metadata — one curation queue, assignable by area.</li>
+    </ul>
+    <p>All of it surfaces in two places: a governance panel in the Workspace, and governance widgets
+    available to any § 7 template (the Portfolio template ships with them on). No decision needed —
+    scope rides on D3/D5.</p>
+    <details class="secnote"><summary>Add a note on this section</summary><textarea data-note="sec-8" placeholder="Governance signals your orgs actually care about…"></textarea></details>
+  </section>
+
+  <!-- ================================================================ -->
+  <section id="s9">
+    <h2><span class="sn">§ 9</span>Multi-user reality: conflicts, not collaboration</h2>
+    <p>Once maps are shared files, two people <em>will</em> eventually edit one at once. The honest
+    question is how much machinery that deserves.</p>
+    <p>My read: Flow Builder maps are <b>authored artifacts with one natural owner</b>, edited in
+    sessions, read by many — much closer to a document than to a Figma canvas. Real-time co-editing
+    (CRDTs, presence cursors, a sync server) would be the single most expensive line item in this
+    whole plan and would drag in the very backend we're avoiding. SharePoint's file versioning
+    already provides recovery for the rare collision.</p>
+
+    <div class="decision" data-id="d6" id="d6">
+      <div class="dhead"><span class="dnum">DECISION 06</span><h4>Concurrent-edit handling</h4></div>
+      <p class="dctx">For the map files themselves (dashboards and digests are conflict-free by design).</p>
+      <div class="opts">
+        <label class="opt"><input type="radio" name="d6" value="etag-presence">
+          <span class="ob"><span class="ot">Version check + soft presence<span class="badge">Recommended</span></span>
+          <span class="od">On save, compare the file's etag/mtime with what was opened; if someone saved meanwhile, offer "reload theirs / save mine as copy / overwrite". A tiny presence marker ("Sam opened this 5 min ago") warns before it ever happens. ~Days of work, covers ~99% of real usage.</span></span></label>
+        <label class="opt"><input type="radio" name="d6" value="lww">
+          <span class="ob"><span class="ot">Last write wins, rely on SharePoint versions</span>
+          <span class="od">Zero work now; silent overwrites recoverable via version history. Acceptable early, but a lost afternoon of mapping is the kind of story that kills adoption.</span></span></label>
+        <label class="opt"><input type="radio" name="d6" value="crdt">
+          <span class="ob"><span class="ot">Real-time collaborative editing</span>
+          <span class="od">Genuinely delightful for workshop mapping sessions — and a sync service, a data-model rewrite, and months of work. If workshops matter, a cheaper future path is a session-scoped "follow the facilitator" mode rather than true CRDT merging.</span></span></label>
+      </div>
+      <div class="dnote"><label for="n-d6">Your comment</label><textarea id="n-d6" data-note="d6" placeholder="How often do you expect simultaneous editing vs. workshop-style mapping?"></textarea></div>
+    </div>
+  </section>
+
+  <!-- ================================================================ -->
+  <section id="s10">
+    <h2><span class="sn">§ 10</span>Live data linking — designed now, built later</h2>
+    <p>The tool already has the right primitive: CSV import marks step fields as <code>measured</code>,
+    with precedence measured &gt; observed &gt; modelled. The platform generalizes the <em>source</em>
+    without touching that engine:</p>
+    <ul>
+      <li><b>Phase now (cheap):</b> a map's meta can reference a data file <em>in the library</em>
+      (<code>dataSource: "data/claims-weekly.csv"</code>). Opening the map re-reads it — so any process
+      that can drop a CSV into SharePoint (Power Automate from a queue system, a nightly export, a
+      person) becomes a "live" feed with zero new code paths. Digest records data age → dashboards
+      show freshness.</li>
+      <li><b>Phase later:</b> a connector descriptor format (API pull, Graph Excel ranges, webhook-
+      dropped files) behind the same <code>measured</code> interface. Whether connectors run in-browser
+      or in the optional service is decided then — the map format doesn't change either way.</li>
+    </ul>
+    <p>No decision needed now; the only commitment is keeping <code>measured</code>-source attribution
+    in the digest, which § 3 already does.</p>
+    <details class="secnote"><summary>Add a note on this section</summary><textarea data-note="sec-10" placeholder="Real data sources you expect orgs to connect first…"></textarea></details>
+  </section>
+
+  <!-- ================================================================ -->
+  <section id="s11">
+    <h2><span class="sn">§ 11</span>Security &amp; identity, plainly</h2>
+    <ul>
+      <li><b>The big win of files-in-M365:</b> permissions, encryption at rest, DLP, retention,
+      eDiscovery, audit and backup are all the tenant's existing machinery. Flow Builder never
+      stores org data anywhere else — the static app remains data-free hosting.</li>
+      <li><b>Mode B (local folder)</b> needs no consent at all: the app touches only a folder the
+      user explicitly picked, under their existing rights. Easiest possible security story to tell.</li>
+      <li><b>Mode A (Graph)</b> requires an Entra app registration. Ask for <code>Sites.Selected</code>
+      (IT grants specific sites) rather than tenant-wide file scopes — slower first conversation,
+      far easier approval, and it's the pattern security teams now expect.</li>
+      <li><b>The index inherits the library's ACLs</b> because it lives inside the library (D2). One
+      workspace = one permission boundary. The subtle leak to avoid: never build a cross-library
+      index that could show User X a digest (metrics, people names!) from a library they can't read.
+      Cross-boundary aggregation is exactly the point where the optional service — which can enforce
+      per-user trimming — earns its existence.</li>
+      <li><b>People names in maps</b> are personal data. Digests keeping rosters is what makes
+      "find processes involving Maria" work — worth an explicit note in org onboarding docs, and a
+      workspace setting to digest roles instead of names for stricter orgs.</li>
+    </ul>
+    <details class="secnote"><summary>Add a note on this section</summary><textarea data-note="sec-11" placeholder="Compliance regimes your target orgs live under…"></textarea></details>
+  </section>
+
+  <!-- ================================================================ -->
+  <section id="s12">
+    <h2><span class="sn">§ 12</span>Risks &amp; challenged assumptions</h2>
+    <div class="twrap"><table>
+      <tr><th>Risk / assumption</th><th>Assessment</th><th>Mitigation</th></tr>
+      <tr><td class="rowlbl">"No backend, forever"</td><td>Holds to ~2–5 k maps per workspace and single-library permission scopes; beyond that, cold builds, cross-site search and per-user trimming genuinely want a service.</td><td>The adapter + sidecar contracts are the seam; a service is additive, not a rewrite. Decide at the ceiling, not before.</td></tr>
+      <tr><td class="rowlbl">File System Access API reach</td><td>Chromium-only; Safari/Firefox users can't use Mode B.</td><td>Fine for Edge-standard enterprises; Mode A (D1) is the universal fallback.</td></tr>
+      <tr><td class="rowlbl">Graph throttling on cold index</td><td>First-ever build of 1,000 maps over Graph ≈ 10–15 min.</td><td>Once per org (D2 shared index); progress UI; Mode B cold builds are minutes.</td></tr>
+      <tr><td class="rowlbl">Index write races</td><td>Two users reconciling simultaneously could clash on <code>catalog.json</code>.</td><td>Etag check + retry; digests are idempotent and per-file, so the worst case is one redundant write, never corruption.</td></tr>
+      <tr><td class="rowlbl">Metadata garbage-in</td><td>Dashboards and scopes are only as good as tagging.</td><td>D3 schema + required owner; governance queue makes gaps visible; scoped dashboards give teams a selfish reason to tag.</td></tr>
+      <tr><td class="rowlbl">localStorage divergence</td><td>Old library lingering beside workspace files → "which is real?"</td><td>One-time guided migration; localStorage demoted to offline cache with a visible "not in workspace" badge.</td></tr>
+      <tr><td class="rowlbl">OneDrive sync lag (Mode B)</td><td>A colleague's save appears seconds–minutes later; presence markers lag too.</td><td>Acceptable for authored artifacts; D6 save-time version check still catches true collisions.</td></tr>
+      <tr><td class="rowlbl">Single-file app growth</td><td><code>index.html</code> at ~390 KB grows substantially with a Workspace.</td><td>Decision D8 below.</td></tr>
+      <tr><td class="rowlbl">The real risk: adoption, not architecture</td><td>1,000 good maps require dozens of motivated mappers; a platform of empty folders proves nothing.</td><td>Sequence value selfishly: teams get folder-sync + search for <em>their own</em> maps in phase 1, before any exec asks them to tag things for a roll-up.</td></tr>
+    </table></div>
+    <details class="secnote"><summary>Add a note on this section</summary><textarea data-note="sec-12" placeholder="Risks you'd add or re-rank…"></textarea></details>
+  </section>
+
+  <!-- ================================================================ -->
+  <section id="s13">
+    <h2><span class="sn">§ 13</span>Roadmap: build now vs. enable later</h2>
+
+    <div class="phase"><h4><span class="pill now">Phase 0</span> Format foundations</h4>
+      <p class="ph-meta">Small · unlocks everything · zero user-visible risk</p>
+      <ul><li><code>mapId</code>, <code>schemaVersion</code>, <code>meta</code> block, link-node field, digest writer + <code>validate</code>, migrate-on-load.</li></ul>
+      <p class="exit">Exit: every saved map has identity, metadata and a digest; old flows migrate silently.</p></div>
+
+    <div class="phase"><h4><span class="pill now">Phase 1</span> Workspace: connect · browse · search</h4>
+      <p class="ph-meta">The adoption phase — a team gets value with zero IT involvement</p>
+      <ul><li>Storage adapter (per D1), home gallery → Workspace over the folder, catalog + reconcile loop, faceted browse, full search, localStorage migration.</li></ul>
+      <p class="exit">Exit: a 1,000-map folder browses and searches with no perceptible lag.</p></div>
+
+    <div class="phase"><h4><span class="pill now">Phase 2</span> Links, hierarchy &amp; roll-ups</h4>
+      <p class="ph-meta">Per D4</p>
+      <ul><li>Linked steps + drill-in/breadcrumb, promote/demote group ⇄ map, digest-driven roll-ups, backlinks, tombstones + cycle flags.</li></ul>
+      <p class="exit">Exit: a parent map shows live child metrics; deleting/renaming/moving never breaks a link.</p></div>
+
+    <div class="phase"><h4><span class="pill now">Phase 3</span> Standard dashboards + governance</h4>
+      <p class="ph-meta">Aggregates + the four templates of § 7, governance panel of § 8, CSV export of aggregates</p>
+      <p class="exit">Exit: a VP opens Portfolio and sees consistent, confidence-annotated measures across areas.</p></div>
+
+    <div class="phase"><h4><span class="pill later">Phase 4</span> Dashboard builder &amp; role templating</h4>
+      <p class="ph-meta">Widget-catalog composer over the digest schema; template inheritance &amp; org standards; sharing polish</p></div>
+
+    <div class="phase"><h4><span class="pill later">Phase 5</span> Live connectors · optional thin service</h4>
+      <p class="ph-meta">Connector descriptors (§ 10); service only if an org crosses the browser ceiling (§ 12) — same file contracts either way</p></div>
+
+    <div class="decision" data-id="d7" id="d7">
+      <div class="dhead"><span class="dnum">DECISION 07</span><h4>Build order</h4></div>
+      <p class="dctx">Phases 0–1 are the foundation under every path; the question is what comes immediately after.</p>
+      <div class="opts">
+        <label class="opt"><input type="radio" name="d7" value="as-proposed">
+          <span class="ob"><span class="ot">As proposed: 0 → 1 → 2 → 3<span class="badge">Recommended</span></span>
+          <span class="od">Hierarchy before dashboards, so the first exec dashboard already benefits from roll-ups and honest link structure.</span></span></label>
+        <label class="opt"><input type="radio" name="d7" value="dash-first">
+          <span class="ob"><span class="ot">Dashboards first: 0 → 1 → 3 → 2</span>
+          <span class="od">Exec-visible value sooner (aggregation needs only digests, not links). Good if a sponsor demo is the near-term forcing function; hierarchy follows.</span></span></label>
+        <label class="opt"><input type="radio" name="d7" value="thin-mvp">
+          <span class="ob"><span class="ot">Minimal probe: 0 → 1 only, then reassess</span>
+          <span class="od">Ship connect/browse/search, watch a real team use it, let usage pick phase 2 vs 3. Slowest to the full vision, cheapest way to test the premise.</span></span></label>
+      </div>
+      <div class="dnote"><label for="n-d7">Your comment</label><textarea id="n-d7" data-note="d7" placeholder="Any date or demo forcing functions I should plan around?"></textarea></div>
+    </div>
+
+    <div class="decision" data-id="d8" id="d8">
+      <div class="dhead"><span class="dnum">DECISION 08</span><h4>Where the Workspace code lives</h4></div>
+      <p class="dctx">The single self-contained file is part of Flow Builder's identity — and it's about to grow.</p>
+      <div class="opts">
+        <label class="opt"><input type="radio" name="d8" value="one-file">
+          <span class="ob"><span class="ot">Evolve inside <code>index.html</code><span class="badge">Recommended</span></span>
+          <span class="od">The Workspace is the natural evolution of the existing home gallery screen — same app, same theme system, no duplication of model code, deploy unchanged. Growth to ~600–700 KB is irrelevant at runtime; the real cost is editability of one large file, which we manage with disciplined section banners (as now).</span></span></label>
+        <label class="opt"><input type="radio" name="d8" value="two-files">
+          <span class="ob"><span class="ot">Separate <code>hub.html</code> beside the editor</span>
+          <span class="od">Keeps each file smaller, but the shared 60% (model, metrics, migration, theming) must either be duplicated (drift, the killer) or extracted to a shared script — which ends the true single-file property anyway.</span></span></label>
+        <label class="opt"><input type="radio" name="d8" value="build-step">
+          <span class="ob"><span class="ot">Introduce a build step (source modules → one emitted file)</span>
+          <span class="od">Best long-term editability with the same shipped artifact; the honest end-state if the codebase keeps compounding. Costs the "edit the file directly" workflow you use today — a tooling-culture decision more than a technical one.</span></span></label>
+      </div>
+      <div class="dnote"><label for="n-d8">Your comment</label><textarea id="n-d8" data-note="d8" placeholder="How much do you value hand-editing one file vs. modular source?"></textarea></div>
+    </div>
+  </section>
+
+  <!-- ================================================================ -->
+  <section id="s14">
+    <h2><span class="sn">§ 14</span>Your overall notes</h2>
+    <p>Anything that doesn't fit a card: priorities I've mis-weighted, org realities I can't see from
+    the code, ideas to fold into the implementation plan.</p>
+    <textarea data-note="general" style="min-height:120px" placeholder="Overall direction, concerns, additions…"></textarea>
+    <p style="margin-top:22px"><button class="btn primary" id="btnSave2" type="button">Download reviewed copy</button>
+    <button class="btn" id="btnCopy2" type="button">Copy summary</button></p>
+    <p class="mut" style="font-size:14px">The downloaded file contains your selections and comments
+    embedded in the HTML — send it back in chat (or just tell me its path) and I'll produce the
+    implementation plan from it.</p>
+  </section>
+
+  <footer>FLOW BUILDER · ORG PLATFORM PLAN · REV A · 2026-07-11 · PREPARED FOR REVIEW — 8 DECISIONS, § 0–14</footer>
+</main>
+</div>
+
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+(function(){
+  "use strict";
+  var LS_KEY = "fb.platform-plan.review";
+  var DEC_IDS = ["d1","d2","d3","d4","d5","d6","d7","d8"];
+
+  /* ---------- state ---------- */
+  function collect(){
+    var s = {choices:{}, notes:{}, savedAt:new Date().toISOString()};
+    DEC_IDS.forEach(function(d){
+      var r = document.querySelector('input[name="'+d+'"]:checked');
+      if(r) s.choices[d] = r.value;
+    });
+    document.querySelectorAll("textarea[data-note]").forEach(function(t){
+      if(t.value.trim()) s.notes[t.getAttribute("data-note")] = t.value;
+    });
+    return s;
+  }
+  function apply(s){
+    if(!s) return;
+    Object.keys(s.choices||{}).forEach(function(d){
+      var r = document.querySelector('input[name="'+d+'"][value="'+s.choices[d]+'"]');
+      if(r) r.checked = true;
+    });
+    Object.keys(s.notes||{}).forEach(function(k){
+      var t = document.querySelector('textarea[data-note="'+CSS.escape(k)+'"]');
+      if(t) t.value = s.notes[k];
+    });
+  }
+  function persist(){
+    var s = collect();
+    document.getElementById("fb-review-state").textContent = JSON.stringify(s);
+    try{ localStorage.setItem(LS_KEY, JSON.stringify(s)); }catch(e){}
+    updateRibbon(s);
+  }
+
+  /* ---------- ribbon ---------- */
+  var ribbon = document.getElementById("ribbon");
+  DEC_IDS.forEach(function(d,i){
+    var b = document.createElement("button");
+    b.type = "button"; b.setAttribute("data-n", i+1); b.setAttribute("data-d", d);
+    b.title = "Decision "+(i+1);
+    b.addEventListener("click", function(){ document.getElementById(d).scrollIntoView({block:"center"}); });
+    ribbon.appendChild(b);
+  });
+  function updateRibbon(s){
+    s = s || collect();
+    var n = 0;
+    ribbon.querySelectorAll("button").forEach(function(b){
+      var done = !!s.choices[b.getAttribute("data-d")];
+      b.classList.toggle("done", done); if(done) n++;
+    });
+    document.getElementById("countLbl").textContent = n+" / "+DEC_IDS.length+" decided";
+  }
+
+  /* ---------- serialization into the document ---------- */
+  function syncDomAttrs(){
+    document.querySelectorAll('input[type="radio"]').forEach(function(r){
+      if(r.checked) r.setAttribute("checked",""); else r.removeAttribute("checked");
+    });
+    document.querySelectorAll("textarea").forEach(function(t){ t.textContent = t.value; });
+  }
+  function download(){
+    persist(); syncDomAttrs();
+    var html = "<!doctype html>\n" + document.documentElement.outerHTML;
+    var blob = new Blob([html], {type:"text/html"});
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "org-platform-plan.reviewed.html";
+    document.body.appendChild(a); a.click();
+    setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 400);
+    toast("Reviewed copy downloaded — send that file back to Claude");
+  }
+
+  /* ---------- summary for chat ---------- */
+  function summary(){
+    var s = collect(), out = [];
+    out.push("# Flow Builder org platform plan — review ("+new Date().toISOString().slice(0,10)+")","");
+    document.querySelectorAll(".decision").forEach(function(card){
+      var id = card.getAttribute("data-id");
+      var title = card.querySelector("h4").textContent;
+      var num = card.querySelector(".dnum").textContent;
+      var pick = card.querySelector('input[name="'+id+'"]:checked');
+      var line;
+      if(pick){
+        var ot = pick.closest(".opt").querySelector(".ot");
+        var lbl = ot.textContent.replace(/Recommended$/,"").trim();
+        var rec = !!ot.querySelector(".badge");
+        line = lbl + (rec ? "  (the recommended option)" : "");
+      } else line = "— no selection —";
+      out.push("## "+num+" · "+title, "Choice: "+line);
+      if(s.notes[id]) out.push("Comment: "+s.notes[id]);
+      out.push("");
+    });
+    var secs = Object.keys(s.notes).filter(function(k){ return k.indexOf("sec-")===0; });
+    if(secs.length){
+      out.push("## Section notes");
+      secs.forEach(function(k){ out.push("- ["+k+"] "+s.notes[k]); });
+      out.push("");
+    }
+    if(s.notes.general) out.push("## Overall notes", s.notes.general, "");
+    return out.join("\n");
+  }
+  function copySummary(){
+    var txt = summary();
+    function done(){ toast("Summary copied — paste it to Claude"); }
+    if(navigator.clipboard && navigator.clipboard.writeText)
+      navigator.clipboard.writeText(txt).then(done, function(){ window.prompt("Copy the summary:", txt); });
+    else window.prompt("Copy the summary:", txt);
+  }
+
+  /* ---------- toast ---------- */
+  var toastTimer;
+  function toast(msg){
+    var t = document.getElementById("toast");
+    t.textContent = msg; t.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function(){ t.classList.remove("show"); }, 2600);
+  }
+
+  /* ---------- toc highlight ---------- */
+  var tocLinks = document.querySelectorAll("#tocList a");
+  if("IntersectionObserver" in window){
+    var map = {};
+    tocLinks.forEach(function(a){ map[a.getAttribute("href").slice(1)] = a; });
+    var obs = new IntersectionObserver(function(entries){
+      entries.forEach(function(e){
+        if(e.isIntersecting){
+          tocLinks.forEach(function(a){ a.classList.remove("on"); });
+          var a = map[e.target.id]; if(a) a.classList.add("on");
+        }
+      });
+    }, {rootMargin:"-20% 0px -70% 0px"});
+    document.querySelectorAll("main section").forEach(function(s){ obs.observe(s); });
+  }
+
+  /* ---------- boot ---------- */
+  var embedded = null;
+  try{ embedded = JSON.parse(document.getElementById("fb-review-state").textContent||"{}"); }catch(e){}
+  var hasEmbedded = embedded && embedded.choices && Object.keys(embedded.choices).length + Object.keys(embedded.notes||{}).length > 0
+                 || embedded && embedded.notes && Object.keys(embedded.notes).length > 0;
+  if(hasEmbedded){ apply(embedded); }
+  else{
+    try{ var ls = JSON.parse(localStorage.getItem(LS_KEY)||"null"); if(ls) apply(ls); }catch(e){}
+  }
+  updateRibbon();
+
+  document.addEventListener("change", function(e){ if(e.target.matches('input[type="radio"]')) persist(); });
+  document.addEventListener("input", function(e){ if(e.target.matches("textarea")) persist(); });
+  document.getElementById("btnSave").addEventListener("click", download);
+  document.getElementById("btnSave2").addEventListener("click", download);
+  document.getElementById("btnCopy").addEventListener("click", copySummary);
+  document.getElementById("btnCopy2").addEventListener("click", copySummary);
+})();
+</script>
+</body>
+</html>
