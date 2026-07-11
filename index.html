@@ -226,7 +226,6 @@
     padding:8px 12px;font-size:13px;display:flex;align-items:center;gap:7px}
   #paletteBar button:hover{border-color:var(--accent)}
   #paletteBar .swatch{display:inline-block;width:10px;height:10px;border-radius:3px}
-  #paletteBar .swatch-group{background:transparent;border:1.5px solid var(--accent);border-radius:3px}
   #paletteBar .pb-sep{width:1px;align-self:stretch;background:var(--line);margin:2px 4px}
   #paletteBar button.tool-on{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 18%,var(--panel2));box-shadow:0 0 0 1px var(--accent) inset}
   /* Cursor is the everyday tool — full size; the specialist tools sit beside it, quieter and smaller */
@@ -539,6 +538,7 @@
   .note-picker .np-plate{fill:var(--panel);stroke:var(--line);filter:drop-shadow(0 3px 8px rgba(0,0,0,.3))}
   .note-picker .np-chip{cursor:pointer}
   .note-picker .np-chip:hover rect{filter:brightness(1.08)}
+  .note-picker .np-label{fill:var(--muted);font-family:var(--font);pointer-events:none}
   .note-badge{cursor:pointer}
   .note-badge text{pointer-events:none}
   /* ghost "+ Add note" row at the foot of an open note stack */
@@ -891,7 +891,7 @@
   <span class="pb-label">Tools</span>
   <button data-tool="cursor" class="pb-primary" title="Cursor (V) — click to select, drag steps to move, drag empty canvas to box-select, hold Space to pan; drag a port dot to connect"><svg class="t-ic"><use href="#ic-cursor"/></svg>Cursor</button>
   <button data-tool="connect" class="pb-mini" title="Connect (C) — power rewiring: every port and arrow-end handle at once; drag a dot to wire, drag an arrow's end to re-attach"><svg class="t-ic"><use href="#ic-connect"/></svg>Connect</button>
-  <button data-tool="group" class="pb-mini" title="Group (G) — draw a box around several steps to group and label them"><span class="swatch swatch-group"></span>Group</button>
+  <button data-tool="group" class="pb-mini" title="Group (G) — draw a box around several steps to group and label them"><svg class="t-ic"><use href="#ic-group"/></svg>Group</button>
   <button data-tool="comment" class="pb-mini" title="Note (N) — drop a note, frustration, waste flag or idea anywhere on the map"><svg class="t-ic"><use href="#ic-nt-note"/></svg>Note</button>
   <span class="pb-sep"></span>
   <span class="pb-label">Views</span>
@@ -2800,9 +2800,9 @@ function renderCanvas(r){
       dh.addEventListener("mousedown",ev=>ev.stopPropagation());
       dh.addEventListener("click",ev=>{ ev.stopPropagation(); deleteNode(n.id); });
       g.appendChild(dh);
-      // "+" (bottom-left) — first note on this step (once notes exist the badge owns that corner)
+      // note-glyph "+" (bottom-left) — first note on this step (once notes exist the badge owns that corner)
       if(L.kind==="card" && !n.parentId && showNotes() && !(notesByNode.get(n.id)||[]).length){
-        const nh=plusHandle(0, bt+L.h, ()=>addNoteToNode(n));
+        const nh=notePlusHandle(0, bt+L.h, ()=>addNoteToNode(n));
         nh.appendChild(el("title")).textContent="Add a note, frustration, waste flag or idea";
         g.appendChild(nh);
       }
@@ -2812,8 +2812,12 @@ function renderCanvas(r){
         ah.appendChild(el("title")).textContent="Add the next step — connected automatically";
         g.appendChild(ah);
       }
-      // "+" (top-left) — turn this step into a group container
-      if(L.kind==="card") g.appendChild(plusHandle(0, bt, ()=>wrapInGroup(n.id)));
+      // group glyph (top-left) — turn this step into a group container
+      if(L.kind==="card"){
+        const gh=iconHandle(0, bt, "ic-group", ()=>wrapInGroup(n.id));
+        gh.appendChild(el("title")).textContent="Wrap this step in a group";
+        g.appendChild(gh);
+      }
     }
 
     g.dataset.id=n.id;
@@ -3999,9 +4003,13 @@ function notePickerEl(cm, ax, ay){
   const chips = sub
     ? [["waste",null], ...Object.keys(WASTE_SUBS).map(k=>["waste",k])]
     : Object.keys(NOTE_TYPES).map(k=>[k,null]);
-  const W=chips.length*(CH+GAP)-GAP+12, H=CH+12;
+  const W=Math.max(chips.length*(CH+GAP)-GAP+12, 150), H=CH+12+15;
   const px=Math.max(4,ax), py=Math.max(4,ay-H-8);
   g.appendChild(el("rect",{class:"np-plate",x:px,y:py,width:W,height:H,rx:8}));
+  // instant hover label — updated imperatively on chip enter, no re-render
+  const hint=sub?"Pick a waste type":"Pick a type";
+  const lbl=el("text",{class:"np-label",x:px+W/2,y:py+CH+12+9,"text-anchor":"middle","font-size":"10"});
+  lbl.textContent=hint;
   chips.forEach(([tk,sk],i)=>{
     const NT=NOTE_TYPES[tk], cx=px+6+i*(CH+GAP), cy=py+6;
     const on = sub ? (cm.type==="waste" && (cm.subtype||null)===sk) : cm.type===tk;
@@ -4010,10 +4018,9 @@ function notePickerEl(cm, ax, ay){
     r.style.fill=NT.fill; r.style.stroke=on?NT.ink:NT.line; r.style.strokeWidth=on?"2":"1";
     c.appendChild(r);
     c.appendChild(useIc(sk?WASTE_SUBS[sk].ic:NT.ic, cx+4, cy+4, 16, NT.ink));
-    const t=el("title");
-    t.textContent = sub ? (sk?`Waste · ${WASTE_SUBS[sk].label}`:"Waste (no flavour)")
-                        : (tk==="waste"?"Waste — pick a flavour next":NT.label);
-    c.appendChild(t);
+    const name = sub ? (sk?WASTE_SUBS[sk].label:"Waste (general)")
+                     : (tk==="waste"?"Waste — pick a type next":NT.label);
+    c.addEventListener("mouseenter",()=>{ lbl.textContent=name; });
     c.addEventListener("mousedown",ev=>ev.stopPropagation());
     c.addEventListener("click",ev=>{ ev.stopPropagation();
       if(sub){ cm.type="waste"; if(sk) cm.subtype=sk; else delete cm.subtype; finishNotePick(cm); }
@@ -4021,6 +4028,8 @@ function notePickerEl(cm, ax, ay){
       else { cm.type=tk; delete cm.subtype; finishNotePick(cm); } });
     g.appendChild(c);
   });
+  g.addEventListener("mouseleave",()=>{ lbl.textContent=hint; });
+  g.appendChild(lbl);
   return g;
 }
 function finishNotePick(cm){
@@ -4133,7 +4142,7 @@ function toggleNotesOpen(id){
   }
 }
 
-/* a "+" corner control (top-left of a step card): convert a step into a group */
+/* a "+" corner control (right edge of a step card): append the next step */
 function plusHandle(cx,cy,onClick){ const h=el("g",{class:"plus-handle"});
   h.appendChild(el("circle",{cx,cy,r:9}));
   h.appendChild(el("line",{x1:cx-3.5,y1:cy,x2:cx+3.5,y2:cy}));
@@ -4145,6 +4154,15 @@ function plusHandle(cx,cy,onClick){ const h=el("g",{class:"plus-handle"});
 function iconHandle(cx,cy,iconId,onClick){ const h=el("g",{class:"plus-handle"});
   h.appendChild(el("circle",{cx,cy,r:9}));
   h.appendChild(useIc(iconId, cx-6, cy-6, 12, "#fff"));
+  h.addEventListener("mousedown",ev=>ev.stopPropagation());
+  h.addEventListener("click",ev=>{ ev.stopPropagation(); onClick(); }); return h; }
+/* note-glyph corner control with a tiny satellite "+" (bottom-left of a step card): add the first note */
+function notePlusHandle(cx,cy,onClick){ const h=el("g",{class:"plus-handle"});
+  h.appendChild(el("circle",{cx,cy,r:9}));
+  h.appendChild(useIc("ic-nt-note", cx-6, cy-6, 12, "#fff"));
+  h.appendChild(el("circle",{cx:cx+7,cy:cy-7,r:5}));
+  h.appendChild(el("line",{x1:cx+4.5,y1:cy-7,x2:cx+9.5,y2:cy-7}));
+  h.appendChild(el("line",{x1:cx+7,y1:cy-9.5,x2:cx+7,y2:cy-4.5}));
   h.addEventListener("mousedown",ev=>ev.stopPropagation());
   h.addEventListener("click",ev=>{ ev.stopPropagation(); onClick(); }); return h; }
 function editGroupLabel(grp){ const svg=$("#canvas");
