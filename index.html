@@ -106,6 +106,15 @@
   .modal code{background:var(--panel2);border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-size:12px}
   .modal .steps{margin-top:14px}
   .modal.wide{width:min(900px,94vw)}
+  /* ---- Convert docs modal ---- */
+  .fid-seg{display:inline-flex;gap:0;border:1px solid var(--line);border-radius:9px;overflow:hidden;margin:2px 0 4px}
+  .fid-seg button{background:transparent;border:0;border-right:1px solid var(--line);padding:7px 16px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer}
+  .fid-seg button:last-child{border-right:0}
+  .fid-seg button.on{background:var(--accent);color:#fff}
+  .convert-in{width:100%;min-height:160px;resize:vertical;box-sizing:border-box;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;line-height:1.45;padding:10px;border:1px solid var(--line);border-radius:9px;background:var(--panel2);color:var(--fg)}
+  .convert-err{margin-top:8px;padding:8px 10px;border-radius:8px;background:rgba(217,91,74,.12);border:1px solid var(--nva);color:var(--nva);font-size:13px}
+  .convert-report{margin-top:12px;padding:10px 12px;border-radius:9px;background:var(--panel2);border:1px solid var(--line);font-size:12px;line-height:1.5;white-space:pre-wrap;max-height:220px;overflow:auto}
+  .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:12px}
   /* ---- bottleneck-threshold modal ---- */
   .bn-row{display:flex;align-items:center;justify-content:space-between;gap:14px;margin:14px 0 4px}
   .bn-row label{font-weight:600;white-space:nowrap}
@@ -786,6 +795,7 @@
     <span class="hdr-label">Data</span>
     <button class="btn" id="exportSheet" title="Download a stats sheet (CSV) with one row per step — fill it in, then Import sheet to load the numbers."><svg class="t-ic"><use href="#ic-download"/></svg>Export sheet</button>
     <button class="btn primary" id="importSheet" title="Load a filled-out stats sheet (Excel/CSV) to populate this flow's numbers."><svg class="t-ic"><use href="#ic-upload"/></svg>Import sheet</button>
+    <button class="btn" id="convertDoc" title="Build a new flow from source material — a transcript, a Visio map, an Excel sheet, a job-aid. Copy the prompt into any AI, paste the result back."><svg class="t-ic"><use href="#ic-doc"/></svg>Convert docs</button>
   </div>
   <span class="divider"></span>
   <div class="hdr-group" id="shareGroup">
@@ -864,6 +874,36 @@
   <div class="dash-wrap">
     <div class="dash-hh"><h2 id="dashTitle">Flow insights</h2><button class="x" id="dashClose">✕ Close</button></div>
     <div id="dashBody"></div>
+  </div>
+</div>
+
+<!-- Convert docs — build a flow from source material via any LLM (prompt-only; no key needed) -->
+<div class="overlay" id="convertOverlay">
+  <div class="modal wide">
+    <div class="modal-h"><h3>Convert docs into a flow</h3><button class="x" id="convertClose">✕</button></div>
+    <p class="mut">Turn source material — a meeting transcript, a Visio map, an Excel sheet, a job-aid,
+      or several at once — into a flow. Copy the prompt below into any capable AI
+      (Claude, ChatGPT, Gemini) together with your files, then paste its answer back here.</p>
+
+    <p class="steps"><b>1 · Fidelity</b> — how close to the source vs. reasonably enriched</p>
+    <div class="fid-seg" id="fidSeg">
+      <button data-fid="STRICT" title="Mirror the source exactly — nothing added, nothing inferred.">Strict</button>
+      <button data-fid="BALANCED" class="on" title="Tidy names, obvious grouping, unambiguous value ratings. No invented numbers.">Balanced</button>
+      <button data-fid="ENRICHED" title="Infer a value rating and short details for every step, capture stated pains. Still invents nothing numeric.">Enriched</button>
+    </div>
+
+    <p class="steps"><b>2 · Copy the prompt</b> — paste it into your AI, add your files/notes, run it</p>
+    <button class="btn primary" id="copyPromptBtn"><svg class="t-ic"><use href="#ic-doc"/></svg>Copy prompt</button>
+
+    <p class="steps"><b>3 · Paste the result</b> — the AI's answer (JSON, or a ```json block)</p>
+    <textarea id="convertIn" class="convert-in" placeholder="Paste the AI's answer here…" spellcheck="false"></textarea>
+    <div id="convertErr" class="convert-err" style="display:none"></div>
+    <div class="modal-actions">
+      <button class="btn primary" id="convertCreate"><svg class="t-ic"><use href="#ic-upload"/></svg>Create flow</button>
+    </div>
+    <div id="convertReport" class="convert-report" style="display:none"></div>
+    <p class="mut small">This builds a new flow you can then Tidy, re-rate and refine. Nothing is
+      invented at import — the map is exactly what the AI returned.</p>
   </div>
 </div>
 
@@ -981,6 +1021,155 @@
     { "id": "e7", "from": "t4", "to": "end" }
   ]
 }
+</script>
+
+<!-- Convert-docs prompt: source of truth is tools/convert-to-flow.prompt.md — keep in sync. -->
+<script id="convert-prompt" type="text/plain">
+# Convert source material into a Flow Builder map
+
+You are a process-mapping analyst. Read the SOURCE MATERIAL at the end and produce ONE JSON object
+that Flow Builder can import to render a value-stream / process map. Flow Builder shows how work
+flows to a customer through steps and queues, rates each step for value, and analyses
+speed / capacity / quality.
+
+## Task
+1. Read every source. Identify the real end-to-end flow: the ordered steps work passes through, who
+   does each, where work waits, and how steps connect — including branches, rework loops and
+   parallel paths.
+2. If several sources are given, RECONCILE them (see "Multiple sources").
+3. Emit the flow as ONE JSON object matching the schema below.
+4. Obey the FIDELITY setting for how much you may add beyond what the sources literally say.
+5. After the JSON, write a short REPORT of what you inferred vs. read verbatim, plus any conflicts.
+
+## Output format (strict)
+Return exactly two parts, in order:
+1. A single fenced ```json block containing ONLY the model object — valid JSON, no comments, no
+   trailing commas. The top-level object IS the model (do not nest it under any key).
+2. A "## Report" section in plain markdown (NOT imported).
+
+## FIDELITY = <STRICT | BALANCED | ENRICHED>
+- STRICT — Mirror the source exactly. Include only steps, connections, owners, numbers and wording
+  that appear in the source. Do NOT infer value ratings, do NOT group, do NOT add notes, do NOT
+  rename beyond fixing obvious typos. Omit any field the source doesn't state.
+- BALANCED (default) — STRICT, plus: normalise step names to short consistent verb-phrases; merge
+  obvious duplicates; add groups where the source clearly signals phases / systems / swimlanes; set
+  classification only where the source's own language makes it unambiguous
+  (e.g. "approval required for compliance" -> NNVA). Invent no numbers.
+- ENRICHED — BALANCED, plus: infer classification for every work step from its purpose (value to
+  the customer), add a one-line valueNote for each step, and capture stated pains as comments.
+  Still invent NOTHING numeric and add nothing the source doesn't support — enrichment is
+  interpretation of what's present, not fabrication. Flag every inferred item in the Report.
+
+Hard rule (all levels): never fabricate quantitative data (times, volumes, headcount, rework %).
+Include a number only if a source states it.
+
+## Schema
+{
+  "name": string,                          // the flow's name
+  "settings": {                            // optional
+    "timeUnit": "hrs" | "days" | "mins",   // default "hrs" — match the source
+    "demand": number,                      // cases arriving per day, if stated
+    "bottleneckMode": "absolute",
+    "bottleneckThreshold": 0.8
+  },
+  "nodes": [ {                             // REQUIRED
+    "id": string,                          // unique; referenced by edges/groups/comments
+    "type": "start" | "end" | "touch" | "wait",
+    "label": string,                       // the card title
+    "x": number, "y": number,              // logical px — see Layout
+    // touch steps:
+    "performer": "human" | "bot",          // default human
+    "owner": string,                       // team/role (for bots, the bot/system name)
+    "tool": "uipath" | "copilot" | "excel",// optional automation tool
+    "classification": "VA" | "NNVA" | "NVA",// value rating (see below)
+    "valueNote": string,                   // details — what happens in this step
+    "stepId": string,                      // data key (usually = id)
+    "touchTimeManual": number, "people": number, "hoursPerDay": number,
+    "reworkPct": number, "throughputManual": number, "capacityManual": number,
+    // wait steps:
+    "wip": number,                         // items in the queue
+    "waitTimeManual": number               // avg wait
+  } ],
+  "edges": [ {                             // REQUIRED (may be empty)
+    "id": string, "from": nodeId, "to": nodeId,
+    "fromSide": "right", "toSide": "left", // default sides; keep unless a branch needs otherwise
+    "splitPct": number,                    // branch share (outgoing edges sum ~100)
+    "label": string                        // e.g. "rejected", "rework"
+  } ],
+  "groups": [ { "id": string, "label": string, "members": [nodeId], "collapsed": false,
+                "valueNote": string } ],
+  "comments": [ {                          // notes/pains
+    "id": string,
+    "type": "note" | "frustration" | "waste" | "idea",
+    "subtype": "waiting"|"rework"|"overprocessing"|"handoffs"|"inventory"|"motion", // waste only
+    "text": string, "nodeId": nodeId       // nodeId attaches the note to a step
+  } ]
+}
+
+## Node rules
+- Exactly one "start" (the request/trigger that begins the flow). "end" = value delivered to the
+  customer (one, or one per terminal branch).
+- "touch" = a step where a person or bot actively does work. "wait" = a queue/delay where work sits
+  between steps ("waiting for approval", "sits in the inbox", a backlog). Model waiting explicitly —
+  queues are first-class and usually alternate with touch steps along the main line.
+
+## Connecting the pieces
+- No orphans: every node but start has >=1 incoming edge; every node but end has >=1 outgoing edge.
+- Branch: split -> multiple outgoing edges; set splitPct if proportions are stated; label them.
+- Rework: work bounces back -> an edge from the later step to the earlier one, labelled "rework".
+- Parallel: several edges from one step that later rejoin.
+
+## Grouping (BALANCED / ENRICHED)
+Wrap steps that the source organises into a phase / department / system / swimlane in a group. Group
+for meaning, only when the source supports it.
+
+## Value rating (classification)
+- VA (Valued) — the customer would pay for it / it directly advances their outcome.
+- NNVA (Necessary) — required for compliance / risk / control, not valued by the customer directly.
+- NVA (Could remove) — adds no value; a candidate to cut (duplicate entry, avoidable waiting, chasing).
+Set only per the fidelity rules.
+
+## Numbers (any level — only if stated)
+touch: touchTimeManual, people, hoursPerDay, reworkPct; bots: throughputManual / capacityManual.
+wait: wip, waitTimeManual. Give every metric-bearing step a stepId (= its id) for later data matching.
+
+## Layout (so it reads before "Tidy")
+- Columns advance along the main line: x = 40 + column*300 (snap to nearest 20).
+- Main line at y = 220; branch/parallel lanes at y = 220 +/- 200. Match a node's column to its
+  distance from start; just avoid overlaps — the app's Tidy will perfect the geometry.
+
+## Multiple sources
+- Build the UNION of steps; treat differently-worded steps describing the same work as one (note
+  merges in the Report).
+- Prefer the most authoritative/specific source for names and sequence; prefer whichever source
+  gives measured numbers for numeric fields.
+- On CONFLICT (order, owner, contradictory numbers) pick the most defensible reading, use it in the
+  JSON, and list the conflict in the Report.
+
+## Example (shape reference)
+{ "name": "Invoice approval",
+  "settings": { "timeUnit": "hrs", "demand": 20 },
+  "nodes": [
+    { "id":"start","type":"start","label":"Invoice received","x":40,"y":220 },
+    { "id":"q1","type":"wait","label":"In AP inbox","stepId":"q1","x":340,"y":220,"wip":12 },
+    { "id":"t1","type":"touch","label":"Code & match PO","owner":"AP","stepId":"t1","x":640,"y":220,
+      "touchTimeManual":0.5,"people":2,"hoursPerDay":7,"classification":"NNVA",
+      "valueNote":"Match invoice to PO and GL code." },
+    { "id":"t2","type":"touch","label":"Approve","owner":"Finance","stepId":"t2","x":940,"y":220,
+      "touchTimeManual":0.2,"people":1,"hoursPerDay":6,"reworkPct":10,"classification":"NNVA" },
+    { "id":"end","type":"end","label":"Paid","x":1240,"y":220 } ],
+  "edges": [
+    { "id":"e1","from":"start","to":"q1" },
+    { "id":"e2","from":"q1","to":"t1" },
+    { "id":"e3","from":"t1","to":"t2" },
+    { "id":"e4","from":"t2","to":"end","splitPct":90 },
+    { "id":"e5","from":"t2","to":"t1","label":"rework","splitPct":10 } ],
+  "comments": [
+    { "id":"c1","type":"frustration","text":"Approvals stall when Finance is out.","nodeId":"t2" } ] }
+
+---
+SOURCE MATERIAL (label each source):
+<paste transcripts / exported Visio text / Excel rows / job-aids here>
 </script>
 
 <script>
@@ -1255,6 +1444,85 @@ function importFlowFromObj(obj){
   else if(obj && obj.nodes){ add(obj); }
   else { toast("Unrecognized file"); return; }
   saveLibrary(); renderHome(); toast("Imported");
+}
+
+/* ---------- Convert docs: pull a model out of an LLM answer, then harden it ---------- */
+const NODE_TYPES_OK=["start","end","touch","wait"];
+const CLASS_OK=["VA","NNVA","NVA"];
+const CMT_TYPES_OK=["note","frustration","waste","idea"];
+const WASTE_SUBS_OK=["waiting","rework","overprocessing","handoffs","inventory","motion"];
+const SIDES_OK=["top","right","bottom","left"];
+const NUM_FIELDS=["x","y","touchTimeManual","people","hoursPerDay","reworkPct","throughputManual","capacityManual","wip","waitTimeManual"];
+
+// find the JSON model in a free-form answer: prefer a ```json fence, else the outermost {…}
+function extractModelFromText(txt){
+  const s=String(txt||"").trim();
+  const fence=s.match(/```json\s*([\s\S]*?)```/i) || s.match(/```\s*([\s\S]*?)```/);
+  let body = fence ? fence[1] : (()=>{ const a=s.indexOf("{"), b=s.lastIndexOf("}"); return a>=0&&b>a ? s.slice(a,b+1) : null; })();
+  if(body==null) throw new Error("Couldn't find any JSON in the pasted text.");
+  return JSON.parse(body);
+}
+// the markdown after the JSON (the prompt's "## Report") — shown to the user, not imported
+function extractReportFromText(txt){
+  const m=String(txt||"").match(/##\s*Report[\s\S]*/i);
+  return m ? m[0].trim() : "";
+}
+
+// coerce an arbitrary object into a safe Flow Builder model; loadModel() defaults the rest
+function validateImportModel(obj){
+  // unwrap common wrappers an LLM might add
+  if(obj && !obj.nodes){
+    if(obj.model && obj.model.nodes) obj=obj.model;
+    else if(obj.flow && obj.flow.nodes) obj=obj.flow;
+    else if(obj.flows && typeof obj.flows==="object"){ const f=Object.values(obj.flows)[0]; obj=(f&&f.model)||f; }
+    else { const inner=obj && typeof obj==="object" && Object.values(obj).find(v=>v&&typeof v==="object"&&Array.isArray(v.nodes)); if(inner) obj=inner; }
+  }
+  if(!obj || !Array.isArray(obj.nodes) || !obj.nodes.length) throw new Error("No steps found — the JSON needs a non-empty \"nodes\" array.");
+
+  const m={ name: typeof obj.name==="string"&&obj.name.trim() ? obj.name.trim() : "Converted flow",
+            settings: (obj.settings&&typeof obj.settings==="object") ? obj.settings : {timeUnit:"hrs",bottleneckMode:"absolute"},
+            nodes:[], edges:[], groups:[], comments:[] };
+
+  const ids=new Set();
+  obj.nodes.forEach(raw=>{ if(!raw||typeof raw!=="object") return;
+    const n={...raw};
+    if(!n.id || ids.has(String(n.id))) n.id=uid("n_"); n.id=String(n.id); ids.add(n.id);
+    n.type = NODE_TYPES_OK.includes(n.type) ? n.type : "touch";
+    if(typeof n.label!=="string"||!n.label.trim()) n.label = n.type==="wait"?"Queue":n.type==="start"?"Start":n.type==="end"?"End":"Step";
+    if(n.performer!=="bot") delete n.performer;
+    if(n.classification!=null && !CLASS_OK.includes(n.classification)) delete n.classification;
+    if(n.tool!=null && !TOOL_IC[n.tool]) delete n.tool;
+    NUM_FIELDS.forEach(f=>{ if(n[f]!=null){ const v=Number(n[f]); if(Number.isFinite(v)) n[f]=v; else delete n[f]; } });
+    if(n.x==null) n.x=40; if(n.y==null) n.y=220;
+    m.nodes.push(n); });
+
+  (Array.isArray(obj.edges)?obj.edges:[]).forEach(raw=>{ if(!raw||typeof raw!=="object") return;
+    const from=String(raw.from), to=String(raw.to);
+    if(!ids.has(from)||!ids.has(to)||from===to) return;           // drop dangling / self edges
+    const e={ id: raw.id?String(raw.id):uid("e_"), from, to };
+    if(SIDES_OK.includes(raw.fromSide)) e.fromSide=raw.fromSide;
+    if(SIDES_OK.includes(raw.toSide)) e.toSide=raw.toSide;
+    if(raw.splitPct!=null && Number.isFinite(Number(raw.splitPct))) e.splitPct=Number(raw.splitPct);
+    if(typeof raw.label==="string"&&raw.label.trim()) e.label=raw.label.trim();
+    m.edges.push(e); });
+
+  (Array.isArray(obj.groups)?obj.groups:[]).forEach(raw=>{ if(!raw||typeof raw!=="object") return;
+    const members=(Array.isArray(raw.members)?raw.members:[]).map(String).filter(id=>ids.has(id));
+    if(!members.length) return;
+    const g={ id: raw.id?String(raw.id):uid("grp_"), label: (typeof raw.label==="string"&&raw.label.trim())||"Group",
+              members, collapsed: !!raw.collapsed };
+    if(typeof raw.valueNote==="string"&&raw.valueNote.trim()) g.valueNote=raw.valueNote.trim();
+    m.groups.push(g); });
+
+  (Array.isArray(obj.comments)?obj.comments:[]).forEach(raw=>{ if(!raw||typeof raw!=="object") return;
+    if(typeof raw.text!=="string"||!raw.text.trim()) return;
+    const c={ id: raw.id?String(raw.id):uid("cmt_"), text: raw.text.trim(),
+              type: CMT_TYPES_OK.includes(raw.type)?raw.type:"note" };
+    if(c.type==="waste" && WASTE_SUBS_OK.includes(raw.subtype)) c.subtype=raw.subtype;
+    if(raw.nodeId!=null && ids.has(String(raw.nodeId))) c.nodeId=String(raw.nodeId);
+    m.comments.push(c); });
+
+  return m;
 }
 
 /* ---------- load model into engine ---------- */
@@ -2135,13 +2403,14 @@ function nodeLayout(n){
 
 /* ---- side-aware ports + routing (for Visio-style, loop-friendly connections) ---- */
 const SIDES=["top","right","bottom","left"];
-function portGeo(node, L, side){
-  const x=node.x, y=node.y, w=L.w, top=y+L.bt, cyy=y+NODE_H/2; // box is centred on the original centre line
+function portGeo(node, L, side, frac){
+  const x=node.x, y=node.y, w=L.w, top=y+L.bt;   // box is centred on the original centre line
+  const f=(frac==null?0.5:frac);                 // fan position along the side (0.5 = centre)
   switch(side){
-    case "top":    return {x:x+w/2, y:top,        nx:0,  ny:-1};
-    case "bottom": return {x:x+w/2, y:top+L.h,    nx:0,  ny:1};
-    case "left":   return {x:x,     y:cyy,        nx:-1, ny:0};
-    default:       return {x:x+w,   y:cyy,        nx:1,  ny:0}; // right
+    case "top":    return {x:x+w*f,     y:top,        nx:0,  ny:-1};
+    case "bottom": return {x:x+w*f,     y:top+L.h,    nx:0,  ny:1};
+    case "left":   return {x:x,         y:top+L.h*f,  nx:-1, ny:0};
+    default:       return {x:x+w,       y:top+L.h*f,  nx:1,  ny:0}; // right
   }
 }
 function edgeGeom(p1,p2){
@@ -2282,6 +2551,18 @@ function renderCanvas(r){
   const labelLayer=el("g",{id:"edgeLabels"});   // appended AFTER the node loop → pills never hide under cards
   const endLayer=el("g",{id:"edgeEnds"});       // Connect-tool endpoint handles, above the cards so they're grabbable
   const placedPills=[], seenBoundary=new Set();
+  // fan multiple arrows sharing one node-side across the middle 60% of that side, ordered by the
+  // opposite endpoint, so branches separate at the port instead of all leaving from one midpoint
+  const fanFrac={};
+  { const bins={};
+    m.edges.forEach(e=>{ const fa=resolveEndpoint(e.from), fb=resolveEndpoint(e.to); if(fa===fb) return;
+      const A=geomOf(fa),B=geomOf(fb),LA=lay[fa],LB=lay[fb]; if(!A||!B||!LA||!LB) return;
+      const fs=e.fromSide||"right", ts=e.toSide||"left";
+      const bY=B.y+NODE_H/2, bX=B.x+LB.w/2, aY=A.y+NODE_H/2, aX=A.x+LA.w/2;
+      (bins[fa+"|"+fs]=bins[fa+"|"+fs]||[]).push({tag:e.id+"|f", c:(fs==="left"||fs==="right")?bY:bX});
+      (bins[fb+"|"+ts]=bins[fb+"|"+ts]||[]).push({tag:e.id+"|t", c:(ts==="left"||ts==="right")?aY:aX}); });
+    Object.values(bins).forEach(list=>{ list.sort((p,q)=>p.c-q.c); const k=list.length;
+      list.forEach((it,i)=>{ fanFrac[it.tag]= k===1?0.5 : 0.2+0.6*(i+0.5)/k; }); }); }
   m.edges.forEach(e=>{
     // resolve endpoints through collapsed groups: a hidden member routes to its group card
     const fa=resolveEndpoint(e.from), fb=resolveEndpoint(e.to);
@@ -2291,7 +2572,7 @@ function renderCanvas(r){
       const key=fa+"|"+fb+"|"+(e.fromSide||"right")+"|"+(e.toSide||"left");
       if(seenBoundary.has(key)) return; seenBoundary.add(key);
     }
-    const p1=portGeo(a,La,e.fromSide||"right"), p2=portGeo(b,Lb,e.toSide||"left");
+    const p1=portGeo(a,La,e.fromSide||"right",fanFrac[e.id+"|f"]), p2=portGeo(b,Lb,e.toSide||"left",fanFrac[e.id+"|t"]);
     const geo=edgeGeom(p1,p2), d=geo.d;
     const aReal=byId[fa], bReal=byId[fb];                 // null when an endpoint is a collapsed group card
     const onPath=aReal&&bReal&&hotPath.has(fa)&&hotPath.has(fb);
@@ -4300,86 +4581,124 @@ function tidyGroups(){
 }
 
 /* ---------- Tidy: lay nodes out as a left-to-right flow grid ---------- */
+/* ---------- Tidy: deterministic left→right grid of longest-path columns & aligned rows ----------
+   Rules (see docs): 1) columns = longest path from start (cycles/rework broken so every forward edge
+   spans ≥1 column); 2) one uniform cell + column pitch (sized to the largest lens and to case-flow
+   label room) so a single Tidy reads cleanly in every view, flow on or off; 3) a fixed top baseline
+   with shared rows across columns — no maxH re-centring, so changing one column never drifts another;
+   4) row order follows the mean row of a node's inputs (branches sit by their parent), stably
+   tie-broken → idempotent. Group/collapse handling is preserved; arrows are never re-routed. */
 function autoArrange(){
   if(!editable()||!state.model||!state.model.nodes.length) return;
   const m=state.model;
   const start=m.nodes.find(n=>n.type==="start")||m.nodes[0];
   const byIdNode=Object.fromEntries(m.nodes.map(n=>[n.id,n]));
-  // collapsed groups fold into one card unit: members are hidden and travel with the card,
-  // so the flow treats the group as a single step rather than laying its members out invisibly
+  // collapsed groups fold into one card unit: members are hidden and travel with the card
   const collapsedGroups=(m.groups||[]).filter(g=>g.collapsed && (g.members||[]).length && _lay[g.id]);
   const collapsedOf={}; collapsedGroups.forEach(g=>g.members.forEach(id=>{ if(collapsedOf[id]==null) collapsedOf[id]=g.id; }));
   const resolve=id=> collapsedOf[id]!=null ? collapsedOf[id] : id;   // member id → its collapsed group card id
   const collUnit={}; collapsedGroups.forEach(g=>{ collUnit[g.id]={ id:g.id,
     get x(){return g.cx||0}, set x(v){g.cx=v}, get y(){return g.cy||0}, set y(v){g.cy=v} }; });
-  const unitOf=id=>{ const r=resolve(id); return collUnit[r] || (byIdNode[r] && !byIdNode[r].parentId ? byIdNode[r] : null); };
-  // column = shortest edge-distance from start (BFS over the resolved graph); spine order from flowWeights()
-  const col={}; const s0=resolve(start.id); const q=[s0]; col[s0]=0;
-  while(q.length){ const id=q.shift(); m.edges.forEach(e=>{ if(resolve(e.from)!==id) return;
-    const to=resolve(e.to); if(to!==id && col[to]==null){ col[to]=col[id]+1; q.push(to); } }); }
-  // disconnected units get parked in trailing columns so nothing is lost (sub-steps travel inside their parent)
-  let extra=Math.max(-1,...Object.values(col));
-  const {order}=flowWeights();
-  const seen=new Set(), spine=[];
-  const pushUnit=u=>{ if(u && !seen.has(u.id)){ seen.add(u.id); spine.push(u); } };
-  (order.length?order:m.nodes).forEach(n=>{ if(!n.parentId) pushUnit(unitOf(n.id)); });
-  m.nodes.forEach(n=>{ if(!n.parentId) pushUnit(unitOf(n.id)); });
-  collapsedGroups.forEach(g=>pushUnit(collUnit[g.id]));
-  spine.forEach(u=>{ if(col[u.id]==null) col[u.id]=++extra; });
-  // keep each expanded group's members in a contiguous column block: evict any non-member
-  // sitting in the group's column span by pushing it (and everything downstream) to the right
+  const entOf=u=> collUnit[u] || byIdNode[u];
+
+  // unit set = real nodes (not legacy sub-steps, not collapsed members) + one card per collapsed group
+  const unitIds=[];
+  m.nodes.forEach(n=>{ if(n.parentId||collapsedOf[n.id]!=null) return; unitIds.push(n.id); });
+  collapsedGroups.forEach(g=>unitIds.push(g.id));
+  const unitSet=new Set(unitIds);
+
+  // resolved forward-edge graph
+  const adj={}; unitIds.forEach(u=>adj[u]=new Set());
+  const hasEdge=new Set();
+  m.edges.forEach(e=>{ const u=resolve(e.from), v=resolve(e.to);
+    if(u===v||!unitSet.has(u)||!unitSet.has(v)) return; adj[u].add(v); hasEdge.add(u); hasEdge.add(v); });
+
+  // break cycles (rework loops) with an iterative DFS: a grey-target edge is a back edge and is dropped
+  const color={}, fwd={}; unitIds.forEach(u=>fwd[u]=[]);
+  const dfs=root=>{ color[root]=1; const stack=[[root,[...adj[root]],0]];
+    while(stack.length){ const fr=stack[stack.length-1];
+      if(fr[2]>=fr[1].length){ color[fr[0]]=2; stack.pop(); continue; }
+      const v=fr[1][fr[2]++];
+      if(color[v]===1) continue;                 // back edge → drop
+      fwd[fr[0]].push(v);                         // forward / cross edge → keep
+      if(color[v]==null){ color[v]=1; stack.push([v,[...adj[v]],0]); } } };
+  const startU=resolve(start.id);
+  if(unitSet.has(startU)) dfs(startU);
+  unitIds.forEach(u=>{ if(color[u]==null) dfs(u); });
+
+  // columns = longest path over the forward DAG (Kahn topo, col = max(pred)+1)
+  const indegF={}; unitIds.forEach(u=>indegF[u]=0);
+  unitIds.forEach(u=>fwd[u].forEach(v=>indegF[v]++));
+  const col={}, kq=[]; const indegW={...indegF};
+  unitIds.forEach(u=>{ if(indegF[u]===0){ col[u]=0; kq.push(u); } });
+  for(let qi=0; qi<kq.length; qi++){ const u=kq[qi];
+    fwd[u].forEach(v=>{ col[v]=Math.max(col[v]==null?0:col[v], col[u]+1); if(--indegW[v]===0) kq.push(v); }); }
+  unitIds.forEach(u=>{ if(col[u]==null) col[u]=0; });
+  // park truly isolated units (no resolved edges) in trailing columns so col 0 stays clean
+  let maxCol=Math.max(0,...unitIds.filter(u=>hasEdge.has(u)).map(u=>col[u]));
+  unitIds.forEach(u=>{ if(!hasEdge.has(u) && u!==startU) col[u]=++maxCol; });
+
+  // keep each expanded group's members contiguous — but ONLY shove things right when a non-member
+  // actually sits inside the group's column span; otherwise the block is already clean and shifting
+  // would open a huge blank gap after the group (compaction below then removes any gap we do create)
   const expGroups=(m.groups||[]).filter(g=>!g.collapsed && (g.members||[]).length);
-  expGroups.map(g=>({g, cols:g.members.map(id=>col[id]).filter(c=>c!=null)}))
+  expGroups.map(g=>({g, cols:(g.members||[]).map(id=>col[resolve(id)]).filter(c=>c!=null)}))
     .filter(o=>o.cols.length).sort((a,b)=>Math.min(...a.cols)-Math.min(...b.cols))
-    .forEach(({g,cols})=>{ const lo=Math.min(...cols), hi=Math.max(...cols), span=hi-lo+1, mset=new Set(g.members);
-      spine.forEach(u=>{ if(!mset.has(u.id) && col[u.id]>=lo) col[u.id]+=span; }); });
-  // real card sizes drive the spacing, so wide frames / different views always get room
-  const GAPX=64, GAPY=44, MARGIN_X=40, MARGIN_Y=60;
+    .forEach(({g,cols})=>{ const lo=Math.min(...cols), hi=Math.max(...cols), span=hi-lo+1;
+      const mset=new Set((g.members||[]).map(resolve));
+      if(!unitIds.some(u=>!mset.has(u) && col[u]>=lo && col[u]<=hi)) return;   // no intruder → leave as is
+      unitIds.forEach(u=>{ if(!mset.has(u) && col[u]>=lo) col[u]+=span; }); });
+
+  // squeeze out any empty columns so a single wide gap never survives (esp. after a group)
+  { const used=[...new Set(unitIds.map(u=>col[u]))].sort((a,b)=>a-b);
+    const remap={}; used.forEach((c,i)=>remap[c]=i); unitIds.forEach(u=>col[u]=remap[col[u]]); }
+
+  // rows: within each column (left→right) order by the mean row of inbound neighbours so branches sit
+  // beside their parent; stable tie-breaks (spine order, then original y, then id) keep Tidy idempotent
+  const preds={}; unitIds.forEach(u=>preds[u]=[]);
+  unitIds.forEach(u=>fwd[u].forEach(v=>preds[v].push(u)));
+  const {order}=flowWeights();
+  const spineIdx={}; order.forEach((n,i)=>{ const u=resolve(n.id); if(spineIdx[u]==null) spineIdx[u]=i; });
+  const si=u=> spineIdx[u]==null?1e9:spineIdx[u];
+  const oy=u=>{ const e=entOf(u); return e?(e.y||0):0; };
+  const colGroups={}; unitIds.forEach(u=>{ (colGroups[col[u]]=colGroups[col[u]]||[]).push(u); });
+  const row={};
+  Object.keys(colGroups).map(Number).sort((a,b)=>a-b).forEach(c=>{
+    const list=colGroups[c], key={};
+    list.forEach(u=>{ const ps=preds[u].filter(p=>row[p]!=null);
+      key[u]= ps.length ? ps.reduce((s,p)=>s+row[p],0)/ps.length : si(u); });
+    list.sort((a,b)=> (key[a]-key[b]) || (si(a)-si(b)) || (oy(a)-oy(b)) || (a<b?-1:1));
+    list.forEach((u,i)=>row[u]=i); });
+
+  const CELL={w:236, h:156}, GAPY=44, MARGIN_X=40, HEAD_ROOM=104, BASE_GAP=44, BRANCH_BONUS=32;
   const layOf=n=>{ const L=_lay[n.id]||nodeLayout(n); if(L.bt==null) L.bt=NODE_H/2-L.h/2; return L; };
-  const colNodes={};
-  spine.forEach(n=>{ const c=col[n.id]; (colNodes[c]=colNodes[c]||[]).push(n); });
-  const colXs={}; { let acc=MARGIN_X;
-    Object.keys(colNodes).map(Number).sort((a,b)=>a-b).forEach(c=>{
-      colXs[c]=acc; acc+=Math.max(...colNodes[c].map(n=>layOf(n).w))+GAPX; }); }
-  const colH={}; for(const c in colNodes) colH[c]=colNodes[c].reduce((a,n)=>a+layOf(n).h+GAPY,-GAPY);
-  const maxH=Math.max(...Object.values(colH));
-  const targets=[], yCur={};
-  spine.forEach(n=>{ const c=col[n.id], L=layOf(n);
-    if(yCur[c]==null) yCur[c]=MARGIN_Y+(maxH-colH[c])/2;   // short columns centre vertically
-    const top=yCur[c]; yCur[c]+=L.h+GAPY;
-    targets.push({ent:n, x:snapG(colXs[c]), y:snapG(top-L.bt)}); });
-  // compact each expanded group into a top-aligned block so its box hugs a clean rectangle
-  expGroups.forEach(g=>{ const mset=new Set(g.members);
-    const mem=targets.filter(t=>mset.has(t.ent.id)); if(mem.length<2) return;
-    const topY=Math.min(...mem.map(t=>t.y+layOf(t.ent).bt));   // shared visual top for the whole block
-    const byC={}; mem.forEach(t=>{ const c=col[t.ent.id]; (byC[c]=byC[c]||[]).push(t); });
-    Object.values(byC).forEach(list=>{ list.sort((a,b)=>a.y-b.y); let vy=topY;
-      list.forEach(t=>{ const L=layOf(t.ent); t.y=snapG(vy-L.bt); vy+=L.h+GAPY; }); }); });
-  // widen inter-column gaps so case-flow labels fit between boxes — same measure the
-  // Case-flow view uses, so Tidy no longer collapses room the labels need (avoids overlap)
-  { const needs=flowLabelNeeds();
-    if(needs.length){
-      const nxT={}; targets.forEach(t=>{ if(!t.ent.parentId) nxT[t.ent.id]=t.x; });
-      const items=needs.filter(it=>nxT[it.a.id]!=null&&nxT[it.b.id]!=null&&col[it.b.id]>col[it.a.id])
-                       .sort((i,j)=>nxT[i.b.id]-nxT[j.b.id]);
-      const shiftFrom=(x0,dx)=>{ for(const id in nxT) if(nxT[id]>=x0) nxT[id]+=dx; };
-      items.forEach(it=>{ const gap=nxT[it.b.id]-(nxT[it.a.id]+layOf(it.a).w);
-        if(gap<it.need) shiftFrom(nxT[it.b.id], Math.ceil((it.need-gap)/GRID)*GRID); });
-      targets.forEach(t=>{ if(nxT[t.ent.id]!=null) t.x=nxT[t.ent.id]; });
-    } }
-  // reserve clearance above grouped boxes so each group's header card (title + stats)
-  // fits without overlapping the first row — tidyGroups needs ~HEAD px above its members
-  const HEAD_ROOM=104;
-  const visMembers=new Set();
-  (m.groups||[]).forEach(g=>{ if(g.showInfo!==false) (g.members||[]).forEach(id=>visMembers.add(id)); });
-  if(visMembers.size){
-    const tops=targets.filter(t=>visMembers.has(t.ent.id)).map(t=>t.y+layOf(t.ent).bt);
-    const minTop=Math.min(...tops);
-    if(minTop<HEAD_ROOM){ const dy=snapG(HEAD_ROOM-minTop); targets.forEach(t=>t.y+=dy); }
-  }
+  const ROW_PITCH=CELL.h+GAPY;
+  const anyHdr=(m.groups||[]).some(g=>g.showInfo!==false && (g.members||[]).length);
+  const ROW0=60+(anyHdr?HEAD_ROOM:0)+CELL.h/2;   // centre-line of row 0 (constant → no drift)
+
+  // horizontal: each column gap adapts to what sits in it — plain 1-to-1 steps stay tight, a case-flow
+  // label opens the gap just enough to fit, and branch/merge boundaries get a little extra breathing room
+  const needByBoundary={};
+  flowLabelNeeds().forEach(it=>{ const cf=col[resolve(it.a.id)], ct=col[resolve(it.b.id)];
+    if(ct===cf+1) needByBoundary[cf]=Math.max(needByBoundary[cf]||0, it.need); });
+  const fanOut={}, fanIn={};
+  m.edges.forEach(e=>{ const u=resolve(e.from), v=resolve(e.to);
+    if(u===v||!unitSet.has(u)||!unitSet.has(v)||col[v]!==col[u]+1) return; fanOut[u]=(fanOut[u]||0)+1; fanIn[v]=(fanIn[v]||0)+1; });
+  const maxCol2=Math.max(0,...unitIds.map(u=>col[u]));
+  const colX={}; { let acc=MARGIN_X;
+    for(let c=0;c<=maxCol2;c++){ colX[c]=acc;
+      const branchy = unitIds.some(u=>col[u]===c && (fanOut[u]||0)>1) || unitIds.some(u=>col[u]===c+1 && (fanIn[u]||0)>1);
+      acc += CELL.w + Math.max(BASE_GAP + (branchy?BRANCH_BONUS:0), needByBoundary[c]||0); } }
+
+  // vertical: put every card's CENTRE (= its arrow ports at y+NODE_H/2) on a shared row line, so steps
+  // of different heights — including short Start/End boxes — line up and connectors stay level
+  const targets=[];
+  unitIds.forEach(u=>{ const ent=entOf(u); if(!ent) return;
+    targets.push({ent, _u:u, x:snapG(colX[col[u]]), y:snapG(ROW0 + row[u]*ROW_PITCH - NODE_H/2)}); });
+
   // a collapsed card moves as one; carry its hidden members by the same delta so an expand still lines up
   const collShifts=[];
-  collapsedGroups.forEach(g=>{ const t=targets.find(x=>x.ent.id===g.id); if(!t) return;
+  collapsedGroups.forEach(g=>{ const t=targets.find(x=>x._u===g.id); if(!t) return;
     const dx=t.x-(g.cx||0), dy=t.y-(g.cy||0); if(!dx&&!dy) return;
     g.members.forEach(id=>{ const n=byIdNode[id]; if(n) collShifts.push({node:n,dx,dy}); }); });
   // custom arrow sides survive — Tidy repositions boxes, it never re-routes connections
@@ -5138,6 +5457,47 @@ $("#fileData").onchange=async e=>{ const f=e.target.files[0]; if(!f) return;
 $("#howData").onclick=()=>$("#howOverlay").classList.add("show");
 $("#howClose").onclick=()=>$("#howOverlay").classList.remove("show");
 $("#howOverlay").onclick=e=>{ if(e.target.id==="howOverlay") $("#howOverlay").classList.remove("show"); };
+
+/* ---- Convert docs modal ---- */
+let convertFidelity="BALANCED";
+function assembleConvertPrompt(){
+  const base=($("#convert-prompt")||{}).textContent||"";
+  return base.replace("FIDELITY = <STRICT | BALANCED | ENRICHED>", "FIDELITY = "+convertFidelity);
+}
+$("#convertDoc").onclick=()=>{ convertNewId=null; $("#convertIn").value="";
+  $("#convertCreate").innerHTML='<svg class="t-ic"><use href="#ic-upload"/></svg>Create flow';
+  $("#convertErr").style.display="none"; $("#convertReport").style.display="none";
+  $("#convertOverlay").classList.add("show"); };
+$("#convertClose").onclick=()=>$("#convertOverlay").classList.remove("show");
+$("#convertOverlay").onclick=e=>{ if(e.target.id==="convertOverlay") $("#convertOverlay").classList.remove("show"); };
+$("#fidSeg").onclick=e=>{ const b=e.target.closest("button[data-fid]"); if(!b) return;
+  convertFidelity=b.dataset.fid; $("#fidSeg").querySelectorAll("button").forEach(x=>x.classList.toggle("on",x===b)); };
+$("#copyPromptBtn").onclick=()=>{ const txt=assembleConvertPrompt();
+  const done=()=>toast("Prompt copied — paste it into your AI with your files");
+  if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(done,()=>fallbackCopy(txt,done));
+  else fallbackCopy(txt,done); };
+function fallbackCopy(txt,done){ const ta=document.createElement("textarea"); ta.value=txt; ta.style.position="fixed"; ta.style.opacity="0";
+  document.body.appendChild(ta); ta.select(); try{ document.execCommand("copy"); done(); }catch(e){ toast("Copy failed — select the prompt manually"); } document.body.removeChild(ta); }
+let convertNewId=null;
+$("#convertCreate").onclick=()=>{
+  const err=$("#convertErr"), raw=$("#convertIn").value;
+  err.style.display="none";
+  if(convertNewId){ $("#convertOverlay").classList.remove("show"); openFlow(convertNewId); return; }   // "Open flow" state
+  if(!raw.trim()){ err.textContent="Paste the AI's answer first."; err.style.display="block"; return; }
+  let model;
+  try{ model=validateImportModel(extractModelFromText(raw)); }
+  catch(ex){ err.textContent=(ex&&ex.message)||"Couldn't read that as a flow."; err.style.display="block"; return; }
+  const id=uid("flow_");
+  state.library.flows[id]={id,name:model.name,model,updatedAt:Date.now()};
+  saveLibrary(); renderHome();
+  convertNewId=id;
+  const nS=model.nodes.length, nE=model.edges.length;
+  const report=extractReportFromText(raw);
+  const rp=$("#convertReport");
+  rp.textContent=`✓ Built “${model.name}” — ${nS} step${nS===1?"":"s"}, ${nE} connection${nE===1?"":"s"}.`+(report?`\n\n${report}`:"");
+  rp.style.display="block";
+  $("#convertCreate").innerHTML='<svg class="t-ic"><use href="#ic-flow"/></svg>Open flow';
+};
 $("#effClose").onclick=()=>$("#effOverlay").classList.remove("show");
 $("#effOverlay").onclick=e=>{ if(e.target.id==="effOverlay") $("#effOverlay").classList.remove("show"); };
 $("#bnClose").onclick=()=>$("#bnOverlay").classList.remove("show");

@@ -86,6 +86,17 @@ Click **≣ Flows** (or the "Flow Builder" wordmark) any time to return to the g
   exported library) back in.
 - **Export library** backs up *all* flows as one JSON.
 
+There are two ways to bring a map *in*:
+
+1. **Design file** (`Home → Import…`) — re-add a flow that was exported as JSON.
+2. **Convert docs** (header **Data → Convert docs**) — build a *new* flow from source material: a
+   meeting transcript, a Visio map, an Excel sheet, a job-aid, or several at once. Pick a **fidelity**
+   (Strict = mirror the source · Balanced = tidy + obvious grouping/ratings · Enriched = infer value
+   ratings, details and pains — never any invented numbers), **Copy prompt**, paste it into any
+   capable AI together with your files, then paste the AI's answer back to create the map. The prompt
+   lives in [`tools/convert-to-flow.prompt.md`](tools/convert-to-flow.prompt.md); a future one-click
+   API version is specced in [`docs/convert-docs-api-plan.md`](docs/convert-docs-api-plan.md).
+
 Flows are saved automatically in the browser (localStorage) as you edit. `Save design` and
 `Share with team` (below) are for sharing outside the browser.
 
