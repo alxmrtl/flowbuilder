@@ -113,6 +113,10 @@ Three tiers, honest about what each can achieve:
 
 **Recommendation for orgs with big Visio estates:** Tier 2 is the credible answer and is worth pulling relatively early (hence Phase 2.5) — "drop your Visio files in, they become live maps" is likely the single strongest adoption lever after search.
 
+### 3.5 R5 — Swimlane view (noted 2026-07-11, build later)
+
+A layout mode toggle, sibling of Tidy: switch a map back and forth between the current **one-line** arrangement and a **swimlane** arrangement (lanes by role/owner — the natural lane key given steps already carry owners; segment lanes are a possible second mode via the R1 dimension engine). Like Tidy it's a *placement* operation over the same model — no format change needed, positions are just recomputed per mode — so nothing in Phases 0–4 has to anticipate it beyond keeping owner/role data clean. Also relevant to R4: Visio imports are usually swimlane diagrams, so lane detection there (containers → owners) feeds this view for free. Scheduled Phase 5.
+
 ---
 
 ## 4 · Format specifications (frozen by Phase 0)
@@ -153,7 +157,7 @@ Spine unchanged per D7; new requirements slot in as 2/2.5. Each phase ends with 
 | **2.5** | Visio onboarding | `.vsdx` parser (vendor zip lib); master/connector/container mapping; Shape-Data → details via aliases; preview-accept flow; provenance + governance flag | Reference Visio files render faithfully with only positional tweaks |
 | **3** | Links, hierarchy, roll-ups | Linked steps + drill-in/breadcrumb; promote/demote group ⇄ map; digest roll-ups (segment-aware where dimensions match); backlinks; tombstones + cycle flags | Parent shows live child metrics; rename/move/delete never breaks links |
 | **4** | Dashboards + governance | Aggregates; **all four** templates (per D5): My processes / Ops health / Compare teams / Portfolio; governance panel + widgets; `aggregates/*.csv` for Excel/Power BI; etag save-check + presence (D6) | VP-view renders from aggregates only; confidence + governance visible |
-| **5** | Later | Dashboard builder; **role dimension** (R2) on the dimension engine; Graph adapter + IT one-pager (D1); connector descriptors; Tier-3 bulk onboarding; thin service only if the ceiling is hit | — |
+| **5** | Later | Dashboard builder; **role dimension** (R2) on the dimension engine; **swimlane view** (R5); Graph adapter + IT one-pager (D1); connector descriptors; Tier-3 bulk onboarding; thin service only if the ceiling is hit | — |
 
 **Sequencing note:** Phase 2 (segments) lands before hierarchy because it touches the metric engine's resolution layer — better to stabilize that before roll-ups consume it. Phases 2 and 2.5 are independent of each other and can swap if a Visio-heavy org shows up first.
 
