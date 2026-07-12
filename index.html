@@ -6,6 +6,7 @@
 <title>Flow Builder — Value Stream Visualizer</title>
 <script src="vendor/xlsx.full.min.js"></script>
 <script src="vendor/jspdf.umd.min.js"></script>
+<script src="vendor/minisearch.umd.js"></script>
 <style>
   :root{
     --bg:#0f1720; --panel:#16212e; --panel2:#1d2a3a; --line:#2b3a4d;
@@ -309,6 +310,55 @@
   .fc-actions button.open{background:var(--accent);color:#06202a;border-color:var(--accent);font-weight:600}
   .fc-actions button.del:hover{border-color:var(--nva);color:var(--nva)}
   .home-empty{color:var(--faint);padding:40px 28px}
+
+  /* ---- Workspace (org platform — phase 1): folder-backed library chrome ---- */
+  .ws-chip{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);
+    border:1px solid var(--line);border-radius:20px;padding:4px 11px;background:var(--panel)}
+  .ws-chip b{color:var(--ink);font-weight:600}
+  .ws-status{font-size:11.5px;color:var(--faint)}
+  .ws-filter{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:4px 28px 0}
+  .ws-filter input[type=search]{background:var(--panel2);border:1px solid var(--line);color:var(--ink);
+    border-radius:8px;padding:7px 11px;font-size:13px;min-width:240px;flex:0 1 320px;font-family:inherit}
+  .ws-filter input[type=search]:focus{border-color:var(--accent);outline:none}
+  .ws-filter select{background:var(--panel2);border:1px solid var(--line);color:var(--ink);border-radius:8px;
+    padding:7px 8px;font-size:12.5px;max-width:170px;font-family:inherit}
+  .ws-filter select.on{border-color:var(--accent);color:var(--accent)}
+  .ws-filter .clear{background:transparent;border:none;color:var(--faint);font-size:12px;cursor:pointer;padding:6px}
+  .ws-filter .clear:hover{color:var(--ink)}
+  .ws-filter .count{font-size:12px;color:var(--faint);margin-left:auto}
+  .ws-banner{margin:10px 28px 0;border:1px solid var(--warn);border-radius:10px;padding:10px 14px;
+    display:flex;align-items:center;gap:12px;background:rgba(247,184,75,.08);font-size:13px;color:var(--ink)}
+  .ws-banner .btn{flex:0 0 auto}
+  .fc-chips{display:flex;flex-wrap:wrap;gap:5px;min-height:0}
+  .fc-chip{font-size:10.5px;font-weight:600;padding:2px 8px;border-radius:12px;border:1px solid var(--line);color:var(--muted)}
+  .fc-chip.status-active{color:var(--va);border-color:var(--va)}
+  .fc-chip.status-draft{color:var(--faint)}
+  .fc-chip.status-under-review{color:var(--warn);border-color:var(--warn)}
+  .fc-chip.status-retired{color:var(--faint);text-decoration:line-through}
+  .fc-chip.ai{color:var(--warn);border-color:var(--warn)}
+  /* map-details + workspace modals */
+  .meta-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 12px;margin-top:8px}
+  .meta-grid .full{grid-column:1/-1}
+  .meta-f label{display:block;font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--faint);margin-bottom:4px}
+  .meta-f input,.meta-f select{width:100%;box-sizing:border-box;background:var(--panel2);border:1px solid var(--line);
+    color:var(--ink);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit}
+  .meta-f input:focus,.meta-f select:focus{border-color:var(--accent);outline:none}
+  .meta-note{font-size:12px;color:var(--faint);margin-top:10px}
+  .meta-ai{display:flex;align-items:center;gap:10px;margin-top:12px;padding:9px 12px;border:1px solid var(--warn);
+    border-radius:9px;background:rgba(247,184,75,.08);font-size:12.5px}
+  .ws-sec{margin-top:18px}
+  .ws-sec>h4{margin:0 0 8px;font-size:11px;letter-spacing:.5px;text-transform:uppercase;color:var(--faint);font-weight:700}
+  .ws-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:13px}
+  .vocab-table{display:grid;grid-template-columns:minmax(140px,1fr) minmax(160px,1.2fr);gap:6px 14px;margin-top:6px;
+    max-height:320px;overflow:auto;padding-right:6px}
+  .vocab-table .vh{font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--faint);
+    position:sticky;top:0;background:var(--panel);padding-bottom:4px}
+  .vocab-fb{font-size:13px;color:var(--ink);align-self:center}
+  .vocab-fb small{color:var(--faint)}
+  .vocab-table input{background:var(--panel2);border:1px solid var(--line);color:var(--ink);border-radius:7px;
+    padding:6px 9px;font-size:12.5px;font-family:inherit;width:100%;box-sizing:border-box}
+  .vocab-table input:focus{border-color:var(--accent);outline:none}
+  .vocab-table input:placeholder-shown{opacity:.75}
 
   /* ---- Layout ---- */
   main{flex:1 1 auto;min-height:0;display:flex;position:relative}
@@ -823,6 +873,11 @@
       <li><b>In this browser</b> — every flow is saved automatically (in <code>localStorage</code>) as
         you edit, so it's here when you come back. It's per-browser/per-device, not synced across
         machines.</li>
+      <li><b>In a workspace folder</b> — <b>Home → ⛁ Connect folder</b> points Flow Builder at a
+        local folder (e.g. a synced SharePoint/OneDrive library). Every flow becomes a
+        <code>*.flow.json</code> file there, saved as you edit; anyone who connects the same folder
+        browses and searches the same maps. A <code>.flowbuilder/</code> sidecar holds the catalog
+        and search index — safe to delete, it rebuilds.</li>
       <li><b>Portable copy</b> — <b>Share → Design file</b> downloads the flow as JSON; re-add it on any
         machine via <b>Home → Import…</b>. <b>Share → HTML</b> hands out a read-only HTML copy.</li>
     </ul>
@@ -907,18 +962,41 @@
   </div>
 </div>
 
-<!-- Home / flow library -->
+<!-- Home / flow library — becomes the folder-backed Workspace view when a library folder is connected -->
 <section id="home">
   <div class="home-bar">
-    <h2>My Flows</h2>
+    <h2 id="homeTitle">My Flows</h2>
+    <span class="ws-chip" id="wsChip" style="display:none" title="Connected workspace folder"></span>
+    <span class="ws-status" id="wsStatus"></span>
     <div class="spacer"></div>
     <button class="btn primary" id="newFlow">+ New flow</button>
     <button class="btn" id="importFlow">Import…</button>
     <button class="btn" id="exportLib">Export library</button>
+    <button class="btn" id="wsConnect" style="display:none" title="Connect a shared folder (e.g. a synced SharePoint/OneDrive library) — every flow becomes a file the whole team can browse and search">⛁ Connect folder</button>
+    <button class="btn iconbtn" id="wsSettingsBtn" style="display:none" title="Workspace settings — vocabulary, refresh, disconnect">⚙</button>
     <input type="file" id="fileImport" accept=".json" style="display:none" />
   </div>
+  <div class="ws-filter" id="wsFilter" style="display:none"></div>
+  <div class="ws-banner" id="wsBanner" style="display:none"></div>
   <div class="home-grid" id="homeGrid"></div>
 </section>
+
+<!-- Map details — name + governance meta (core fields + org schema.json extras) -->
+<div class="overlay" id="metaOverlay">
+  <div class="modal">
+    <div class="modal-h"><h3 id="metaTitle">Map details</h3><button class="x" id="metaClose">✕</button></div>
+    <div id="metaBody"></div>
+    <div class="modal-actions"><button class="btn primary" id="metaSave">Save details</button></div>
+  </div>
+</div>
+
+<!-- Workspace settings — folder, refresh/disconnect, org vocabulary editor -->
+<div class="overlay" id="wsOverlay">
+  <div class="modal wide">
+    <div class="modal-h"><h3>Workspace</h3><button class="x" id="wsClose">✕</button></div>
+    <div id="wsBody"></div>
+  </div>
+</div>
 
 <div id="paletteBar">
   <span class="pb-label">Add to flow</span>
@@ -1176,7 +1254,13 @@ SOURCE MATERIAL (label each source):
 "use strict";
 /* ============================================================
    Flow Builder — Lean value-stream visualizer (single file)
-   Increment 2: flow library + home screen, load-weighting, timeline
+   FILE MAP (banner-delimited sections, in order):
+     nomenclature + METRICS_SPEC · state · helpers · PLATFORM FOUNDATIONS
+     (mapId/meta/migrate) · LIBRARY (localStorage) · digest builder ·
+     WORKSPACE (folder adapter, catalog/reconcile, search, meta/vocab UI) ·
+     flow CRUD + Convert docs · DATA BINDING · metrics engine (rollup) ·
+     RENDER (home, stats, canvas, ribbon, inspector) · theming · exports ·
+     simulate-a-day · WIRING · BOOT
    ============================================================ */
 
 const NS = "http://www.w3.org/2000/svg";
@@ -1278,6 +1362,8 @@ const state = {
   _notePick: null,        // {cid, stage:"type"|"subtype", thenEdit} — type-picker chips open on a note
   _stepPick: null,        // {x, y, fromId, fromSide, append?} — step-type chips after a port drop on empty canvas
   vocab: null,            // workspace term overrides {metricId: "Org label"} — resolved by ML(); null = FB standard
+  ws: null,               // connected workspace (org platform — phase 1): {adapter, dirName, catalog, digests, schema, open, …}; null = localStorage mode
+  wsPending: null,        // a persisted directory handle awaiting a permission re-grant (needs a user gesture)
 };
 
 /* ---------- helpers ---------- */
@@ -1361,7 +1447,7 @@ function loadLibrary(){
 function saveLibrary(){ try{ localStorage.setItem(LIB_KEY, JSON.stringify(state.library)); }
   catch(e){ toast("Could not save (storage blocked)"); } }
 function seedLibrary(){
-  if(Object.keys(state.library.flows).length) return;
+  if(Object.keys(state.library.flows).length || state.library.migratedToWs) return;   // never re-seed a library the user moved into a workspace
   try{
     const sample=JSON.parse($("#egp-model").textContent);
     const id=uid("flow_");
@@ -1371,10 +1457,11 @@ function seedLibrary(){
 }
 let _saveT=null;
 function scheduleSave(){
-  if(state.viewer||!state.currentId) return;
+  if(state.viewer||(!state.currentId && !(state.ws&&state.ws.open))) return;
   clearTimeout(_saveT);
   _saveT=setTimeout(()=>{
     commitUndo();   // the 500ms debounce coalesces a whole drag/tween/typing burst into ONE undo step
+    if(state.ws && state.ws.open){ wsSaveCurrent(); return; }   // workspace maps save to their file (+digest/catalog)
     const f=state.library.flows[state.currentId];
     if(f&&state.model){ f.model=clone(state.model); f.name=state.model.name; f.updatedAt=Date.now(); saveLibrary(); }
   },500);
@@ -1428,7 +1515,7 @@ function rollupFor(model){
    The compact cross-map extract of one flow: everything the workspace layer (search,
    dashboards, links, roll-ups) reads about a map, in a few KB, so the full file only
    ever opens to edit it. Derived purely from the model — writing it twice is harmless. */
-const DIGEST_VERSION = 1;
+const DIGEST_VERSION = 2;   // v2: queue labels join text.steps (searchable)
 function buildDigest(model){
   migratePlatform(model);
   const sm=state.model, sd=state.data, ss=state.segment, sp=state.period;
@@ -1445,7 +1532,7 @@ function buildDigest(model){
         if(n.tool) tools.add(String(n.tool));
         if(!hasSubs(n) && !n.excludeStats){ const mt=metricFor(n);   // confidence mirrors the insights count
           if(mt.hasData) measured++; else if(mt.derivedCap) modelled++; } }
-      if(n.type==="wait") queueN++; });
+      if(n.type==="wait"){ queueN++; if(n.label) stepLabels.push(n.label); } });
   } finally { state.model=sm; state.data=sd; state.segment=ss; state.period=sp; }
   const cap=(r&&r.cap)||{}, qual=(r&&r.qual)||{};
   const links=[...new Set((model.nodes||[]).filter(n=>n.linksTo && typeof n.linksTo.mapId==="string")
@@ -1482,10 +1569,506 @@ function buildDigest(model){
   };
 }
 
+/* ============================================================
+   WORKSPACE (org platform — phase 1)
+   A user-picked local synced folder (SharePoint/OneDrive/Drive on disk)
+   becomes the shared library: every map is a *.flow.json file, and a
+   .flowbuilder/ sidecar carries catalog.json + digests/<mapId>.json +
+   schema.json + vocabulary.json. All paths are library-relative, identity
+   is mapId (never a path), and revs are opaque strings — the same 5-method
+   adapter contract maps onto Graph API later (list → /children, read →
+   /content, write+expectedRev → PUT If-Match, changedSince → /delta,
+   rev → eTag). Disconnected mode is exactly the old localStorage app.
+   ============================================================ */
+const WS_CATALOG_PATH=".flowbuilder/catalog.json";
+const WS_DIGEST_DIR=".flowbuilder/digests/";
+const CATALOG_VERSION=1;
+
+/* ---- IndexedDB: persisted directory handle + digest cache (per mapId+rev) ---- */
+function idbOpen(){ return new Promise((res,rej)=>{ const q=indexedDB.open("fb-workspace",1);
+  q.onupgradeneeded=()=>{ const db=q.result;
+    if(!db.objectStoreNames.contains("kv")) db.createObjectStore("kv");
+    if(!db.objectStoreNames.contains("digests")) db.createObjectStore("digests"); };
+  q.onsuccess=()=>res(q.result); q.onerror=()=>rej(q.error); }); }
+function idbReq(store,mode,op){ return idbOpen().then(db=>new Promise((res,rej)=>{
+  const tx=db.transaction(store,mode), r=op(tx.objectStore(store));
+  r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); })); }
+const idbGet =(s,k)=>idbReq(s,"readonly", o=>o.get(k));
+const idbSet =(s,k,v)=>idbReq(s,"readwrite",o=>o.put(v,k));
+const idbDel =(s,k)=>idbReq(s,"readwrite",o=>o.delete(k));
+
+/* ---- storage adapter, Mode B: File System Access over a directory handle ----
+   Contract (§2.2 of the plan): list() / read(path) / write(path,text,expectedRev) /
+   changedSince(cursor) / rev(path) (+remove, which Graph gets as DELETE). The fs
+   cursor is {path→rev}; the Graph adapter will hold a delta token instead — callers
+   treat it as opaque and get it from the catalog they maintain. */
+function fsAdapter(dir){
+  async function walk(handle,prefix,out){
+    for await (const h of handle.values()){
+      if(h.kind==="file"){ if(h.name.endsWith(".flow.json")){
+        const f=await h.getFile(); out.push({path:prefix+h.name, rev:String(f.lastModified)}); } }
+      else if(h.kind==="directory" && !h.name.startsWith(".")) await walk(h,prefix+h.name+"/",out);
+    }
+  }
+  async function fileHandle(path,create){
+    const parts=path.split("/"); let d=dir;
+    for(let i=0;i<parts.length-1;i++) d=await d.getDirectoryHandle(parts[i],{create:!!create});
+    return d.getFileHandle(parts[parts.length-1],{create:!!create});
+  }
+  return {
+    kind:"fs", name:dir.name||"folder", _dir:dir,
+    async list(){ const out=[]; await walk(dir,"",out); return out; },   // every *.flow.json, recursive, dot-dirs skipped
+    async read(path){ const fh=await fileHandle(path); const f=await fh.getFile();
+      return {text:await f.text(), rev:String(f.lastModified)}; },
+    async rev(path){ try{ const fh=await fileHandle(path); const f=await fh.getFile(); return String(f.lastModified); }
+      catch(e){ return null; } },
+    async write(path,text,expectedRev){
+      if(expectedRev!=null){ const cur=await this.rev(path);
+        if(cur!=null && cur!==expectedRev){ const err=new Error("rev mismatch on "+path); err.code="REV_MISMATCH"; throw err; } }
+      const fh=await fileHandle(path,true); const w=await fh.createWritable();
+      await w.write(text); await w.close();
+      const f=await fh.getFile(); return String(f.lastModified);
+    },
+    async remove(path){ const parts=path.split("/"); let d=dir;
+      for(let i=0;i<parts.length-1;i++) d=await d.getDirectoryHandle(parts[i]);
+      await d.removeEntry(parts[parts.length-1]); },
+    async changedSince(cursor){   // cursor {path→rev} → {changed:[{path,rev}], removed:[path]}
+      const now=await this.list(), seen={}, changed=[];
+      now.forEach(e=>{ seen[e.path]=1; if(!cursor || cursor[e.path]!==e.rev) changed.push(e); });
+      return {changed, removed: cursor?Object.keys(cursor).filter(p=>!seen[p]):[]};
+    }
+  };
+}
+
+/* ---- connect / resume / disconnect ---- */
+async function wsConnect(dir){
+  const adapter=fsAdapter(dir);
+  state.ws={ adapter, dirName:adapter.name, catalog:{catalogVersion:CATALOG_VERSION, maps:{}},
+             digests:{}, schema:null, vocabDoc:null, open:null, index:null,
+             query:"", facets:{}, reconciling:false, saveQ:Promise.resolve() };
+  state.wsPending=null;
+  idbSet("kv","dirHandle",dir).catch(()=>{});   // real handles persist across sessions; test fakes can't be cloned — fine
+  try{ const c=await adapter.read(WS_CATALOG_PATH); const cat=JSON.parse(c.text);
+    if(cat && cat.maps) state.ws.catalog=cat; }catch(e){}
+  await wsLoadDigests();
+  try{ const s=await adapter.read(".flowbuilder/schema.json"); state.ws.schema=JSON.parse(s.text); }catch(e){}
+  try{ const v=await adapter.read(".flowbuilder/vocabulary.json"); const doc=JSON.parse(v.text);
+    state.ws.vocabDoc=doc; state.vocab=(doc && doc.terms && Object.keys(doc.terms).length)?doc.terms:null; }
+  catch(e){ state.vocab=null; }
+  if(state.mode==="home") renderHome();
+  wsBuildIndex();
+  wsReconcile();          // background: catch files added/edited/removed outside the app
+}
+async function wsResume(){   // boot: reopen the persisted handle if permission still stands
+  let dir=null; try{ dir=await idbGet("kv","dirHandle"); }catch(e){}
+  if(!dir) return;
+  try{
+    const perm = dir.queryPermission ? await dir.queryPermission({mode:"readwrite"}) : "granted";
+    if(perm==="granted") await wsConnect(dir);
+    else { state.wsPending=dir; if(state.mode==="home") renderHome(); }   // re-request needs a user gesture
+  }catch(e){}
+}
+async function wsDisconnect(){
+  idbDel("kv","dirHandle").catch(()=>{});
+  state.ws=null; state.vocab=null;
+  $("#wsOverlay").classList.remove("show");
+  renderHome(); toast("Workspace disconnected — back to this browser's flows");
+}
+
+/* ---- catalog + digest persistence ---- */
+async function wsWriteCatalog(){
+  const ws=state.ws; if(!ws) return;
+  ws.catalog.catalogVersion=CATALOG_VERSION; ws.catalog.updatedAt=new Date().toISOString();
+  try{ await ws.adapter.write(WS_CATALOG_PATH, JSON.stringify(ws.catalog,null,2)); }
+  catch(e){ console.warn("catalog write failed",e); }
+}
+async function wsWriteDigest(digest,rev){
+  const ws=state.ws; if(!ws||!digest||!digest.mapId) return;
+  try{ await ws.adapter.write(WS_DIGEST_DIR+digest.mapId+".json", JSON.stringify(digest,null,2)); }
+  catch(e){ console.warn("digest write failed",e); }
+  idbSet("digests",digest.mapId,{rev,digest}).catch(()=>{});
+}
+async function wsLoadDigests(){   // digests for every catalog entry: IDB cache (rev-checked) → digest file → reconcile rebuilds
+  const ws=state.ws;
+  for(const [mid,e] of Object.entries(ws.catalog.maps||{})){
+    try{
+      const c=await idbGet("digests",mid).catch(()=>null);
+      if(c && c.rev===e.rev && c.digest && c.digest.digestVersion===DIGEST_VERSION){ ws.digests[mid]=c.digest; continue; }
+      const d=await ws.adapter.read(WS_DIGEST_DIR+mid+".json");
+      const dig=JSON.parse(d.text);
+      if(dig.digestVersion!==DIGEST_VERSION) continue;   // older format — the reconcile pass rebuilds it from the flow file
+      ws.digests[mid]=dig;
+      idbSet("digests",mid,{rev:e.rev,digest:dig}).catch(()=>{});
+    }catch(err){}
+  }
+}
+/* the reconcile loop: compare what's on disk (mtime revs) against the catalog,
+   re-digest anything stale/new, prune anything deleted. Cheap when clean — one
+   directory scan; only changed files are actually opened. */
+async function wsReconcile(){
+  const ws=state.ws; if(!ws||ws.reconciling) return; ws.reconciling=true;
+  wsStatusMsg("checking folder…");
+  let dirty=false;
+  try{
+    const cursor={}; Object.values(ws.catalog.maps).forEach(m=>{ cursor[m.path]=m.rev; });
+    const {changed,removed}=await ws.adapter.changedSince(cursor);
+    let n=0;
+    for(const {path,rev} of changed){
+      try{
+        const {text}=await ws.adapter.read(path); const model=migratePlatform(JSON.parse(text));
+        for(const [mid,e] of Object.entries(ws.catalog.maps))   // path re-keyed under a new mapId → drop the stale entry
+          if(e.path===path && mid!==model.mapId){ delete ws.catalog.maps[mid]; delete ws.digests[mid]; idbDel("digests",mid).catch(()=>{}); }
+        const other=ws.catalog.maps[model.mapId];
+        if(other && other.path!==path && cursor[other.path]!=null && !removed.includes(other.path)){
+          console.warn("duplicate mapId — skipping",path,"(also at",other.path+")"); continue; }
+        const digest=buildDigest(model);
+        ws.catalog.maps[model.mapId]={path,rev,title:digest.title,savedAt:digest.savedAt};
+        ws.digests[model.mapId]=digest;
+        await wsWriteDigest(digest,rev);
+        dirty=true;
+        if(++n%40===0 && state.mode==="home"){ wsBuildIndex(); renderHome(); }   // progressive first-connect render
+      }catch(e){ console.warn("reconcile: skipped",path,e); }
+    }
+    removed.forEach(p=>{ for(const [mid,e] of Object.entries(ws.catalog.maps))
+      if(e.path===p){ delete ws.catalog.maps[mid]; delete ws.digests[mid]; idbDel("digests",mid).catch(()=>{}); dirty=true; } });
+    for(const [mid,e] of Object.entries(ws.catalog.maps))   // catalog entry whose digest never loaded → rebuild from the flow file
+      if(!ws.digests[mid]){
+        try{ const {text}=await ws.adapter.read(e.path); const digest=buildDigest(migratePlatform(JSON.parse(text)));
+          ws.digests[mid]=digest; await wsWriteDigest(digest,e.rev); dirty=true; }catch(err){}
+      }
+    if(dirty) await wsWriteCatalog();
+  } finally {
+    ws.reconciling=false; wsStatusMsg("");
+    if(dirty){ wsBuildIndex(); if(state.mode==="home") renderHome(); }
+  }
+}
+function wsStatusMsg(t){ const e=$("#wsStatus"); if(e) e.textContent=t||""; }
+
+/* ---- full-text search over digest text fields (MiniSearch, vendored) ---- */
+function wsBuildIndex(){
+  const ws=state.ws; if(!ws) return;
+  if(typeof MiniSearch==="undefined"){ ws.index=null; return; }
+  const idx=new MiniSearch({ idField:"mapId",
+    fields:["title","steps","people","tools","groups","notes","tags","area","team","owner"],
+    searchOptions:{ prefix:true, fuzzy:0.15, combineWith:"AND", boost:{title:3,tags:2,steps:1.5} } });
+  idx.addAll(Object.values(ws.digests).map(d=>{ const t=d.text||{}, m=d.meta||{};
+    return { mapId:d.mapId, title:d.title||"",
+      steps:(t.steps||[]).join(" "), people:(t.people||[]).join(" "), tools:(t.tools||[]).join(" "),
+      groups:(t.groups||[]).join(" "), notes:(t.notes||[]).join(" "),
+      tags:(m.tags||[]).join(" "), area:m.area||"", team:m.team||"", owner:m.owner||"" }; }));
+  ws.index=idx;
+}
+
+/* ---- workspace file CRUD (identity = mapId; filenames are just human-friendly) ---- */
+const wsSlug=s=>String(s||"flow").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"").slice(0,60)||"flow";
+async function wsFreshPath(name){
+  const ws=state.ws, taken=new Set(Object.values(ws.catalog.maps).map(e=>e.path)), slug=wsSlug(name);
+  for(let i=0;i<999;i++){ const p=slug+(i?"-"+(i+1):"")+".flow.json";
+    if(!taken.has(p) && (await ws.adapter.rev(p))==null) return p; }
+  return slug+"-"+Date.now()+".flow.json";
+}
+/* write a model into the folder as a new map (collision on mapId → the newcomer re-mints) */
+async function wsAddModel(model){
+  const ws=state.ws; migratePlatform(model);
+  if(ws.catalog.maps[model.mapId]) model.mapId=mintMapId();
+  const path=await wsFreshPath(model.name);
+  const rev=await ws.adapter.write(path, JSON.stringify(model,null,2));
+  const digest=buildDigest(model);
+  ws.catalog.maps[model.mapId]={path,rev,title:digest.title,savedAt:digest.savedAt};
+  ws.digests[model.mapId]=digest;
+  await wsWriteDigest(digest,rev);
+  return {mapId:model.mapId,path,rev};
+}
+async function openWsMap(mapId){
+  const ws=state.ws, e=ws&&ws.catalog.maps[mapId]; if(!e) return;
+  try{
+    const {text,rev}=await ws.adapter.read(e.path);
+    const model=migratePlatform(JSON.parse(text));
+    if(typeof stopSim==="function"&&state.simming) stopSim();
+    state.currentId=null; ws.open={mapId,path:e.path,rev};
+    ws._lastSavedText=text; ws._lastSavedPath=e.path;
+    loadModel(model); setMode("build");
+  }catch(err){ console.warn(err); toast("Couldn't open that file"); }
+}
+async function wsNewFlow(){
+  const model=migratePlatform({ name:"New flow", settings:{timeUnit:"hrs",bottleneckMode:"absolute"},
+    nodes:[ {id:"start",type:"start",label:"Customer request",x:60,y:200},
+            {id:"end",type:"end",label:"Value delivered",x:560,y:200} ], edges:[] });
+  try{
+    const {mapId}=await wsAddModel(model);
+    await wsWriteCatalog(); wsBuildIndex();
+    await openWsMap(mapId); toast("New flow created in the workspace");
+  }catch(e){ console.warn(e); toast("Couldn't create a file in the folder"); }
+}
+async function wsDuplicate(mapId){
+  const ws=state.ws, e=ws.catalog.maps[mapId]; if(!e) return;
+  try{
+    const {text}=await ws.adapter.read(e.path);
+    const m=migratePlatform(JSON.parse(text));
+    m.name=(m.name||"Flow")+" (copy)"; m.mapId=mintMapId();   // a copy is a new map
+    await wsAddModel(m); await wsWriteCatalog(); wsBuildIndex(); renderHome(); toast("Duplicated");
+  }catch(err){ toast("Couldn't duplicate"); }
+}
+async function wsDelete(mapId){
+  const ws=state.ws, e=ws.catalog.maps[mapId]; if(!e) return;
+  const title=(ws.digests[mapId]||{}).title||e.title||"this map";
+  if(!window.confirm('Delete "'+title+'"? The file is removed from the folder.')) return;
+  try{ await ws.adapter.remove(e.path); }catch(err){ toast("Couldn't delete the file"); return; }
+  try{ await ws.adapter.remove(WS_DIGEST_DIR+mapId+".json"); }catch(err){}
+  delete ws.catalog.maps[mapId]; delete ws.digests[mapId]; idbDel("digests",mapId).catch(()=>{});
+  if(ws.open && ws.open.mapId===mapId){ ws.open=null; state.model=null; }
+  await wsWriteCatalog(); wsBuildIndex(); renderHome(); toast("Deleted");
+}
+/* the debounced save target while a workspace map is open: write the file, then
+   regenerate its digest + catalog row. Serialized on a promise chain; a no-op
+   when the JSON didn't change so mere re-renders never churn file mtimes. */
+function wsSaveCurrent(){
+  const ws=state.ws, open=ws&&ws.open; if(!open||!state.model) return;
+  const model=clone(state.model), text=JSON.stringify(model,null,2);
+  if(text===ws._lastSavedText && open.path===ws._lastSavedPath) return;
+  ws.saveQ=ws.saveQ.then(async()=>{
+    try{
+      let rev;
+      try{ rev=await ws.adapter.write(open.path,text,open.rev); }
+      catch(e){ if(e.code==="REV_MISMATCH"){   // changed on disk since we read it (sync client, teammate)
+          rev=await ws.adapter.write(open.path,text);
+          toast("This file changed outside Flow Builder — your version was kept"); }
+        else throw e; }
+      open.rev=rev; ws._lastSavedText=text; ws._lastSavedPath=open.path;
+      const digest=buildDigest(model);
+      ws.catalog.maps[model.mapId]={path:open.path,rev,title:digest.title,savedAt:digest.savedAt};
+      ws.digests[model.mapId]=digest;
+      await wsWriteDigest(digest,rev); await wsWriteCatalog(); wsBuildIndex();
+    }catch(e){ console.warn("workspace save failed",e); toast("Couldn't save to the workspace folder"); }
+  });
+}
+async function wsImportObj(obj){
+  const models = obj && obj.flows && typeof obj.flows==="object" ? Object.values(obj.flows).map(f=>(f&&f.model)||f)
+               : obj && obj.nodes ? [obj] : null;
+  if(!models){ toast("Unrecognized file"); return; }
+  let ok=0;
+  for(const m of models){ try{ await wsAddModel(m); ok++; }catch(e){ console.warn(e); } }
+  await wsWriteCatalog(); wsBuildIndex(); renderHome();
+  toast(ok?`Imported ${ok} flow${ok===1?"":"s"} into the workspace`:"Import failed");
+}
+/* one-time migration: browser-local flows become files in the connected folder */
+async function wsMigrateLocal(){
+  const ws=state.ws, flows=Object.values(state.library.flows); if(!ws||!flows.length) return;
+  if(!window.confirm(`Move ${flows.length} flow${flows.length===1?"":"s"} from this browser into “${ws.dirName}”?\n\nEach becomes a .flow.json file in the folder and leaves this browser's local list.`)) return;
+  let ok=0;
+  for(const f of flows){
+    try{ const m=clone(f.model); m.name=m.name||f.name; await wsAddModel(m);
+      delete state.library.flows[f.id]; ok++; }
+    catch(e){ console.warn("migration failed for",f&&f.name,e); }
+  }
+  state.library.lastOpenedId=null; state.library.migratedToWs=true; saveLibrary();
+  await wsWriteCatalog(); wsBuildIndex(); renderHome();
+  toast(`Moved ${ok} flow${ok===1?"":"s"} into the workspace`);
+}
+
+/* ---- workspace home: chrome, facets + search, gallery from digests ---- */
+function wsMetaOf(id){ const d=state.ws.digests[id]; return (d&&d.meta)||{}; }
+function wsFiltered(){   // active query+facets → [mapId] in display order
+  const ws=state.ws;
+  let ids=Object.keys(ws.catalog.maps);
+  const q=(ws.query||"").trim();
+  if(q && ws.index) ids=ws.index.search(q).map(r=>r.id).filter(id=>ws.catalog.maps[id]);   // relevance order
+  else ids.sort((a,b)=>Number(ws.catalog.maps[b].rev||0)-Number(ws.catalog.maps[a].rev||0));
+  const f=ws.facets;
+  return ids.filter(id=>{ const m=wsMetaOf(id);
+    return (!f.area  || m.area===f.area) && (!f.team || m.team===f.team) &&
+           (!f.owner || m.owner===f.owner) && (!f.status || (m.status||"draft")===f.status); });
+}
+function wsRenderFilter(){
+  const ws=state.ws, bar=$("#wsFilter"); if(!ws){ bar.style.display="none"; return; }
+  bar.style.display="flex";
+  const vals=k=>{ const c={}; Object.keys(ws.catalog.maps).forEach(id=>{ const v=(wsMetaOf(id)[k]||"").trim(); if(v) c[v]=(c[v]||0)+1; }); return c; };
+  const sel=(k,label,counts)=>{
+    const opts=Object.keys(counts).sort().map(v=>`<option value="${esc(v)}"${ws.facets[k]===v?" selected":""}>${esc(v)} (${counts[v]})</option>`).join("");
+    return `<select data-facet="${k}" class="${ws.facets[k]?"on":""}"><option value="">${label} — all</option>${opts}</select>`; };
+  const statusCounts={}; Object.keys(ws.catalog.maps).forEach(id=>{ const s=wsMetaOf(id).status||"draft"; statusCounts[s]=(statusCounts[s]||0)+1; });
+  bar.innerHTML=`<input type="search" id="wsSearch" placeholder="Search maps — steps, people, tools, notes…" value="${esc(ws.query||"")}"/>
+    ${sel("area","Area",vals("area"))}${sel("team","Team",vals("team"))}${sel("owner","Owner",vals("owner"))}
+    <select data-facet="status" class="${ws.facets.status?"on":""}"><option value="">Status — all</option>${
+      ["draft","active","under-review","retired"].filter(s=>statusCounts[s]).map(s=>
+        `<option value="${s}"${ws.facets.status===s?" selected":""}>${s} (${statusCounts[s]})</option>`).join("")}</select>
+    <button class="clear" id="wsClear" title="Clear search and filters">✕ clear</button>
+    <span class="count" id="wsCount"></span>`;
+  const inp=bar.querySelector("#wsSearch");
+  inp.oninput=()=>{ ws.query=inp.value; wsRenderGrid(); };   // grid-only refresh keeps focus in the box
+  bar.querySelectorAll("select[data-facet]").forEach(s=>s.onchange=()=>{
+    if(s.value) ws.facets[s.dataset.facet]=s.value; else delete ws.facets[s.dataset.facet];
+    wsRenderFilter(); wsRenderGrid(); });   // rebuild refreshes counts + the selects' active state
+  bar.querySelector("#wsClear").onclick=()=>{ ws.query=""; ws.facets={}; wsRenderFilter(); wsRenderGrid(); };
+}
+function wsCardHtml(id){
+  const ws=state.ws, d=ws.digests[id]||{}, e=ws.catalog.maps[id], m=d.meta||{}, x=d.metrics||{};
+  const eff=x.flowEff!=null?Math.round(x.flowEff*100)+"%":"—";
+  const bn=x.bottleneck?esc(x.bottleneck.step):"—";
+  const chips=[];
+  const st=m.status||"draft"; chips.push(`<span class="fc-chip status-${st}">${st}</span>`);
+  if(m.area) chips.push(`<span class="fc-chip">${esc(m.area)}</span>`);
+  if(m.team) chips.push(`<span class="fc-chip">${esc(m.team)}</span>`);
+  if(m.owner) chips.push(`<span class="fc-chip">${esc(m.owner)}</span>`);
+  if(m.importedFrom && !m.reviewedAt) chips.push(`<span class="fc-chip ai" title="Imported by AI conversion and not yet reviewed by a person — treat as a draft">AI import · unreviewed</span>`);
+  return `<div class="flowcard" data-mid="${esc(id)}">
+    <div class="fc-name">${esc(d.title||e.title||"Untitled")}</div>
+    <div class="fc-chips">${chips.join("")}</div>
+    <div class="fc-stat"><span class="fc-eff">${eff}</span> flow efficiency</div>
+    <div class="fc-sub">${x.steps!=null?x.steps+" steps":""}${x.queues?` · ${x.queues} queues`:""} · bottleneck: ${bn}</div>
+    <div class="fc-actions">
+      <button class="open" data-act="open">Open ▶</button>
+      <button data-act="meta">Details</button>
+      <button data-act="dup">Duplicate</button>
+      <button class="del" data-act="del">Delete</button>
+    </div></div>`;
+}
+function wsRenderGrid(){
+  const ws=state.ws, grid=$("#homeGrid");
+  const ids=wsFiltered(), total=Object.keys(ws.catalog.maps).length;
+  const cnt=$("#wsCount"); if(cnt) cnt.textContent=`${ids.length} of ${total} map${total===1?"":"s"}`;
+  if(!total){ grid.innerHTML='<div class="home-empty">No flows in this folder yet — click <b>+ New flow</b>, use <b>Import…</b>, or drop <code>*.flow.json</code> files in and they\'ll appear.</div>'; return; }
+  if(!ids.length){ grid.innerHTML='<div class="home-empty">Nothing matches that search / filter.</div>'; return; }
+  grid.innerHTML=ids.map(wsCardHtml).join("");
+}
+function wsRenderBanner(){
+  const b=$("#wsBanner"), n=state.ws?Object.keys(state.library.flows).length:0;
+  if(!n){ b.style.display="none"; b.innerHTML=""; return; }
+  b.style.display="flex";
+  b.innerHTML=`<span>📦 ${n} flow${n===1?"":"s"} still live only in this browser.</span>
+    <button class="btn" id="wsMigrate">Move ${n===1?"it":"them"} into the workspace</button>`;
+  b.querySelector("#wsMigrate").onclick=wsMigrateLocal;
+}
+
+/* ---- map details panel: name + governance meta; org schema.json drives options + custom fields ---- */
+let _metaCtx=null;   // {kind:"ws"|"local", id}
+const META_STATUS=["draft","active","under-review","retired"];
+function schemaFields(){ const s=state.ws&&state.ws.schema; return (s&&Array.isArray(s.fields))?s.fields:[]; }
+function showMetaPanel(ctx){
+  let model, sub;
+  if(ctx.kind==="ws"){ const d=state.ws.digests[ctx.id]; if(!d) return;
+    model={name:d.title, meta:clone(d.meta||{})}; sub=state.ws.catalog.maps[ctx.id].path; }
+  else { const f=state.library.flows[ctx.id]; if(!f) return;
+    migratePlatform(f.model); model={name:f.name, meta:clone(f.model.meta)}; sub="saved in this browser"; }
+  _metaCtx=ctx;
+  const meta=Object.assign(defaultMeta(), model.meta);
+  const fld=(id,label,inner)=>`<div class="meta-f ${id==="name"||id==="tags"?"full":""}"><label>${esc(label)}</label>${inner}</div>`;
+  const optionsFor=id=>{ const f=schemaFields().find(x=>x.id===id); return f&&Array.isArray(f.options)?f.options:null; };
+  const coreInput=(id,val)=>{ const opts=optionsFor(id);
+    if(opts){ const all=[...new Set([...(val?[val]:[]),...opts])];
+      return `<select data-meta="${id}"><option value="">—</option>${all.map(o=>`<option${o===val?" selected":""}>${esc(o)}</option>`).join("")}</select>`; }
+    return `<input data-meta="${id}" value="${esc(val||"")}" placeholder="—"/>`; };
+  const customs=schemaFields().filter(f=>!["owner","area","team","status","tags"].includes(f.id)).map(f=>{
+    const val=(meta.custom||{})[f.id]||"";
+    const inner=Array.isArray(f.options)
+      ? `<select data-metacustom="${esc(f.id)}"><option value="">—</option>${f.options.map(o=>`<option${o===val?" selected":""}>${esc(o)}</option>`).join("")}</select>`
+      : `<input data-metacustom="${esc(f.id)}" value="${esc(val)}" placeholder="—"/>`;
+    return fld(f.id,f.label||f.id,inner); }).join("");
+  const ai=meta.importedFrom?`<div class="meta-ai"><span>🤖 Imported ${meta.importedFrom.type==="ai-doc"?"by AI conversion":"from "+esc(meta.importedFrom.type)}${meta.importedFrom.date?" · "+esc(meta.importedFrom.date):""}${meta.importedFrom.fidelity?" · "+esc(String(meta.importedFrom.fidelity).toLowerCase()):""}.${meta.reviewedAt?" Reviewed "+esc(String(meta.reviewedAt).slice(0,10))+".":" Not yet reviewed."}</span>${meta.reviewedAt?"":'<button class="btn" id="metaReviewed">Mark reviewed</button>'}</div>`:"";
+  $("#metaTitle").textContent="Map details";
+  $("#metaBody").innerHTML=`
+    <div class="meta-grid">
+      ${fld("name","Name",`<input data-meta="name" value="${esc(model.name||"")}"/>`)}
+      ${fld("owner","Owner",coreInput("owner",meta.owner))}
+      ${fld("area","Area",coreInput("area",meta.area))}
+      ${fld("team","Team",coreInput("team",meta.team))}
+      ${fld("status","Status",`<select data-meta="status">${META_STATUS.map(s=>`<option${s===(meta.status||"draft")?" selected":""}>${s}</option>`).join("")}</select>`)}
+      ${fld("reviewCadenceDays","Review every (days)",`<input data-meta="reviewCadenceDays" type="number" min="0" value="${meta.reviewCadenceDays!=null?esc(String(meta.reviewCadenceDays)):""}" placeholder="—"/>`)}
+      ${fld("tags","Tags (comma-separated)",`<input data-meta="tags" value="${esc((meta.tags||[]).join(", "))}"/>`)}
+      ${customs}
+    </div>${ai}
+    <div class="meta-note">${esc(sub)}${meta.reviewedAt?` · last reviewed ${esc(String(meta.reviewedAt).slice(0,10))}`:""}</div>`;
+  const rv=$("#metaBody").querySelector("#metaReviewed");
+  if(rv) rv.onclick=()=>{ rv.dataset.set="1"; rv.textContent="✓ Will be marked reviewed"; rv.disabled=true; };
+  $("#metaOverlay").classList.add("show");
+}
+async function commitMetaPanel(){
+  const ctx=_metaCtx; if(!ctx) return;
+  const body=$("#metaBody"), get=id=>{ const e=body.querySelector(`[data-meta="${id}"]`); return e?e.value.trim():""; };
+  const apply=model=>{
+    migratePlatform(model);
+    model.name=get("name")||model.name;
+    const meta=model.meta;
+    ["owner","area","team","status"].forEach(k=>{ meta[k]=get(k); });
+    if(!meta.status) meta.status="draft";
+    const rc=get("reviewCadenceDays"); meta.reviewCadenceDays=rc===""?null:Math.max(0,Number(rc)||0);
+    meta.tags=get("tags").split(",").map(s=>s.trim()).filter(Boolean);
+    body.querySelectorAll("[data-metacustom]").forEach(e=>{ const v=e.value.trim();
+      if(v) meta.custom[e.dataset.metacustom]=v; else delete meta.custom[e.dataset.metacustom]; });
+    const rv=body.querySelector("#metaReviewed");
+    if(rv && rv.dataset.set==="1") meta.reviewedAt=new Date().toISOString();
+    return model;
+  };
+  if(ctx.kind==="ws"){
+    const ws=state.ws, e=ws.catalog.maps[ctx.id]; if(!e) return;
+    try{
+      if(ws.open && ws.open.mapId===ctx.id && state.model){   // map is open in the editor — edit live, saves flow through
+        apply(state.model); scheduleSave();
+      } else {
+        const {text,rev}=await ws.adapter.read(e.path);
+        const model=apply(migratePlatform(JSON.parse(text)));
+        const nrev=await ws.adapter.write(e.path, JSON.stringify(model,null,2), rev).catch(async err=>{
+          if(err.code==="REV_MISMATCH") return ws.adapter.write(e.path, JSON.stringify(model,null,2)); throw err; });
+        const digest=buildDigest(model);
+        ws.catalog.maps[model.mapId]={path:e.path,rev:nrev,title:digest.title,savedAt:digest.savedAt};
+        ws.digests[model.mapId]=digest;
+        await wsWriteDigest(digest,nrev); await wsWriteCatalog(); wsBuildIndex();
+      }
+    }catch(err){ console.warn(err); toast("Couldn't save details"); return; }
+  } else {
+    const f=state.library.flows[ctx.id]; if(!f) return;
+    apply(f.model); f.name=f.model.name; f.updatedAt=Date.now();
+    if(state.currentId===ctx.id && state.model){ apply(state.model); state.model.name=f.name; }
+    saveLibrary();
+  }
+  $("#metaOverlay").classList.remove("show"); _metaCtx=null;
+  if(state.mode==="home") renderHome(); else render();
+  toast("Details saved");
+}
+
+/* ---- workspace settings: folder controls + org vocabulary editor ---- */
+function showWsModal(){
+  const ws=state.ws; if(!ws) return;
+  const n=Object.keys(ws.catalog.maps).length;
+  const rows=Object.keys(METRICS_SPEC.metrics).map(id=>{ const m=METRICS_SPEC.metrics[id];
+    return `<div class="vocab-fb" title="${esc(m.d)}">${esc(m.l)}${m.u?` <small>(${esc(m.u)})</small>`:""}</div>
+      <input data-vocab="${id}" value="${esc((state.vocab||{})[id]||"")}" placeholder="${esc(m.l)}"/>`; }).join("");
+  $("#wsBody").innerHTML=`
+    <div class="ws-row"><b>${esc(ws.dirName)}</b><span class="mut">· ${n} map${n===1?"":"s"} · library lives in the folder — anyone who connects it sees the same maps</span></div>
+    <div class="ws-sec"><h4>Folder</h4><div class="ws-row">
+      <button class="btn" id="wsRefresh">⟳ Refresh from folder</button>
+      <button class="btn" id="wsPick">Connect a different folder…</button>
+      <button class="btn" id="wsDisc">Disconnect</button></div>
+      <div class="meta-note">${state.ws.schema?`Org metadata schema loaded (.flowbuilder/schema.json — ${schemaFields().length} field${schemaFields().length===1?"":"s"}).`:"No .flowbuilder/schema.json — the details panel shows the core fields; add one to define org fields and dropdown options."}</div></div>
+    <div class="ws-sec"><h4>Vocabulary — your organisation's words for the standard metrics</h4>
+      <div class="meta-note" style="margin:0 0 6px">Leave a box empty to keep the Flow Builder term. Org terms appear everywhere labels render — cards, analysis, exports, the metrics explainer. Files always store the standard ids, so renaming is safe.</div>
+      <div class="vocab-table"><div class="vh">Flow Builder standard</div><div class="vh">Your term</div>${rows}</div>
+      <div class="modal-actions"><button class="btn primary" id="vocabSave">Save vocabulary</button></div></div>`;
+  $("#wsBody").querySelector("#wsRefresh").onclick=()=>{ wsReconcile(); toast("Checking the folder…"); };
+  $("#wsBody").querySelector("#wsDisc").onclick=wsDisconnect;
+  $("#wsBody").querySelector("#wsPick").onclick=async()=>{
+    try{ const dir=await window.showDirectoryPicker({mode:"readwrite"});
+      $("#wsOverlay").classList.remove("show"); await wsConnect(dir); }catch(e){} };
+  $("#wsBody").querySelector("#vocabSave").onclick=async()=>{
+    const terms={};
+    $("#wsBody").querySelectorAll("[data-vocab]").forEach(i=>{ const v=i.value.trim();
+      if(v && v!==METRICS_SPEC.metrics[i.dataset.vocab].l) terms[i.dataset.vocab]=v; });
+    const doc={version:1, terms};
+    try{ await ws.adapter.write(".flowbuilder/vocabulary.json", JSON.stringify(doc,null,2)); }
+    catch(e){ toast("Couldn't write vocabulary.json"); return; }
+    ws.vocabDoc=doc; state.vocab=Object.keys(terms).length?terms:null;
+    $("#wsOverlay").classList.remove("show");
+    if(state.mode==="home") renderHome(); else render();
+    toast(Object.keys(terms).length?"Vocabulary saved — org terms now show everywhere":"Vocabulary reset to Flow Builder standard");
+  };
+  $("#wsOverlay").classList.add("show");
+}
+
 /* ---------- flow CRUD ---------- */
 function openFlow(id, mode){
   if(typeof stopSim==="function"&&state.simming) stopSim();   // never carry a sim across flows
   const f=state.library.flows[id]; if(!f) return;
+  if(state.ws) state.ws.open=null;   // a browser-local flow is open — saves go to localStorage, not a file
   state.currentId=id; state.library.lastOpenedId=id; saveLibrary();
   loadModel(clone(f.model));   // imported stats (model.data) are hydrated inside loadModel
   setMode(mode||"build");
@@ -1896,8 +2479,21 @@ function updateChrome(){
   document.body.classList.toggle("viewer", state.viewer);
 }
 
-/* ---------- Home gallery ---------- */
+/* ---------- Home gallery — folder-backed Workspace when connected, localStorage view otherwise ---------- */
 function renderHome(){
+  const ws=state.ws, chip=$("#wsChip");
+  $("#homeTitle").textContent = ws ? "Workspace" : "My Flows";
+  chip.style.display = ws ? "inline-flex" : "none";
+  if(ws) chip.innerHTML=`⛁ <b>${esc(ws.dirName)}</b>`;
+  $("#exportLib").style.display = ws ? "none" : "";
+  $("#wsSettingsBtn").style.display = ws ? "" : "none";
+  const cbtn=$("#wsConnect");
+  const supported = typeof window.showDirectoryPicker==="function";
+  cbtn.style.display = (!ws && (supported || state.wsPending)) ? "" : "none";
+  cbtn.textContent = state.wsPending ? `⟳ Reconnect “${state.wsPending.name||"workspace"}”` : "⛁ Connect folder";
+  wsRenderBanner();
+  if(ws){ wsRenderFilter(); wsRenderGrid(); return; }
+  $("#wsFilter").style.display="none";
   const grid=$("#homeGrid");
   const flows=Object.values(state.library.flows).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
   if(!flows.length){ grid.innerHTML='<div class="home-empty">No flows yet — click <b>+ New flow</b> to begin.</div>'; return; }
@@ -1905,12 +2501,15 @@ function renderHome(){
     const r=rollupFor(f.model);
     const eff=r.eff!=null?Math.round(r.eff*100)+"%":"—";
     const bn=(r.flag&&r.flag.node)?esc(r.flag.node.label):"—";
+    const meta=(f.model&&f.model.meta)||{};
+    const ai=(meta.importedFrom && !meta.reviewedAt)?'<div class="fc-chips"><span class="fc-chip ai" title="Imported by AI conversion and not yet reviewed by a person — treat as a draft">AI import · unreviewed</span></div>':"";
     return `<div class="flowcard" data-id="${f.id}">
-      <div class="fc-name">${esc(f.name||"Untitled")}</div>
+      <div class="fc-name">${esc(f.name||"Untitled")}</div>${ai}
       <div class="fc-stat"><span class="fc-eff">${eff}</span> flow efficiency</div>
       <div class="fc-sub">${(f.model.nodes||[]).length} nodes · bottleneck: ${bn}</div>
       <div class="fc-actions">
         <button class="open" data-act="open">Open ▶</button>
+        <button data-act="meta">Details</button>
         <button data-act="dup">Duplicate</button>
         <button data-act="rename">Rename</button>
         <button data-act="export">Export</button>
@@ -2067,10 +2666,11 @@ function showMetricsModal(){
   const S=METRICS_SPEC;
   const catBlock=c=>{ const C=S.categories[c];
     const rows=Object.keys(S.metrics).filter(id=>S.metrics[id].c===c).map(id=>{ const m=S.metrics[id];
-      return `<div class="mx-m"><b>${esc(m.l)}</b>${m.u?`<span class="u">${esc(m.u)}</span>`:""} <span class="d">— ${esc(m.d)}</span></div>`; }).join("");
+      const fb = ML(id)!==m.l ? ` <span class="u" title="Your organisation's term — the Flow Builder standard name is shown after it">FB: ${esc(m.l)}</span>` : "";
+      return `<div class="mx-m"><b>${esc(ML(id))}</b>${m.u?`<span class="u">${esc(m.u)}</span>`:""}${fb} <span class="d">— ${esc(m.d)}</span></div>`; }).join("");
     return `<div class="mx-cat" style="--cat:var(--cat-${c})"><h4><svg><use href="#${C.icon}"/></svg>${esc(C.label)}</h4><div class="tag">${esc(C.tagline)}</div>${rows}</div>`; };
   const nodeHtml=id=>{ const m=S.metrics[id];
-    return `<div class="mx-node${m?"":" input"}" data-mxn="${id}"${m?` style="--cat:var(--cat-${m.c})"`:""} title="${esc(m?m.d:"")}">${esc(m?m.l:S.inputs[id].l)}</div>`; };
+    return `<div class="mx-node${m?"":" input"}" data-mxn="${id}"${m?` style="--cat:var(--cat-${m.c})"`:""} title="${esc(m?m.d:"")}">${esc(m?ML(id):S.inputs[id].l)}</div>`; };
   const web=`<div class="mx-web" id="mxWeb"><svg class="wires"></svg>${MX_COLS.map(col=>
     `<div class="mx-col"><div class="mx-colt">${col.t}</div>${col.ids.map(nodeHtml).join("")}</div>`).join("")}</div>`;
   const rules=S.rels.map((r,i)=>`<div class="mx-rule" data-mxr="${i}" style="--cat:var(--cat-${CAT_OF(r.t)})">
@@ -5509,7 +6109,9 @@ function buildSimHud(){
    WIRING
    ============================================================ */
 function setMode(m){ state.mode=m; state.selected=null; cancelLink(true); if(state.tool) setTool(null); render(); }   // m: "home" | "build"
-function goHome(){ if(state.currentId) scheduleSave(); state.mode="home"; resetThemeRoot(); updateChrome(); renderHome(); }
+function goHome(){ if(state.currentId||(state.ws&&state.ws.open)) scheduleSave();
+  state.mode="home"; resetThemeRoot(); updateChrome(); renderHome();
+  if(state.ws) wsReconcile(); }   // returning to the gallery re-checks the folder in the background
 
 $("#flowsBtn").onclick=goHome;
 $("#brandHome").onclick=()=>{ if(!state.viewer) goHome(); };
@@ -5579,23 +6181,34 @@ $("#copyPromptBtn").onclick=()=>{ const txt=assembleConvertPrompt();
   else fallbackCopy(txt,done); };
 function fallbackCopy(txt,done){ const ta=document.createElement("textarea"); ta.value=txt; ta.style.position="fixed"; ta.style.opacity="0";
   document.body.appendChild(ta); ta.select(); try{ document.execCommand("copy"); done(); }catch(e){ toast("Copy failed — select the prompt manually"); } document.body.removeChild(ta); }
-let convertNewId=null;
-$("#convertCreate").onclick=()=>{
+let convertNewId=null;   // {kind:"local"|"ws", id} after a successful conversion
+$("#convertCreate").onclick=async()=>{
   const err=$("#convertErr"), raw=$("#convertIn").value;
   err.style.display="none";
-  if(convertNewId){ $("#convertOverlay").classList.remove("show"); openFlow(convertNewId); return; }   // "Open flow" state
+  if(convertNewId){ $("#convertOverlay").classList.remove("show");   // "Open flow" state
+    convertNewId.kind==="ws" ? openWsMap(convertNewId.id) : openFlow(convertNewId.id); return; }
   if(!raw.trim()){ err.textContent="Paste the AI's answer first."; err.style.display="block"; return; }
   let model;
   try{ model=validateImportModel(extractModelFromText(raw)); }
   catch(ex){ err.textContent=(ex&&ex.message)||"Couldn't read that as a flow."; err.style.display="block"; return; }
-  const id=uid("flow_");
-  state.library.flows[id]={id,name:model.name,model,updatedAt:Date.now()};
-  saveLibrary(); renderHome();
-  convertNewId=id;
+  // Tier-1 provenance: AI-converted maps enter the estate as visible drafts, not silent truth
+  migratePlatform(model);
+  model.meta.importedFrom={type:"ai-doc", fidelity:convertFidelity, date:new Date().toISOString().slice(0,10)};
+  model.meta.status="draft";
+  if(state.ws){
+    try{ const res=await wsAddModel(model); await wsWriteCatalog(); wsBuildIndex();
+      if(state.mode==="home") renderHome(); convertNewId={kind:"ws",id:res.mapId}; }
+    catch(e){ err.textContent="Couldn't write the flow into the workspace folder."; err.style.display="block"; return; }
+  } else {
+    const id=uid("flow_");
+    state.library.flows[id]={id,name:model.name,model,updatedAt:Date.now()};
+    saveLibrary(); renderHome();
+    convertNewId={kind:"local",id};
+  }
   const nS=model.nodes.length, nE=model.edges.length;
   const report=extractReportFromText(raw);
   const rp=$("#convertReport");
-  rp.textContent=`✓ Built “${model.name}” — ${nS} step${nS===1?"":"s"}, ${nE} connection${nE===1?"":"s"}.`+(report?`\n\n${report}`:"");
+  rp.textContent=`✓ Built “${model.name}” — ${nS} step${nS===1?"":"s"}, ${nE} connection${nE===1?"":"s"}. Flagged as an AI import until someone marks it reviewed (Details).`+(report?`\n\n${report}`:"");
   rp.style.display="block";
   $("#convertCreate").innerHTML='<svg class="t-ic"><use href="#ic-flow"/></svg>Open flow';
 };
@@ -5669,21 +6282,48 @@ $("#exportHtml").onclick=()=>{
   toast("Read-only copy created — share it with the team");
 };
 
-/* home controls */
-$("#newFlow").onclick=newFlow;
+/* home controls — every action forks on whether a workspace folder is connected */
+$("#newFlow").onclick=()=>{ state.ws ? wsNewFlow() : newFlow(); };
 $("#exportLib").onclick=()=>download("flow-builder-library.json", JSON.stringify(state.library,null,2),"application/json");
 $("#importFlow").onclick=()=>$("#fileImport").click();
 $("#fileImport").onchange=e=>{ const f=e.target.files[0]; if(!f) return; const rd=new FileReader();
-  rd.onload=()=>{ try{ importFlowFromObj(JSON.parse(rd.result)); }catch(err){ toast("Invalid JSON"); } }; rd.readAsText(f); e.target.value=""; };
+  rd.onload=()=>{ try{ const obj=JSON.parse(rd.result); state.ws ? wsImportObj(obj) : importFlowFromObj(obj); }
+    catch(err){ toast("Invalid JSON"); } }; rd.readAsText(f); e.target.value=""; };
 $("#homeGrid").addEventListener("click",ev=>{
-  const card=ev.target.closest(".flowcard"); if(!card) return; const id=card.dataset.id;
+  const card=ev.target.closest(".flowcard"); if(!card) return;
   const act=ev.target.dataset.act;
+  if(state.ws && card.dataset.mid){ const mid=card.dataset.mid;
+    if(act==="open") openWsMap(mid);
+    else if(act==="meta") showMetaPanel({kind:"ws",id:mid});
+    else if(act==="dup") wsDuplicate(mid);
+    else if(act==="del") wsDelete(mid);
+    return; }
+  const id=card.dataset.id;
   if(act==="open") openFlow(id,"build");
+  else if(act==="meta") showMetaPanel({kind:"local",id});
   else if(act==="dup") duplicateFlow(id);
   else if(act==="rename") renameFlow(id);
   else if(act==="export") exportFlow(id);
   else if(act==="del") deleteFlow(id);
 });
+
+/* workspace chrome: connect / reconnect, settings, details modal */
+$("#wsConnect").onclick=async()=>{
+  if(state.wsPending){   // persisted handle from last session — permission re-grant needs this click
+    const dir=state.wsPending;
+    try{ const p=dir.requestPermission ? await dir.requestPermission({mode:"readwrite"}) : "granted";
+      if(p==="granted"){ await wsConnect(dir); return; } }catch(e){}
+    state.wsPending=null; renderHome(); toast("Couldn't reopen the folder — pick it again"); return;
+  }
+  try{ const dir=await window.showDirectoryPicker({mode:"readwrite"}); await wsConnect(dir); }
+  catch(e){ /* picker dismissed */ }
+};
+$("#wsSettingsBtn").onclick=showWsModal;
+$("#wsClose").onclick=()=>$("#wsOverlay").classList.remove("show");
+$("#wsOverlay").onclick=e=>{ if(e.target.id==="wsOverlay") $("#wsOverlay").classList.remove("show"); };
+$("#metaClose").onclick=()=>{ $("#metaOverlay").classList.remove("show"); _metaCtx=null; };
+$("#metaOverlay").onclick=e=>{ if(e.target.id==="metaOverlay"){ $("#metaOverlay").classList.remove("show"); _metaCtx=null; } };
+$("#metaSave").onclick=()=>commitMetaPanel();
 
 /* ============================================================
    BOOT
@@ -5701,6 +6341,7 @@ $("#homeGrid").addEventListener("click",ev=>{
   state.model = cur ? clone(cur.model) : null;
   if(state.model) rebuildSegPer();
   setMode("home");
+  wsResume();   // async: reopen the persisted workspace folder if permission still stands
 })();
 </script>
 </body>
