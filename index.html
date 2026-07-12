@@ -60,8 +60,9 @@
 
   /* chrome visibility by screen */
   body.home #paletteBar, body.home main, body.home #analysis{display:none}
-  body.home #flowTitle,
+  body.home #flowTitle, body.home #detailsBtn,
   body.home .divider, body.home #dataGroup, body.home #shareGroup, body.home #howData{display:none}
+  body.viewer #detailsBtn{display:none}
   #home{display:none}
   body.home #home{display:flex;flex:1 1 auto;min-height:0}
   body.viewer #flowsBtn, body.viewer #paletteBar,
@@ -242,6 +243,12 @@
   #paletteBar button.pb-mini{padding:6px 9px;font-size:12px;gap:5px;opacity:.85}
   #paletteBar button.pb-mini .t-ic{width:13px;height:13px}
   #paletteBar button.pb-mini:hover,#paletteBar button.pb-mini.tool-on{opacity:1}
+  /* segment switcher chips (phase 2) — a quiet pill row beside the lenses */
+  #segChips{display:flex;align-items:center;gap:4px;flex-wrap:wrap}
+  #segChips .segchip{padding:5px 11px;font-size:12px;border-radius:999px;gap:5px;opacity:.85}
+  #segChips .segchip:hover{opacity:1}
+  #segChips .segchip.on{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 18%,var(--panel2));
+    box-shadow:0 0 0 1px var(--accent) inset;opacity:1;font-weight:600}
   #paletteBar .pb-zoom{display:flex;align-items:center;gap:6px;margin-left:8px}
   #paletteBar .pb-zoom button{padding:6px 11px;font-size:15px;font-weight:700;line-height:1;min-width:34px;justify-content:center}
   #paletteBar .pb-zoom span{color:var(--faint);font-size:11px;min-width:40px;text-align:center}
@@ -344,6 +351,19 @@
     color:var(--ink);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit}
   .meta-f input:focus,.meta-f select:focus{border-color:var(--accent);outline:none}
   .meta-note{font-size:12px;color:var(--faint);margin-top:10px}
+  /* segments editor on the details panel (phase 2) */
+  .meta-segsec{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+  .meta-segsec h4{margin:0 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+  .meta-segsec h4 .h4note{text-transform:none;letter-spacing:0;font-weight:500;font-size:11px;color:var(--faint)}
+  .seged-top{display:flex;gap:8px;margin-bottom:8px}
+  .seged-top input{flex:1}
+  .seged-row{display:flex;align-items:center;gap:6px;margin-bottom:6px}
+  .seged-row .se-label{flex:1}
+  .seged-row .se-share{width:64px}
+  .seged-row .se-pct{color:var(--faint);font-size:12px}
+  .seged-row .se-del{background:transparent;border:1px solid var(--line);color:var(--faint);border-radius:7px;
+    padding:4px 8px;cursor:pointer;font-size:11px}
+  .seged-row .se-del:hover{color:var(--nva);border-color:var(--nva)}
   .meta-ai{display:flex;align-items:center;gap:10px;margin-top:12px;padding:9px 12px;border:1px solid var(--warn);
     border-radius:9px;background:rgba(247,184,75,.08);font-size:12.5px}
   .ws-sec{margin-top:18px}
@@ -425,6 +445,16 @@
   .insp-sec2-body .insp-cath:first-child{margin-top:2px}
   .insp-sec2-body>.insp-adv:first-child{border-top:none;padding-top:0}
   .idline{font-size:11px;color:var(--faint);font-family:ui-monospace,Menlo,monospace;word-break:break-all;padding-top:2px}
+  /* per-segment override rows (phase 2) */
+  .segov{border:1px solid var(--line);border-radius:9px;padding:8px 10px;margin-bottom:8px;background:var(--panel2)}
+  .segov-h{display:flex;align-items:baseline;gap:6px;font-size:12.5px;margin-bottom:2px}
+  .segov-h b{color:var(--ink)}
+  .segov-skip{margin-left:auto;display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);cursor:pointer;white-space:nowrap}
+  .segov-skip input{accent-color:var(--accent)}
+  .segov-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 8px;margin-top:6px}
+  .segov-f label{display:block;font-size:10.5px;color:var(--faint);margin-bottom:3px}
+  .segov-f input{width:100%;background:var(--panel);border:1px solid var(--line);color:var(--ink);border-radius:7px;padding:6px 8px;font-size:12.5px}
+  .segov-f input:focus{border-color:var(--accent);outline:none}
   /* swatch / colour rows */
   .swatchrow{display:flex;align-items:center;gap:8px}
   .swatchrow input[type=color]{width:34px;height:30px;padding:0;border:1px solid var(--line);border-radius:7px;background:var(--panel2);cursor:pointer}
@@ -555,6 +585,10 @@
   /* held marquee selection: chosen steps stay lit, the rest dim until you click empty canvas */
   body.has-selection:not(.anno-grouping) .node[data-id]{opacity:.5;transition:opacity .08s}
   body.has-selection:not(.anno-grouping) .node[data-id].multi{opacity:1}
+  /* segment view: steps/edges off the active segment's route step back (same grammar as lens dimming) */
+  .node.seg-off{opacity:.35;transition:opacity .12s}
+  .edge.seg-off,.eband.seg-off{opacity:.3}
+  #edgeLabels text.seg-off{opacity:.3}
   /* ---- canvas cursors (unified cursor tool) ---- */
   body.tool-cursor #stage{cursor:default}
   body.tool-cursor #stage .node, body.tool-cursor #stage .node *{cursor:move}
@@ -840,6 +874,7 @@
   <div class="brand" id="brandHome">Flow <span>Builder</span></div>
   <button class="btn" id="flowsBtn">≣ Flows</button>
   <input type="text" id="flowTitle" placeholder="Untitled flow" title="Rename this flow" spellcheck="false" />
+  <button class="btn iconbtn" id="detailsBtn" title="Map details — owner, status, tags, segments">☰</button>
   <div class="spacer"></div>
   <div class="hdr-group" id="dataGroup">
     <span class="hdr-label">Data</span>
@@ -1016,6 +1051,10 @@
   <button data-cardview="value" title="Value lens — classify each step as value / necessary / waste"><svg class="t-ic"><use href="#ic-val-value"/></svg>Value</button>
   <button data-cardview="metrics" title="Metrics lens — show the speed / capacity / quality numbers on each card"><svg class="t-ic"><use href="#ic-metrics"/></svg>Metrics</button>
   <button data-cardview="gaps" title="Gaps lens — highlight bottlenecks and where the flow stalls"><svg class="t-ic"><use href="#ic-flag"/></svg>Gaps</button>
+  <!-- segment switcher (org platform — phase 2): shown only when the map defines segments -->
+  <span class="pb-sep" id="segSep" style="display:none"></span>
+  <span class="pb-label" id="segDimLabel" style="display:none">Segments</span>
+  <div id="segChips" style="display:none"></div>
   <span class="pb-sep"></span>
   <span class="pb-label">Layout</span>
   <div class="themewrap">
@@ -1258,7 +1297,8 @@ SOURCE MATERIAL (label each source):
      nomenclature + METRICS_SPEC · state · helpers · PLATFORM FOUNDATIONS
      (mapId/meta/migrate) · LIBRARY (localStorage) · digest builder ·
      WORKSPACE (folder adapter, catalog/reconcile, search, meta/vocab UI) ·
-     flow CRUD + Convert docs · DATA BINDING · metrics engine (rollup) ·
+     flow CRUD + Convert docs · DIMENSION ENGINE (segments) · DATA BINDING ·
+     metrics engine (rollup) ·
      RENDER (home, stats, canvas, ribbon, inspector) · theming · exports ·
      simulate-a-day · WIRING · BOOT
    ============================================================ */
@@ -1515,7 +1555,7 @@ function rollupFor(model){
    The compact cross-map extract of one flow: everything the workspace layer (search,
    dashboards, links, roll-ups) reads about a map, in a few KB, so the full file only
    ever opens to edit it. Derived purely from the model — writing it twice is harmless. */
-const DIGEST_VERSION = 2;   // v2: queue labels join text.steps (searchable)
+const DIGEST_VERSION = 3;   // v3: metricsBySegment + segments block (phase 2) · v2: queue labels join text.steps
 function buildDigest(model){
   migratePlatform(model);
   const sm=state.model, sd=state.data, ss=state.segment, sp=state.period;
@@ -1537,6 +1577,24 @@ function buildDigest(model){
   const cap=(r&&r.cap)||{}, qual=(r&&r.qual)||{};
   const links=[...new Set((model.nodes||[]).filter(n=>n.linksTo && typeof n.linksTo.mapId==="string")
                                            .map(n=>n.linksTo.mapId))];
+  /* segmented map: headline speed/quality reflect the all-cases blend; each segment also gets
+     its own slice (same headline fields, keyed by segment id) for cross-map dashboard compares */
+  const bl=r&&r.blend, segs=segList(model);
+  const w=segs.length?segWeights(segs):{};
+  const bySeg = (r&&r.bySeg) ? Object.fromEntries(segs.filter(s=>r.bySeg[s.id]).map(s=>{
+    const sr=r.bySeg[s.id], sc=sr.cap||{}, sq=sr.qual||{};
+    return [s.id, {
+      label: s.label||s.id, share: +s.share>0?+s.share:null,
+      leadTime:  sr.turnaround>0 ? sr.turnaround : null,
+      touchTime: sr.touch>0      ? sr.touch      : null,
+      waitTime:  sr.wait>0       ? sr.wait       : null,
+      flowEff:   sr.eff!=null    ? sr.eff        : null,
+      demandPerDay:   sc.demand!=null ? sc.demand*w[s.id] : null,   // this segment's slice of demand
+      capacityPerDay: sc.flowCap!=null ? sc.flowCap : null,          // the ceiling if all cases looked like this
+      rftPct: sq.rft!=null ? sq.rft*100 : null,
+      lostToRework: sc.lostToRework!=null ? sc.lostToRework : null,
+      bottleneck: sr.flag ? { step: sr.flag.node.label||"", why: sr.flag.kind } : null
+    }]; })) : null;
   return {
     digestVersion: DIGEST_VERSION,
     mapId: model.mapId, title: model.name||"Untitled",
@@ -1546,18 +1604,19 @@ function buildDigest(model){
       steps: stepN, queues: queueN,
       people: people.size||null, fte: fte>0?fte:null,
       timeUnit: (model.settings&&model.settings.timeUnit)||"hrs",   // times below are in this unit
-      leadTime:  r&&r.turnaround>0 ? r.turnaround : null,
-      touchTime: r&&r.touch>0      ? r.touch      : null,
-      waitTime:  r&&r.wait>0       ? r.wait       : null,
-      flowEff:   r&&r.eff!=null    ? r.eff        : null,
+      leadTime:  bl ? (bl.turnaround>0?bl.turnaround:null) : (r&&r.turnaround>0 ? r.turnaround : null),
+      touchTime: bl ? (bl.touch>0?bl.touch:null)           : (r&&r.touch>0      ? r.touch      : null),
+      waitTime:  bl ? (bl.wait>0?bl.wait:null)             : (r&&r.wait>0       ? r.wait       : null),
+      flowEff:   bl ? bl.eff                               : (r&&r.eff!=null    ? r.eff        : null),
       demandPerDay:   cap.demand  !=null ? cap.demand  : null,
       capacityPerDay: cap.flowCap !=null ? cap.flowCap : null,
-      rftPct: qual.rft!=null ? qual.rft*100 : null,
+      rftPct: bl&&bl.rft!=null ? bl.rft*100 : (qual.rft!=null ? qual.rft*100 : null),
       lostToRework: cap.lostToRework!=null ? cap.lostToRework : null,
       bottleneck: r&&r.flag ? { step: r.flag.node.label||"", why: r.flag.kind } : null,
       confidence: { measured, modelled }
     },
-    metricsBySegment: null,   // reserved — per-segment slices land with the dimension engine (R1)
+    metricsBySegment: bySeg,
+    segments: segs.length ? { dimension:(model.segments&&model.segments.dimension)||"", list: clone(segs) } : null,
     links: { out: links },
     text: {   // the searchable substance of the map, for the workspace full-text index
       steps: stepLabels,
@@ -1947,9 +2006,11 @@ function schemaFields(){ const s=state.ws&&state.ws.schema; return (s&&Array.isA
 function showMetaPanel(ctx){
   let model, sub;
   if(ctx.kind==="ws"){ const d=state.ws.digests[ctx.id]; if(!d) return;
-    model={name:d.title, meta:clone(d.meta||{})}; sub=state.ws.catalog.maps[ctx.id].path; }
+    const open = state.ws.open && state.ws.open.mapId===ctx.id && state.model;
+    model={name:d.title, meta:clone(d.meta||{}), segments: open ? clone(state.model.segments||null) : clone(d.segments||null)};
+    sub=state.ws.catalog.maps[ctx.id].path; }
   else { const f=state.library.flows[ctx.id]; if(!f) return;
-    migratePlatform(f.model); model={name:f.name, meta:clone(f.model.meta)}; sub="saved in this browser"; }
+    migratePlatform(f.model); model={name:f.name, meta:clone(f.model.meta), segments:clone(f.model.segments||null)}; sub="saved in this browser"; }
   _metaCtx=ctx;
   const meta=Object.assign(defaultMeta(), model.meta);
   const fld=(id,label,inner)=>`<div class="meta-f ${id==="name"||id==="tags"?"full":""}"><label>${esc(label)}</label>${inner}</div>`;
@@ -1965,6 +2026,21 @@ function showMetaPanel(ctx){
       : `<input data-metacustom="${esc(f.id)}" value="${esc(val)}" placeholder="—"/>`;
     return fld(f.id,f.label||f.id,inner); }).join("");
   const ai=meta.importedFrom?`<div class="meta-ai"><span>🤖 Imported ${meta.importedFrom.type==="ai-doc"?"by AI conversion":"from "+esc(meta.importedFrom.type)}${meta.importedFrom.date?" · "+esc(meta.importedFrom.date):""}${meta.importedFrom.fidelity?" · "+esc(String(meta.importedFrom.fidelity).toLowerCase()):""}.${meta.reviewedAt?" Reviewed "+esc(String(meta.reviewedAt).slice(0,10))+".":" Not yet reviewed."}</span>${meta.reviewedAt?"":'<button class="btn" id="metaReviewed">Mark reviewed</button>'}</div>`:"";
+  /* segments editor (phase 2): dimension name + members with demand shares. An org schema.json
+     may declare shared dimensions so segment labels stay comparable across maps. */
+  const segs=model.segments, segRow=(s)=>`<div class="seged-row" data-segid="${esc(s.id||"")}">
+      <input class="se-label" value="${esc(s.label||"")}" placeholder="e.g. Simple"/>
+      <input class="se-share" type="number" min="0" max="100" value="${+s.share>0?esc(String(Math.round(s.share*1000)/10)):""}" placeholder="—"/><span class="se-pct">%</span>
+      <button class="se-del" title="Remove this segment">✕</button></div>`;
+  const orgDims=(state.ws&&state.ws.schema&&Array.isArray(state.ws.schema.dimensions))?state.ws.schema.dimensions:[];
+  const dimSel=orgDims.length?`<select id="segEdPreset"><option value="">Use an org dimension…</option>
+      ${orgDims.map((d,i)=>`<option value="${i}">${esc(d.label||d.name||d.id)}</option>`).join("")}</select>`:"";
+  const segEd=`<div class="meta-segsec"><h4>Segments <span class="h4note">· per-case-type stats</span></h4>
+    <div class="seged-top"><input id="segEdDim" value="${esc((segs&&segs.dimension)||"")}" placeholder="Dimension name — e.g. Case type"/>${dimSel}</div>
+    <div id="segEdRows">${(segs&&Array.isArray(segs.list)?segs.list:[]).map(segRow).join("")}</div>
+    <button class="btn" id="segEdAdd">+ Add segment</button>
+    <div class="meta-note" style="margin-top:6px">Share = the slice of incoming cases. The "All" view blends segment numbers by share; each step can carry per-segment values (or be skipped) in its drawer.</div>
+  </div>`;
   $("#metaTitle").textContent="Map details";
   $("#metaBody").innerHTML=`
     <div class="meta-grid">
@@ -1976,10 +2052,21 @@ function showMetaPanel(ctx){
       ${fld("reviewCadenceDays","Review every (days)",`<input data-meta="reviewCadenceDays" type="number" min="0" value="${meta.reviewCadenceDays!=null?esc(String(meta.reviewCadenceDays)):""}" placeholder="—"/>`)}
       ${fld("tags","Tags (comma-separated)",`<input data-meta="tags" value="${esc((meta.tags||[]).join(", "))}"/>`)}
       ${customs}
-    </div>${ai}
+    </div>${ai}${segEd}
     <div class="meta-note">${esc(sub)}${meta.reviewedAt?` · last reviewed ${esc(String(meta.reviewedAt).slice(0,10))}`:""}</div>`;
   const rv=$("#metaBody").querySelector("#metaReviewed");
   if(rv) rv.onclick=()=>{ rv.dataset.set="1"; rv.textContent="✓ Will be marked reviewed"; rv.disabled=true; };
+  const body=$("#metaBody");
+  const wireSegRows=()=>body.querySelectorAll("#segEdRows .se-del").forEach(b=>b.onclick=()=>{ b.closest(".seged-row").remove(); });
+  wireSegRows();
+  body.querySelector("#segEdAdd").onclick=()=>{
+    body.querySelector("#segEdRows").insertAdjacentHTML("beforeend",segRow({id:"",label:"",share:null})); wireSegRows(); };
+  const pre=body.querySelector("#segEdPreset");
+  if(pre) pre.onchange=()=>{ const d=orgDims[+pre.value]; if(!d) return;
+    body.querySelector("#segEdDim").value=d.label||d.name||d.id||"";
+    const members=Array.isArray(d.list)?d.list:(Array.isArray(d.members)?d.members:[]);
+    body.querySelector("#segEdRows").innerHTML=members.map(mm=>segRow({id:mm.id||"",label:mm.label||mm.id||"",share:+mm.share>0?+mm.share:null})).join("");
+    wireSegRows(); pre.value=""; };
   $("#metaOverlay").classList.add("show");
 }
 async function commitMetaPanel(){
@@ -1997,6 +2084,17 @@ async function commitMetaPanel(){
       if(v) meta.custom[e.dataset.metacustom]=v; else delete meta.custom[e.dataset.metacustom]; });
     const rv=body.querySelector("#metaReviewed");
     if(rv && rv.dataset.set==="1") meta.reviewedAt=new Date().toISOString();
+    /* segments editor → model.segments (ids survive edits so per-node overrides keep pointing home) */
+    const rows=[...body.querySelectorAll("#segEdRows .seged-row")].map(row=>{
+      const label=row.querySelector(".se-label").value.trim();
+      const pct=row.querySelector(".se-share").value.trim();
+      return { id:row.dataset.segid||uid("seg_"), label,
+               share: pct===""?null:Math.max(0,(parseFloat(pct)||0))/100 };
+    }).filter(s=>s.label);
+    if(rows.length){
+      const dim=(body.querySelector("#segEdDim")||{value:""}).value.trim();
+      model.segments={ dimension:dim||"Segments", list:rows.map(s=>s.share==null?{id:s.id,label:s.label}:s) };
+    } else delete model.segments;
     return model;
   };
   if(ctx.kind==="ws"){
@@ -2224,6 +2322,7 @@ function loadModel(m){
   migrateSubStepsToGroups(m);   // fold legacy meta-steps (children/parentId) into collapsed groups
   migrateComments(m);           // default untyped comments to plain notes, drop dangling anchors
   state.data = Array.isArray(m.data) ? m.data : [];   // imported stats are stored on the model
+  state.segment="ALL";                                // the segment switcher is per-flow view state
   state.selected=null; state.linkingFrom=null;
   state._notesOpen=new Set(); state._notesAnim={}; state._notePick=null; state._editComment=null; state._stepPick=null;   // per-flow transients
   undoStack=[]; redoStack=[]; _undoBase=JSON.stringify(m);   // undo history is per open flow
@@ -2231,12 +2330,99 @@ function loadModel(m){
 }
 
 /* ============================================================
+   DIMENSION ENGINE  (org platform — phase 2)
+   Generic per-node value slicing. A *dimension* (map-level) declares members
+   (segments today; roles reserved for phase 5); a node carries sparse overrides
+   per member under n.<dimKey>[memberId] — absent override → base value.
+   `seg` members also *route*: {skip:true} means that segment bypasses the step.
+   ZERO-REGRESSION RULE: with no segments defined every resolution path below
+   returns the base model untouched, so all numbers stay byte-identical.
+   ============================================================ */
+/* the R2 spec's resolve(node, field, dimKey, memberId): the member's override
+   for one field, or null → caller falls back to the base value */
+function dimResolve(node, field, dimKey, memberId){
+  const d=node && node[dimKey], o=d && d[memberId];
+  const v=o ? o[field] : null;
+  return (v==null || v==="") ? null : v;
+}
+function segList(model){
+  const s=(model||state.model), g=s && s.segments;
+  return (g && Array.isArray(g.list)) ? g.list.filter(x=>x && x.id) : [];
+}
+/* the active segment id, or null in the all-cases view (incl. "no segments defined") */
+function activeSegId(){
+  if(!state.model || state.segment==="ALL") return null;
+  const s=segList().find(x=>x.id===state.segment || x.label===state.segment);
+  return s ? s.id : null;
+}
+function segSkips(node, segId){ const o=node && node.seg && node.seg[segId]; return !!(o && o.skip); }
+/* run fn with a segment (or "ALL") as the active slice, restoring afterwards */
+function withSeg(segId, fn){
+  const ss=state.segment; state.segment=segId;
+  try{ return fn(); } finally { state.segment=ss; }
+}
+/* share-normalized blend weights for the all-cases view (equal split when no shares set) */
+function segWeights(list){
+  const w={}; let tot=0;
+  list.forEach(s=>{ const v=+s.share>0?+s.share:0; w[s.id]=v; tot+=v; });
+  list.forEach(s=>{ w[s.id] = tot>0 ? w[s.id]/tot : 1/list.length; });
+  return w;
+}
+/* the model the metrics engine walks: the real one, or — inside a segment view —
+   a copy with that segment's skipped steps spliced out (their in/out edges joined,
+   branch shares composed so flow math is exact). Never rendered; render() always
+   draws the full map and dims off-route boxes instead. */
+function engineModel(){
+  const m=state.model, sid=activeSegId();
+  if(!sid) return m;
+  const skip=new Set(m.nodes.filter(n=>(n.type==="touch"||n.type==="wait") && segSkips(n,sid)).map(n=>n.id));
+  if(!skip.size) return m;
+  // normalized out-shares per edge, same rules as flowWeights' wOut (blank Split % shares the leftover)
+  const share={}, outs={};
+  m.edges.forEach(e=>(outs[e.from]=outs[e.from]||[]).push(e));
+  for(const id in outs){ const es=outs[id];
+    const explicit=es.filter(e=>e.splitPct!=null);
+    const E=explicit.reduce((a,e)=>a+(+e.splitPct||0),0);
+    const M=es.length-explicit.length;
+    const per=M>0?Math.max(0,100-E)/M:0;
+    const raw=es.map(e=>e.splitPct!=null?(+e.splitPct||0):per);
+    const tot=raw.reduce((a,b)=>a+b,0);
+    es.forEach((e,i)=>share[e.id]= tot>0?raw[i]/tot : 1/es.length); }
+  // sources with an edge into a skipped step get ALL their out-edges made explicit,
+  // so the composed shares re-normalize to exactly the original flow weights
+  const rewrite=new Set(m.edges.filter(e=>!skip.has(e.from)&&skip.has(e.to)).map(e=>e.from));
+  const edges=[], acc={};   // acc: "from|to|sides" → composed share, deduped across parallel splices
+  m.edges.forEach(e=>{
+    if(skip.has(e.from)) return;
+    if(!skip.has(e.to)){
+      edges.push(rewrite.has(e.from) ? Object.assign({},e,{splitPct:share[e.id]*100}) : e);
+      return; }
+    // walk through skipped steps, composing shares until non-skipped targets emerge
+    const stack=[{at:e.to, w:share[e.id]}]; let guard=0;
+    while(stack.length && guard++<500){
+      const {at,w}=stack.pop();
+      (outs[at]||[]).forEach(o=>{ const nw=w*share[o.id]; if(nw<=1e-9) return;
+        if(skip.has(o.to)) stack.push({at:o.to, w:nw});
+        else { const k=e.from+"|"+o.to+"|"+(e.fromSide||"right")+"|"+(o.toSide||"left");
+          if(acc[k]==null){ acc[k]={from:e.from, to:o.to, fromSide:e.fromSide, toSide:o.toSide, w:0}; }
+          acc[k].w+=nw; } }); }
+  });
+  Object.keys(acc).forEach(k=>{ const a=acc[k];
+    edges.push({id:"sx_"+k.replace(/[^a-zA-Z0-9_-]/g,"_"), from:a.from, to:a.to,
+      fromSide:a.fromSide, toSide:a.toSide, splitPct:a.w*100}); });
+  return Object.assign({}, m, { nodes:m.nodes.filter(n=>!skip.has(n.id)), edges });
+}
+
+/* ============================================================
    DATA BINDING  (FlowData: StepID, Segment, Period, TouchTimeAvg, WaitTimeAvg, WIP/Volume)
    ============================================================ */
 function rowsFor(stepId){
+  // a segment chip holds the segment *id*; measured rows may carry the id or the human label
+  const seg=state.segment==="ALL" ? null : (segList().find(s=>s.id===state.segment)||null);
   return state.data.filter(r =>
     String(r.StepID)===String(stepId) &&
-    (state.segment==="ALL" || String(r.Segment)===state.segment) &&
+    (state.segment==="ALL" || String(r.Segment)===state.segment ||
+      (seg && String(r.Segment)===String(seg.label))) &&
     (state.period==="ALL"  || String(r.Period)===state.period));
 }
 function metricFor(node){
@@ -2264,18 +2450,27 @@ function metricFor(node){
     touch=avg("TouchTimeAvg"); wait=avg("WaitTimeAvg"); wip=avg("WIP"); if(wip==null) wip=avg("Volume");
     throughput=avg("Throughput"); capacity=avg("Capacity"); rework=avg("ReworkPct");
   }
-  if(node.type==="touch" && touch==null)      touch      = node.touchTimeManual!=null ? node.touchTimeManual : null;
+  /* segment slice: a per-segment override sits between measured rows and the base
+     manual value (precedence measured > override > base). Null outside a segment view. */
+  const sid=activeSegId();
+  const ov=f=>sid ? dimResolve(node,f,"seg",sid) : null;
+  if(node.type==="touch" && touch==null){ const o=ov("touch");
+    touch = o!=null ? +o : (node.touchTimeManual!=null ? node.touchTimeManual : null); }
   if(node.type==="touch" && throughput==null) throughput = node.throughputManual!=null ? node.throughputManual : null;
   if(node.type==="touch" && capacity==null)   capacity   = node.capacityManual!=null  ? node.capacityManual  : null;
-  if(node.type==="touch" && rework==null)     rework     = node.reworkPct!=null       ? node.reworkPct       : null;
+  if(node.type==="touch" && rework==null){ const o=ov("rework");
+    rework = o!=null ? +o : (node.reworkPct!=null ? node.reworkPct : null); }
   // modeled capacity: availability dictates potential pace — people × hours/day ÷ hands-on hrs per case
   let derivedCap=false;
-  if(node.type==="touch" && capacity==null && node.people!=null && node.people>0){
+  const peopleEff = (()=>{ const o=ov("people"); return o!=null ? +o : node.people; })();
+  if(node.type==="touch" && capacity==null && peopleEff!=null && peopleEff>0){
     const th=touchHours(touch);
-    if(th!=null && th>0){ capacity = node.people*(node.hoursPerDay!=null?node.hoursPerDay:AVAIL_HRS)/th; derivedCap=true; }
+    if(th!=null && th>0){ capacity = peopleEff*(node.hoursPerDay!=null?node.hoursPerDay:AVAIL_HRS)/th; derivedCap=true; }
   }
-  if(node.type==="wait"  && wait==null)  wait  = node.waitTimeManual!=null ? node.waitTimeManual : null;
-  if(node.type==="wait"  && wip==null)   wip   = node.wip!=null ? node.wip : null;
+  if(node.type==="wait"  && wait==null){ const o=ov("wait");
+    wait = o!=null ? +o : (node.waitTimeManual!=null ? node.waitTimeManual : null); }
+  if(node.type==="wait"  && wip==null){ const o=ov("wip");
+    wip = o!=null ? +o : (node.wip!=null ? node.wip : null); }
   // rework eats capacity
   const effCapacity = capacity==null?null:capacity*(1-Math.min(100,Math.max(0,rework||0))/100);
   return {touch, wait, wip, throughput, capacity, effCapacity, rework, derivedCap, hasData};
@@ -2283,7 +2478,7 @@ function metricFor(node){
 
 /* ---------- main-path traversal ---------- */
 function mainPath(){
-  const m=state.model; if(!m) return [];
+  const m=engineModel(); if(!m) return [];
   const start=m.nodes.find(n=>n.type==="start")||m.nodes[0]; if(!start) return [];
   const byId=Object.fromEntries(m.nodes.map(n=>[n.id,n]));
   const out=id=>m.edges.filter(e=>e.from===id);
@@ -2297,7 +2492,7 @@ function mainPath(){
    through each node — driven by edge Split %. Forward branches cap at the branch odds;
    rework loops produce >1 via a converging series. Linear flows give every node 1.0. */
 function flowWeights(){
-  const m=state.model; if(!m||!m.nodes.length) return {visits:{}, order:[], edgeFlow:{}, edgeShare:{}};
+  const m=engineModel(); if(!m||!m.nodes.length) return {visits:{}, order:[], edgeFlow:{}, edgeShare:{}};
   const start=m.nodes.find(n=>n.type==="start")||m.nodes[0]; if(!start) return {visits:{}, order:[], edgeFlow:{}, edgeShare:{}};
   const byId=Object.fromEntries(m.nodes.map(n=>[n.id,n]));
   const edgeFlow={}, edgeShare={};   // per-case traversals + normalized outgoing share, per edge id
@@ -2332,6 +2527,7 @@ function flowWeights(){
 }
 function rollup(){
   const path=mainPath();
+  const em=engineModel();   // segment view: skipped steps spliced out; otherwise state.model itself
   const {visits, order, edgeFlow, edgeShare}=flowWeights();
   const S=state.model.settings||{};
   const demand = S.demand!=null && S.demand!=="" ? +S.demand : null;
@@ -2353,8 +2549,8 @@ function rollup(){
     if(mt.effCapacity!=null){ const del=mt.effCapacity/v; flowCap = flowCap==null?del:Math.min(flowCap,del); }
     if(load!=null && (!busiest || load>busiest.load)) busiest={node:n, load}; });
   /* downstream touch step of a queue (follow the highest-split edges) — for Little's Law waits */
-  const byId=Object.fromEntries(state.model.nodes.map(n=>[n.id,n]));
-  const downTouch=id=>{ let cur=id; for(let i=0;i<10;i++){ const es=state.model.edges.filter(e=>e.from===cur);
+  const byId=Object.fromEntries(em.nodes.map(n=>[n.id,n]));
+  const downTouch=id=>{ let cur=id; for(let i=0;i<10;i++){ const es=em.edges.filter(e=>e.from===cur);
       if(!es.length) return null; es.sort((a,b)=>(b.splitPct||0)-(a.splitPct||0));
       const nx=byId[es[0].to]; if(!nx) return null; if(nx.type==="touch") return nx; cur=nx.id; } return null; };
   order.forEach(n=>{ const v=visits[n.id]||0; if(v<=0 || n.excludeStats) return; const mt=metricFor(n);
@@ -2385,7 +2581,7 @@ function rollup(){
              : (bnMode==="relative" && busiest) ? {kind:"load", node:busiest.node, load:busiest.load} : null;
   /* owner load + quality — leaf steps only (sub-steps inherit the parent's spot on the flow) */
   const owners={}; let lost=0, rft=null, worst=null, rcount=0;
-  state.model.nodes.forEach(n=>{ if(n.type!=="touch" || hasSubs(n)) return;
+  em.nodes.forEach(n=>{ if(n.type!=="touch" || hasSubs(n)) return;
     const par=n.parentId?byId[n.parentId]:null;
     if(n.excludeStats||(par&&par.excludeStats)) return;   // excluded from flow stats (drawer checkbox)
     const mt=metricFor(n);
@@ -2401,15 +2597,38 @@ function rollup(){
     const o=owners[key]||(owners[key]={owner:key, demandHrs:0, staffedHrs:0, steps:0, hasDemand:false, hasStaff:false});
     o.steps++;
     if(th!=null && vol!=null){ o.demandHrs+=th*vol; o.hasDemand=true; }
-    if(n.people!=null && n.people>0){ o.staffedHrs+=n.people*(n.hoursPerDay!=null?n.hoursPerDay:AVAIL_HRS); o.hasStaff=true; } });
+    const ppl=(()=>{ const sd=activeSegId(), sv=sd?dimResolve(n,"people","seg",sd):null; return sv!=null?+sv:n.people; })();
+    if(ppl!=null && ppl>0){ o.staffedHrs+=ppl*(n.hoursPerDay!=null?n.hoursPerDay:AVAIL_HRS); o.hasStaff=true; } });
   const byOwner=Object.values(owners).map(o=>({...o, load:o.hasDemand&&o.hasStaff&&o.staffedHrs>0?o.demandHrs/o.staffedHrs:null}))
     .filter(o=>o.hasDemand||o.hasStaff)
     .sort((a,b)=>(b.load||0)-(a.load||0));
   const cap={demand, flowCap, busiest, byOwner, per, lostToRework:lost>0?lost:null,
              any: demand!=null || flowCap!=null || byOwner.length>0};
   const qual={rft: rcount?rft:null, count:rcount, worst};
-  return {path, flow, touch, wait, turnaround, eff, waits, bottleneck, flag, unclassified, cap, qual, dw,
+  const out={path, flow, touch, wait, turnaround, eff, waits, bottleneck, flag, unclassified, cap, qual, dw,
           visits, edgeFlow, edgeShare, qOut};
+  /* segments (org platform — phase 2): in the all-cases view of a segmented map, also run the
+     engine once per segment (its route + overrides, same semantics throughout) and attach
+     (a) the per-segment rollups and (b) the share-weighted "All cases" blend of the headline
+     speed/quality numbers. Base fields above stay whole-flow — the ribbon, capacity web and
+     the unified bottleneck flag keep their existing meaning. Absent unless segments exist. */
+  if(state.segment==="ALL"){
+    const list=segList();
+    if(list.length){
+      const bySeg={};
+      list.forEach(s=>{ bySeg[s.id]=withSeg(s.id, rollup); });   // inner runs are non-ALL → no recursion
+      const w=segWeights(list);
+      const sum=get=>list.reduce((a,s)=>a+w[s.id]*(get(bySeg[s.id])||0),0);
+      const avgNN=get=>{ let t=0,W=0; list.forEach(s=>{ const v=get(bySeg[s.id]);
+        if(v!=null && !isNaN(v)){ t+=w[s.id]*v; W+=w[s.id]; } }); return W>0?t/W:null; };
+      const bt=sum(r=>r.touch), bw=sum(r=>r.wait), bturn=bt+bw;
+      out.bySeg=bySeg;
+      out.blend={ touch:bt, wait:bw, turnaround:bturn,
+                  eff: bturn>0 ? bt/bturn : null,
+                  rft: avgNN(r=>r.qual?r.qual.rft:null) };
+    }
+  }
+  return out;
 }
 /* aggregate value classification for a group's member steps (queues carry no value).
    key: a single VA/NNVA/NVA when members agree, "MIXED" when they differ, null when none are rated.
@@ -2453,6 +2672,24 @@ function maxWip(){
 /* editing is on whenever we're in the flow screen and not a read-only shared viewer */
 const editable = () => state.mode==="build" && !state.viewer && !state.simming;
 
+/* segment switcher (phase 2): All · <segments>, beside the lens controls; hidden on unsegmented maps */
+function renderSegChips(){
+  const sep=$("#segSep"), lab=$("#segDimLabel"), box=$("#segChips"); if(!box) return;
+  const list=(state.mode==="build" && state.model) ? segList() : [];
+  const show=list.length>0;
+  [sep,lab,box].forEach(e=>{ if(e) e.style.display=show?"":"none"; });
+  if(!show){ box.innerHTML=""; return; }
+  lab.textContent=(state.model.segments&&state.model.segments.dimension)||"Segments";
+  const cur=activeSegId();
+  const chip=(id,txt,title)=>`<button class="segchip${(cur===id||(id==="ALL"&&!cur))?" on":""}" data-segchip="${esc(id)}" title="${esc(title)}">${esc(txt)}</button>`;
+  box.innerHTML=chip("ALL","All","Every case — headline numbers blend the segments by share")
+    +list.map(s=>chip(s.id, s.label||s.id,
+      `Only ${s.label||s.id} cases${+s.share>0?` (${Math.round(s.share*100)}% of demand)`:""} — cards and analysis show this segment's route and numbers`)).join("");
+  box.querySelectorAll("[data-segchip]").forEach(b=>b.onclick=()=>{
+    if(state.simming) return;   // a day-simulation freezes the view it started on
+    state.segment=b.dataset.segchip; render(); });
+}
+
 function render(){
   updateChrome();
   if(state.mode==="home"){ renderHome(); return; }
@@ -2463,6 +2700,7 @@ function render(){
   { const ft=$("#flowToggle"); if(ft) ft.classList.toggle("tool-on",(state.model.settings&&state.model.settings.showFlow)!==false); }
   { const nt=$("#notesToggle"); if(nt) nt.classList.toggle("tool-on",showNotes()); }
   { const t=$("#flowTitle"); if(t){ t.readOnly=state.viewer; if(document.activeElement!==t) t.value=state.model.name||""; fitTitle(t); } }
+  renderSegChips();
   const r=rollup();
   { const sb=$("#simBtn"); if(sb){
       sb.innerHTML=state.simming?'<svg class="t-ic"><use href="#ic-stop"/></svg>Stop sim':'<svg class="t-ic"><use href="#ic-play"/></svg>Simulate';
@@ -2521,16 +2759,22 @@ function renderHome(){
 function renderStats(r){
   const u=unit();
   const cap=r.cap||{}, q=r.qual||{};
+  /* segmented map, all-cases view: the headline speed/quality numbers are the share-weighted
+     blend across segments (base fields keep feeding the ribbon/capacity web unchanged) */
+  const B=r.blend ? Object.assign({},r,{touch:r.blend.touch,wait:r.blend.wait,
+    turnaround:r.blend.turnaround,eff:r.blend.eff}) : r;
+  const qRft=r.blend && r.blend.rft!=null ? r.blend.rft : q.rft;
+  const blendNote=r.blend ? " — all cases, blended by segment share" : "";
   const card=c=>`<div class="stat ${c.cls||""}"${c.title?` title="${esc(c.title)}"`:""}><div class="k">${c.k}</div><div class="v">${c.v}</div></div>`;
   // turnaround: show days alongside hours so a big number is easy to grasp
-  const days=(u==="hrs" && r.turnaround!=null) ? ` <small>(${fmt(r.turnaround/24)} days)</small>` : "";
+  const days=(u==="hrs" && B.turnaround!=null) ? ` <small>(${fmt(B.turnaround/24)} days)</small>` : "";
   /* SPEED — how fast work moves */
   const speed=[
-    {cls:"",k:ML("turnaround"),v:`${fmt(r.turnaround)} <small>${u}</small>${days}`},
-    {cls:"",k:ML("touch"),v:`${fmt(r.touch)} <small>${u}</small>`},
-    {cls:"",k:ML("wait"),v:`${fmt(r.wait)} <small>${u}</small>`},
-    {cls:"eff clickable",k:`${ML("eff")} <span class="info">ⓘ</span>`,v:r.eff==null?"—":`${Math.round(r.eff*100)}<small>%</small>`,
-      title:`${ML("touch")} ${fmt(r.touch)} ÷ ${ML("turnaround")} ${fmt(r.turnaround)} ${u} — click for the full breakdown`},
+    {cls:"",k:ML("turnaround"),v:`${fmt(B.turnaround)} <small>${u}</small>${days}`,title:r.blend?`Start to delivered${blendNote}`:undefined},
+    {cls:"",k:ML("touch"),v:`${fmt(B.touch)} <small>${u}</small>`,title:r.blend?`Hands-on time${blendNote}`:undefined},
+    {cls:"",k:ML("wait"),v:`${fmt(B.wait)} <small>${u}</small>`,title:r.blend?`Queue time${blendNote}`:undefined},
+    {cls:"eff clickable",k:`${ML("eff")} <span class="info">ⓘ</span>`,v:B.eff==null?"—":`${Math.round(B.eff*100)}<small>%</small>`,
+      title:`${ML("touch")} ${fmt(B.touch)} ÷ ${ML("turnaround")} ${fmt(B.turnaround)} ${u}${blendNote} — click for the full breakdown`},
   ].map(card).join("");
   /* CAPACITY — can the team keep up? */
   let capCards="";
@@ -2572,8 +2816,8 @@ function renderStats(r){
   /* QUALITY — how often it's right first time */
   let qualCards="";
   if(q.count){
-    qualCards+=card({cls:"eff",k:ML("rft"),v:`${Math.round(q.rft*100)}<small>%</small>`,
-      title:`Chance a case sails through with no rework — across ${q.count} rated step${q.count>1?"s":""}`});
+    qualCards+=card({cls:"eff",k:ML("rft"),v:`${Math.round(qRft*100)}<small>%</small>`,
+      title:`Chance a case sails through with no rework — across ${q.count} rated step${q.count>1?"s":""}${blendNote}`});
     if(q.worst) qualCards+=card({cls:"namecard"+(q.worst.rework>=30?" warnflag":""),k:ML("worstRework"),
       v:`${esc(q.worst.node.label)} · ${fmt(q.worst.rework)}<small>%</small>`,
       title:"Share of cases that come back to this step"});
@@ -2591,7 +2835,7 @@ function renderStats(r){
     <div class="pillar">${pHead("speed")}<div class="p-cards">${speed}</div></div>
     <div class="pillar">${pHead("capacity")}<div class="p-cards">${capBody}</div></div>
     <div class="pillar">${pHead("quality")}<div class="p-cards">${qualCards}</div></div>`;
-  const effCard=$("#stats .stat.eff.clickable:not(.dash-open)"); if(effCard) effCard.onclick=()=>showEffModal(r);
+  const effCard=$("#stats .stat.eff.clickable:not(.dash-open)"); if(effCard) effCard.onclick=()=>showEffModal(B);
   const kuCard=$("#stats .stat.dash-open"); if(kuCard) kuCard.onclick=()=>showDashboard();
   const bnCard=$("#stats .stat.bn-open"); if(bnCard) bnCard.onclick=()=>showBottleneckModal(r);
 }
@@ -3242,6 +3486,9 @@ function renderCanvas(r){
   const geomOf=id=>byId[id]||collapsedById[id];
   const resolveEndpoint=id=>memberOf[id]||id;   // a member id → its collapsed group's card
   const hotPath=new Set(r.path.map(n=>n.id));
+  /* segment view: steps this segment skips (and their arrows) dim but stay in place */
+  const segView=activeSegId();
+  const segOff=id=>{ const n=byId[id]; return !!(segView && n && segSkips(n,segView)); };
   /* case flow on the arrows: volume + branch splits; ASSUMED splits (no Split % on a branch)
      show in amber with ≈ — the engine divides those evenly, which multiplies demand through loops */
   const showFlow=(m.settings&&m.settings.showFlow)!==false;
@@ -3280,13 +3527,14 @@ function renderCanvas(r){
     const hot=onPath && (isBottleneck(aReal,r)||isBottleneck(bReal,r));
     const ef=eFlow[e.id]||0;
     /* Sankey band: the flow itself is the container — width ∝ cases along this arrow */
+    const eOff=segOff(fa)||segOff(fb);   // touches a step the active segment bypasses
     if(showFlow){
       const bw=Math.max(5,Math.min(22,5+17*ef/maxEF));
-      svg.appendChild(el("path",{d:bandD(geo,bw),class:"eband",
+      svg.appendChild(el("path",{d:bandD(geo,bw),class:"eband"+(eOff?" seg-off":""),
         fill:hot?"var(--nva)":"var(--wait)","fill-opacity":hot?"0.16":"0.13","pointer-events":"none"}));
     }
     const edgeSel = state.selected && state.selected.type==="edge" && state.selected.id===e.id;
-    const ep=el("path",{d,class:"edge"+(hot?" hot":"")+(edgeSel?" sel":""),"marker-end":`url(#${hot?'arrowHot':'arrow'})`});
+    const ep=el("path",{d,class:"edge"+(hot?" hot":"")+(edgeSel?" sel":"")+(eOff?" seg-off":""),"marker-end":`url(#${hot?'arrowHot':'arrow'})`});
     ep.dataset.eid=e.id;                         // the simulator finds edge paths by id
     svg.appendChild(ep);
     if(editable()){ const hit=el("path",{d,class:"edge-hit"});
@@ -3330,7 +3578,7 @@ function renderCanvas(r){
       if(clash(pos.x,pos.y)){ if(!clash(pos.x,pos.y-15)) pos={x:pos.x,y:pos.y-15};
         else if(!clash(pos.x,pos.y+15)) pos={x:pos.x,y:pos.y+15}; }
       placedPills.push({x:pos.x,y:pos.y,w:tw});
-      const tl=el("text",{x:pos.x,y:pos.y+3.5,class:"eflow","text-anchor":"middle"});
+      const tl=el("text",{x:pos.x,y:pos.y+3.5,class:"eflow"+(eOff?" seg-off":""),"text-anchor":"middle"});
       parts.forEach((p,i)=>{ const ts=el("tspan",{fill:p[1],"font-weight":p[2]});
         ts.textContent=(i?" · ":"")+p[0]; tl.appendChild(ts); });
       const tip=el("title");
@@ -3374,7 +3622,7 @@ function renderCanvas(r){
     // children only render while their parent is expanded (they live inside its frame)
     if(n.parentId){ const p=byId[n.parentId];
       if(!p || !p.expanded || !(p.children||[]).includes(n.id)) return; }
-    const g=el("g",{class:"node"+(state.selected&&state.selected.id===n.id?" selected":"")+(state.selectedIds.includes(n.id)?" multi":""),transform:`translate(${n.x},${n.y})`});
+    const g=el("g",{class:"node"+(state.selected&&state.selected.id===n.id?" selected":"")+(state.selectedIds.includes(n.id)?" multi":"")+(segOff(n.id)?" seg-off":""),transform:`translate(${n.x},${n.y})`});
     if(n.excludeStats) g.setAttribute("opacity","0.6");   // excluded from flow stats — visibly quieter
     const col=nodeColors(n), L=lay[n.id], w=L.w, bt=L.bt, mt=L.mt;
 
@@ -4126,6 +4374,7 @@ function renderInspector(){
           ${["VA","NNVA","NVA"].map(k=>`<div class="def ${n.classification===k?"sel "+k.toLowerCase():""}"><b>${T.cls[k].name}</b> — ${T.cls[k].def}</div>`).join("")}
         </div>
       </div>`);
+    body+=segSection(n,u);
     body+=section("advanced","Advanced",`${excludeRow(n)}${advanced(n,true)}`);
   } else if(n.type==="wait"){
     body+=section("info","Info",field("Owner","owner",n.owner||"","text"));
@@ -4135,6 +4384,7 @@ function renderInspector(){
        ${cathead("speed")}
        ${field(`Avg ${ML("wait").toLowerCase()} (${u})`,"waitTimeManual",n.waitTimeManual==null?"":n.waitTimeManual,"number","Leave blank to estimate it from the queue ÷ the next step's pace")}
        ${r.dw&&r.dw[n.id]!=null?`<div class="sub" style="margin:2px 0 6px">→ waiting ≈ <b>${fmt(r.dw[n.id])} ${u}</b> — time to clear the queue at today's pace</div>`:""}`);
+    body+=segSection(n,u);
     body+=section("advanced","Advanced",`${excludeRow(n)}${advanced(n,true)}`);
   } else if(n.type==="start"){
     body+=`<div class="insp-sec"><h4>Flow settings</h4>
@@ -4236,6 +4486,31 @@ function settingsSelect(label,key,val,opts){
   return `<div class="field"><label>${label}</label><select data-setbind="${key}">
     ${opts.map(o=>`<option ${o===val?"selected":""}>${o}</option>`).join("")}</select></div>`;
 }
+/* per-segment value rows (phase 2): sparse overrides over the base numbers, plus the
+   route flag — "skips this step" takes the step off that segment's path entirely */
+function segSection(n,u){
+  const list=segList(); if(!list.length) return "";
+  if(n.type==="touch" && hasSubs(n)) return "";   // legacy rolled-up meta steps carry no own numbers
+  const dim=(state.model.segments&&state.model.segments.dimension)||"Segments";
+  const isQ=n.type==="wait";
+  const base=f=>({touch:n.touchTimeManual, rework:n.reworkPct, people:n.people, wait:n.waitTimeManual, wip:n.wip}[f]);
+  const blocks=list.map(s=>{
+    const o=(n.seg&&n.seg[s.id])||{};
+    const num=(f,lbl)=>`<div class="segov-f"><label>${lbl}</label>
+      <input type="number" data-segbind="${esc(s.id)}|${f}" value="${o[f]!=null?esc(o[f]):""}"
+        placeholder="${base(f)!=null?esc(base(f)):"—"}" ${o.skip?"disabled":""}/></div>`;
+    const fields=isQ ? num("wait",`${ML("wait")} (${u})`)+num("wip",ML("wip"))
+      : num("touch",`${ML("touch")} (${u})`)+num("rework",`${ML("rework")}`)+num("people","People");
+    return `<div class="segov">
+      <div class="segov-h"><b>${esc(s.label||s.id)}</b>${+s.share>0?`<span class="h4note">· ${Math.round(s.share*100)}% of cases</span>`:""}
+        <label class="segov-skip" title="This segment bypasses the step — it drops off the segment's route and its numbers">
+          <input type="checkbox" data-segbind="${esc(s.id)}|skip" ${o.skip?"checked":""}/>skips this step</label></div>
+      ${o.skip?"":`<div class="segov-grid">${fields}</div>`}
+    </div>`; }).join("");
+  return section("segments",esc(dim),
+    `${blocks}<div class="sub" style="margin:2px 0 0">Blank = the step's base number. Segments are defined on the map details panel.</div>`,
+    "per-segment");
+}
 /* drawer checkbox: keep the box on the map but leave its numbers out of every flow stat */
 function excludeRow(n){
   return `<label class="checkrow"><input type="checkbox" data-bindchk="excludeStats" ${n.excludeStats?"checked":""}/>
@@ -4272,6 +4547,16 @@ function wireInspector(n){
       n[inp.dataset.bind]=v===""?undefined:v; render(); }); });
   insp.querySelectorAll("[data-bindchk]").forEach(ch=>ch.addEventListener("change",()=>{
     n[ch.dataset.bindchk]=ch.checked||undefined; render(); }));
+  /* per-segment overrides (phase 2): sparse writes — empty/base values leave no trace on the node */
+  insp.querySelectorAll("[data-segbind]").forEach(inp=>inp.addEventListener("change",()=>{
+    const [sid,f]=inp.dataset.segbind.split("|");
+    n.seg=n.seg||{}; const o=n.seg[sid]=n.seg[sid]||{};
+    if(f==="skip"){ if(inp.checked) o.skip=true; else delete o.skip; }
+    else { const v=inp.value===""?null:parseFloat(inp.value);
+      if(v==null||isNaN(v)) delete o[f]; else o[f]=v; }
+    if(!Object.keys(o).length) delete n.seg[sid];
+    if(!Object.keys(n.seg).length) delete n.seg;
+    render(); }));
   /* remember which sections are open (no re-render — keeps the section open while typing) */
   insp.querySelectorAll("details.insp-sec2").forEach(d=>d.addEventListener("toggle",()=>{
     if(d.open) state.ui.openSecs[d.dataset.sec]=true; else delete state.ui.openSecs[d.dataset.sec]; }));
@@ -5482,6 +5767,7 @@ function onConnectUp(ev){
 function rebuildSegPer(){
   const segs=new Set(["ALL"]),pers=new Set(["ALL"]);
   state.data.forEach(r=>{ if(r.Segment!=null)segs.add(String(r.Segment)); if(r.Period!=null)pers.add(String(r.Period)); });
+  segList().forEach(s=>{ segs.add(s.id); if(s.label!=null) segs.add(String(s.label)); });   // model-declared segments stay selectable
   state.segments=[...segs]; state.periods=[...pers];
   if(!state.segments.includes(state.segment)) state.segment="ALL";
   if(!state.periods.includes(state.period)) state.period="ALL";
@@ -5540,11 +5826,11 @@ function exportSheet(){
   const period=new Date().toISOString().slice(0,7); // YYYY-MM
   const nodes=dataNodes();
   if(!nodes.length){ toast("Add a step or queue first"); return; }
-  const rows=nodes.map(n=>{
+  const rowFor=(n,segLabel)=>{
     const isWork=n.type==="touch", mt=metricFor(n);   // prefill with whatever the cards currently show
     const type=isWork?(n.performer==="bot"?"Bot":"Human"):"Queue";
     const par=n.parentId ? (state.model.nodes.find(p=>p.id===n.parentId)||{}).label||"" : "";
-    return [ n.stepId, n.label, type, "ALL", period,
+    return [ n.stepId, n.label, type, segLabel, period,
       isWork && mt.touch!=null ? mt.touch : "",
       !isWork && mt.wait!=null ? mt.wait : "",
       !isWork && mt.wip!=null ? mt.wip : "", "",
@@ -5554,7 +5840,13 @@ function exportSheet(){
       isWork && n.hoursPerDay!=null ? n.hoursPerDay : "",
       isWork && mt.rework!=null ? mt.rework : "",
       par ];
-  });
+  };
+  /* segmented map: the Segment column grows one row per segment per step (its route only),
+     prefilled with that segment's effective numbers; plain maps keep today's single ALL row */
+  const segs=segList();
+  const rows=nodes.flatMap(n=> segs.length
+    ? segs.filter(s=>!segSkips(n,s.id)).map(s=>withSeg(s.id,()=>rowFor(n, s.label||s.id)))
+    : [rowFor(n,"ALL")]);
   const csv=[cols.join(",")].concat(rows.map(r=>r.map(csvCell).join(","))).join("\n");
   download((state.model.name||"flow").replace(/\s+/g,"-")+"-stats-sheet.csv", csv, "text/csv");
   toast(`Sheet for ${nodes.length} steps downloaded — fill it in, then Import sheet`);
@@ -6117,6 +6409,10 @@ $("#flowsBtn").onclick=goHome;
 $("#brandHome").onclick=()=>{ if(!state.viewer) goHome(); };
 function fitTitle(t){ if(t) t.size=Math.max(12,(t.value||t.placeholder||"").length+2); }
 $("#flowTitle").oninput=e=>{ if(state.model) state.model.name=e.target.value; fitTitle(e.target); scheduleSave(); };
+/* map details (incl. segments editor) for the open map */
+$("#detailsBtn").onclick=()=>{ if(state.mode!=="build") return;
+  if(state.ws && state.ws.open) showMetaPanel({kind:"ws", id:state.ws.open.mapId});
+  else if(state.currentId) showMetaPanel({kind:"local", id:state.currentId}); };
 $("#paletteBar").querySelectorAll("[data-add]").forEach(b=>b.addEventListener("click",()=>addNode(b.dataset.add,b.dataset.perf)));
 $("#paletteBar").querySelectorAll("[data-tool]").forEach(b=>b.addEventListener("click",()=>setTool(b.dataset.tool)));
 
