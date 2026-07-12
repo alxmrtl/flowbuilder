@@ -54,6 +54,13 @@
   #flowTitle::placeholder{color:var(--faint);font-weight:500}
   #flowTitle:hover{border-color:var(--line)}
   #flowTitle:focus{outline:none;border-color:var(--accent);background:var(--panel2)}
+  /* breadcrumb trail while drilled into a linked map (parent ▸ child) */
+  #crumbs{display:none;align-items:center;gap:2px;min-width:0;flex:0 1 auto}
+  #crumbs .crumb{background:transparent;border:1px solid transparent;border-radius:6px;color:var(--muted);
+    font-size:13px;font-weight:600;padding:4px 6px;cursor:pointer;max-width:180px;overflow:hidden;
+    text-overflow:ellipsis;white-space:nowrap}
+  #crumbs .crumb:hover{border-color:var(--line);color:var(--accent)}
+  #crumbs .crumb-sep{color:var(--faint);font-size:11px;padding:0 1px}
   /* header sections (Data / Share) — mirror the palette-bar groups */
   .hdr-group{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
   .hdr-label{color:var(--faint);font-size:11px;text-transform:uppercase;letter-spacing:.6px}
@@ -61,7 +68,7 @@
 
   /* chrome visibility by screen */
   body.home #paletteBar, body.home main, body.home #analysis{display:none}
-  body.home #flowTitle, body.home #detailsBtn,
+  body.home #flowTitle, body.home #detailsBtn, body.home #crumbs,
   body.home .divider, body.home #dataGroup, body.home #shareGroup, body.home #howData{display:none}
   body.viewer #detailsBtn{display:none}
   #home{display:none}
@@ -772,6 +779,10 @@
   <symbol id="ic-group" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
     <rect x="4" y="4" width="13" height="13" rx="2.4"/><path d="M20 8.5v10a1.5 1.5 0 0 1-1.5 1.5h-10"/>
   </symbol>
+  <symbol id="ic-linkmap" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="3" y="3.5" width="7.5" height="6" rx="1.6"/><rect x="13.5" y="14.5" width="7.5" height="6" rx="1.6"/>
+    <path d="M10.5 6.5H15a3 3 0 0 1 3 3v5"/><path d="M13.5 17.5H9a3 3 0 0 1-3-3v-5"/>
+  </symbol>
   <!-- metric-category glyphs (Speed / Capacity / Quality) — chosen in the metrics workbench -->
   <symbol id="ic-cat-speed" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
     <path d="M13 2.5 5.5 13H11l-1.5 8.5L17 11h-5.5l1.5-8.5z"/>
@@ -886,6 +897,7 @@
 <header>
   <div class="brand" id="brandHome">Flow <span>Builder</span></div>
   <button class="btn" id="flowsBtn">≣ Flows</button>
+  <div id="crumbs" title="You drilled in from these maps — click one to go back"></div>
   <input type="text" id="flowTitle" placeholder="Untitled flow" title="Rename this flow" spellcheck="false" />
   <button class="btn iconbtn" id="detailsBtn" title="Map details — owner, status, tags, segments">☰</button>
   <div class="spacer"></div>
@@ -1329,7 +1341,8 @@ SOURCE MATERIAL (label each source):
      (mapId/meta/migrate) · LIBRARY (localStorage) · digest builder ·
      WORKSPACE (folder adapter, catalog/reconcile, search, meta/vocab UI) ·
      flow CRUD + Convert docs · VISIO IMPORT (.vsdx, phase 2.5) ·
-     DIMENSION ENGINE (segments) · DATA BINDING ·
+     DIMENSION ENGINE (segments) · LINKS / HIERARCHY (linked steps,
+     promote/demote, roll-ups from digests, backlinks) · DATA BINDING ·
      metrics engine (rollup) ·
      RENDER (home, stats, canvas, ribbon, inspector) · theming · exports ·
      simulate-a-day · WIRING · BOOT
@@ -1436,6 +1449,8 @@ const state = {
   vocab: null,            // workspace term overrides {metricId: "Org label"} — resolved by ML(); null = FB standard
   ws: null,               // connected workspace (org platform — phase 1): {adapter, dirName, catalog, digests, schema, open, …}; null = localStorage mode
   wsPending: null,        // a persisted directory handle awaiting a permission re-grant (needs a user gesture)
+  crumbs: [],             // drill-in breadcrumb trail [{kind:"ws"|"local", id, name}] — transient, cleared on goHome
+  _linkNav: null,         // trail handed to the next openFlow/openWsMap by a link drill-in; null = normal open (clears crumbs)
 };
 
 /* ---------- helpers ---------- */
@@ -1601,6 +1616,7 @@ function buildDigest(model){
   state.model=model; state.data=Array.isArray(model.data)?model.data:[]; state.segment="ALL"; state.period="ALL";
   let r=null, measured=0, modelled=0;
   const stepLabels=[], people=new Set(), tools=new Set(); let fte=0, stepN=0, queueN=0;
+  _digStack.push(model.mapId);   // links: cycles must terminate, not recurse (see linkDigest)
   try{
     try{ r=rollup(); }catch(e){ r=null; }
     (model.nodes||[]).forEach(n=>{
@@ -1609,10 +1625,17 @@ function buildDigest(model){
         if(n.owner && String(n.owner).trim()) people.add(String(n.owner).trim());
         if(n.people!=null && n.people>0) fte+=n.people;
         if(n.tool) tools.add(String(n.tool));
-        if(!hasSubs(n) && !n.excludeStats){ const mt=metricFor(n);   // confidence mirrors the insights count
+        if(isLinkNode(n)){   // roll-up: the child's FTE, roster and confidence counts carry up
+          const cd=linkDigest(n.linksTo.mapId);
+          if(cd && cd.metrics){
+            if(cd.metrics.fte) fte+=cd.metrics.fte;
+            (((cd.text||{}).people)||[]).forEach(p=>people.add(p));
+            const cf=cd.metrics.confidence||{};
+            measured+=cf.measured||0; modelled+=cf.modelled||0; } }
+        else if(!hasSubs(n) && !n.excludeStats){ const mt=metricFor(n);   // confidence mirrors the insights count
           if(mt.hasData) measured++; else if(mt.derivedCap) modelled++; } }
       if(n.type==="wait"){ queueN++; if(n.label) stepLabels.push(n.label); } });
-  } finally { state.model=sm; state.data=sd; state.segment=ss; state.period=sp; }
+  } finally { state.model=sm; state.data=sd; state.segment=ss; state.period=sp; _digStack.pop(); }
   const cap=(r&&r.cap)||{}, qual=(r&&r.qual)||{};
   const links=[...new Set((model.nodes||[]).filter(n=>n.linksTo && typeof n.linksTo.mapId==="string")
                                            .map(n=>n.linksTo.mapId))];
@@ -1810,7 +1833,8 @@ async function wsReconcile(){
   try{
     const cursor={}; Object.values(ws.catalog.maps).forEach(m=>{ cursor[m.path]=m.rev; });
     const {changed,removed}=await ws.adapter.changedSince(cursor);
-    let n=0;
+    let n=0; const affected=new Set(ws._staleParents||[]);   // mapIds whose digests changed — parents' roll-ups go stale (phase 3)
+    ws._staleParents=null;
     for(const {path,rev} of changed){
       try{
         const {text}=await ws.adapter.read(path); const model=migratePlatform(JSON.parse(text));
@@ -1823,12 +1847,33 @@ async function wsReconcile(){
         ws.catalog.maps[model.mapId]={path,rev,title:digest.title,savedAt:digest.savedAt};
         ws.digests[model.mapId]=digest;
         await wsWriteDigest(digest,rev);
-        dirty=true;
+        dirty=true; affected.add(model.mapId);
         if(++n%40===0 && state.mode==="home"){ wsBuildIndex(); renderHome(); }   // progressive first-connect render
       }catch(e){ console.warn("reconcile: skipped",path,e); }
     }
     removed.forEach(p=>{ for(const [mid,e] of Object.entries(ws.catalog.maps))
-      if(e.path===p){ delete ws.catalog.maps[mid]; delete ws.digests[mid]; idbDel("digests",mid).catch(()=>{}); dirty=true; } });
+      if(e.path===p){ delete ws.catalog.maps[mid]; delete ws.digests[mid]; idbDel("digests",mid).catch(()=>{}); dirty=true; affected.add(mid); } });
+    /* links (phase 3): a changed/removed child leaves stale rolled-up numbers in every digest
+       that links to it — re-digest upward through links.out until the frontier is empty.
+       DAG-bounded in practice; the guard keeps a flagged cycle from looping the pass. */
+    let frontier=affected; const rolled=new Set();
+    for(let hop=0; frontier.size && hop<8; hop++){
+      const next=new Set();
+      for(const [mid,e] of Object.entries(ws.catalog.maps)){
+        if(rolled.has(mid)) continue;   // once per reconcile — a map freshly digested BEFORE its child still re-rolls
+        const d=ws.digests[mid];
+        if(!(d && d.links && (d.links.out||[]).some(x=>frontier.has(x)))) continue;
+        try{
+          const {text}=await ws.adapter.read(e.path);
+          const digest=buildDigest(migratePlatform(JSON.parse(text)));
+          ws.catalog.maps[mid]={path:e.path,rev:e.rev,title:digest.title,savedAt:digest.savedAt};
+          ws.digests[mid]=digest;
+          await wsWriteDigest(digest,e.rev);
+          dirty=true; rolled.add(mid); next.add(mid);
+        }catch(err){}
+      }
+      frontier=next;
+    }
     for(const [mid,e] of Object.entries(ws.catalog.maps))   // catalog entry whose digest never loaded → rebuild from the flow file
       if(!ws.digests[mid]){
         try{ const {text}=await ws.adapter.read(e.path); const digest=buildDigest(migratePlatform(JSON.parse(text)));
@@ -1878,7 +1923,7 @@ async function wsAddModel(model){
   return {mapId:model.mapId,path,rev};
 }
 async function openWsMap(mapId){
-  const ws=state.ws, e=ws&&ws.catalog.maps[mapId]; if(!e) return;
+  const ws=state.ws, e=ws&&ws.catalog.maps[mapId]; if(!e){ state._linkNav=null; return; }
   try{
     const {text,rev}=await ws.adapter.read(e.path);
     const model=migratePlatform(JSON.parse(text));
@@ -1937,6 +1982,8 @@ function wsSaveCurrent(){
       ws.catalog.maps[model.mapId]={path:open.path,rev,title:digest.title,savedAt:digest.savedAt};
       ws.digests[model.mapId]=digest;
       await wsWriteDigest(digest,rev); await wsWriteCatalog(); wsBuildIndex();
+      // links (phase 3): saving here bypasses the reconcile diff — queue parents for its next pass
+      if(backlinksTo(model.mapId).length) (ws._staleParents=ws._staleParents||new Set()).add(model.mapId);
     }catch(e){ console.warn("workspace save failed",e); toast("Couldn't save to the workspace folder"); }
   });
 }
@@ -2003,6 +2050,7 @@ function wsCardHtml(id){
   const ws=state.ws, d=ws.digests[id]||{}, e=ws.catalog.maps[id], m=d.meta||{}, x=d.metrics||{};
   const eff=x.flowEff!=null?Math.round(x.flowEff*100)+"%":"—";
   const bn=x.bottleneck?esc(x.bottleneck.step):"—";
+  const ub=backlinksTo(id);   // computed from digests' links.out — "used by" is free
   const chips=[];
   const st=m.status||"draft"; chips.push(`<span class="fc-chip status-${st}">${st}</span>`);
   if(m.area) chips.push(`<span class="fc-chip">${esc(m.area)}</span>`);
@@ -2013,7 +2061,7 @@ function wsCardHtml(id){
     <div class="fc-name">${esc(d.title||e.title||"Untitled")}</div>
     <div class="fc-chips">${chips.join("")}</div>
     <div class="fc-stat"><span class="fc-eff">${eff}</span> flow efficiency</div>
-    <div class="fc-sub">${x.steps!=null?x.steps+" steps":""}${x.queues?` · ${x.queues} queues`:""} · bottleneck: ${bn}</div>
+    <div class="fc-sub">${x.steps!=null?x.steps+" steps":""}${x.queues?` · ${x.queues} queues`:""} · bottleneck: ${bn}${ub.length?` · <span title="Linked from: ${esc(ub.map(b=>b.title).join(", "))}">used by ${ub.length} flow${ub.length===1?"":"s"}</span>`:""}</div>
     <div class="fc-actions">
       <button class="open" data-act="open">Open ▶</button>
       <button data-act="meta">Details</button>
@@ -2092,6 +2140,10 @@ function showMetaPanel(ctx){
       ${fld("tags","Tags (comma-separated)",`<input data-meta="tags" value="${esc((meta.tags||[]).join(", "))}"/>`)}
       ${customs}
     </div>${ai}${segEd}
+    ${(()=>{ /* backlinks (phase 3): who links here — computed, never authored */
+      const mid = ctx.kind==="ws" ? ctx.id : (state.library.flows[ctx.id]&&state.library.flows[ctx.id].model.mapId);
+      const ub=backlinksTo(mid);
+      return ub.length?`<div class="meta-note">🔗 Used by ${ub.length} flow${ub.length===1?"":"s"}: ${ub.map(b=>esc(b.title)).join(", ")}</div>`:""; })()}
     <div class="meta-note">${esc(sub)}${meta.reviewedAt?` · last reviewed ${esc(String(meta.reviewedAt).slice(0,10))}`:""}</div>`;
   const rv=$("#metaBody").querySelector("#metaReviewed");
   if(rv) rv.onclick=()=>{ rv.dataset.set="1"; rv.textContent="✓ Will be marked reviewed"; rv.disabled=true; };
@@ -2204,7 +2256,7 @@ function showWsModal(){
 /* ---------- flow CRUD ---------- */
 function openFlow(id, mode){
   if(typeof stopSim==="function"&&state.simming) stopSim();   // never carry a sim across flows
-  const f=state.library.flows[id]; if(!f) return;
+  const f=state.library.flows[id]; if(!f){ state._linkNav=null; return; }
   if(state.ws) state.ws.open=null;   // a browser-local flow is open — saves go to localStorage, not a file
   state.currentId=id; state.library.lastOpenedId=id; saveLibrary();
   loadModel(clone(f.model));   // imported stats (model.data) are hydrated inside loadModel
@@ -2325,6 +2377,9 @@ function validateImportModel(obj){
     if(raw.splitPct!=null && Number.isFinite(Number(raw.splitPct))) e.splitPct=Number(raw.splitPct);
     if(typeof raw.label==="string"&&raw.label.trim()) e.label=raw.label.trim();
     if(raw.primary===true) e.primary=true;   // happy-path highlight (set by hand or by the Visio importer)
+    // promote/demote riders: which inner node a boundary edge attached to (child-map ids — kept as-is)
+    if(typeof raw.innerTo==="string") e.innerTo=raw.innerTo;
+    if(typeof raw.innerFrom==="string") e.innerFrom=raw.innerFrom;
     m.edges.push(e); });
 
   (Array.isArray(obj.groups)?obj.groups:[]).forEach(raw=>{ if(!raw||typeof raw!=="object") return;
@@ -2363,6 +2418,8 @@ function loadModel(m){
   migrateComments(m);           // default untyped comments to plain notes, drop dangling anchors
   state.data = Array.isArray(m.data) ? m.data : [];   // imported stats are stored on the model
   state.segment="ALL";                                // the segment switcher is per-flow view state
+  state.crumbs = Array.isArray(state._linkNav) ? state._linkNav : [];   // drill-ins carry a trail; normal opens start fresh
+  state._linkNav=null;
   state.selected=null; state.linkingFrom=null;
   state._notesOpen=new Set(); state._notesAnim={}; state._notePick=null; state._editComment=null; state._stepPick=null;   // per-flow transients
   undoStack=[]; redoStack=[]; _undoBase=JSON.stringify(m);   // undo history is per open flow
@@ -2751,6 +2808,289 @@ function engineModel(){
 }
 
 /* ============================================================
+   LINKS / HIERARCHY  (org platform — phase 3)
+   A touch node carrying linksTo:{mapId} is a *linked step*: a whole child
+   map viewed from outside, exactly like a collapsed group but across a file
+   boundary (D4). Its numbers ALWAYS come from the child's digest — the
+   workspace's when connected, one built on the fly from the library flow in
+   local mode — never from opening the child model inside the engine, which
+   is what keeps hundreds of maps cheap. Navigation resolves mapId → path
+   through the catalog, so renames/moves never break; a deleted target shows
+   a tombstone, never a crash. Navigation links may loop; ROLL-UP links must
+   form a DAG — cyclic links are flagged and excluded from roll-ups, not
+   fatal. Backlinks are computed by inverting digests' links.out, never
+   authored. ZERO-REGRESSION RULE: with no linksTo on any node, every path
+   below is dormant and all outputs stay byte-identical.
+   ============================================================ */
+const isLinkNode = n => !!(n && n.type==="touch" && n.linksTo && typeof n.linksTo.mapId==="string");
+let _linkDigCache={};    // local mode: mapId → {key, digest} (key = library updatedAt, so edits invalidate)
+const _digStack=[];      // mapIds currently inside buildDigest — breaks A→B→A recursion when digesting locally
+
+/* the child map's digest — ws.digests when connected, else built (and cached) from the library flow */
+function linkDigest(mapId){
+  if(!mapId) return null;
+  if(state.ws) return state.ws.digests[mapId]||null;
+  const f=Object.values(state.library.flows).find(x=>x.model && x.model.mapId===mapId);
+  if(!f) return null;
+  const key=String(f.updatedAt||0);
+  const c=_linkDigCache[mapId];
+  if(c && c.key===key) return c.digest;
+  if(_digStack.includes(mapId)) return c?c.digest:null;   // already being digested above us — cycle, stop here
+  let dig=null;
+  try{ dig=buildDigest(clone(f.model)); }catch(e){}
+  _linkDigCache[mapId]={key, digest:dig};
+  return dig;
+}
+/* resolve a linked step's target: catalog entry / library flow + digest + integrity state.
+   tomb = the library says the map is gone; unknown = we have no library to ask (shared viewer). */
+function linkInfo(node){
+  const mid=isLinkNode(node) ? node.linksTo.mapId : null;
+  if(!mid) return null;
+  if(state.ws){
+    const entry=state.ws.catalog.maps[mid], digest=state.ws.digests[mid]||null;
+    return {mapId:mid, entry, digest, tomb:!entry, unknown:false,
+            title:(digest&&digest.title)||(entry&&entry.title)||"", path:entry&&entry.path};
+  }
+  const f=Object.values(state.library.flows).find(x=>x.model && x.model.mapId===mid);
+  if(!f) return {mapId:mid, digest:null, tomb:!state.viewer, unknown:!!state.viewer, title:""};
+  return {mapId:mid, flow:f, digest:linkDigest(mid), tomb:false, unknown:false, title:f.name||"Untitled"};
+}
+/* can `fromId` reach `targetId` walking digests' links.out? (BFS — the roll-up DAG check) */
+function linkReaches(fromId, targetId){
+  if(!fromId || !targetId) return false;
+  const seen=new Set(); const q=[fromId]; let guard=0;
+  while(q.length && guard++<500){
+    const id=q.shift();
+    if(id===targetId) return true;
+    if(seen.has(id)) continue; seen.add(id);
+    const d=linkDigest(id);
+    (((d&&d.links)||{}).out||[]).forEach(x=>{ if(!seen.has(x)) q.push(x); });
+  }
+  return false;
+}
+/* a linked step whose child can link back to the map it sits in = a roll-up cycle */
+function linkCyclic(node){
+  return isLinkNode(node) && !!(state.model && state.model.mapId)
+      && linkReaches(node.linksTo.mapId, state.model.mapId);
+}
+/* metricFor for a linked step: the child's digest totals, converted into this map's time
+   unit, shaped like any other step so mainPath/flowWeights/rollup treat it as one card.
+   touch/wait = child totals (parent lead + flow efficiency then compute exactly as today);
+   capacity = the child's constraint capacity (min-propagation matches the unified flag);
+   rework = 100−RFT so right-first-time multiplies through. Tombstoned or cyclic links
+   report null everywhere — visible dashes, never silent zeros, excluded from roll-ups. */
+function linkMetricFor(node){
+  const base={touch:null, wait:null, wip:null, throughput:null, capacity:null, effCapacity:null,
+              rework:null, derivedCap:false, hasData:false, linked:true};
+  const info=linkInfo(node); if(!info) return base;
+  base.tomb=info.tomb; base.unknown=info.unknown;
+  if(info.tomb || info.unknown || !info.digest || !info.digest.metrics) return base;
+  if(linkCyclic(node)){ base.cyclic=true; return base; }
+  const x=info.digest.metrics;
+  const cu=x.timeUnit||"hrs", pu=unit();
+  const tf=(HRS_PER_UNIT[cu]||1)/(HRS_PER_UNIT[pu]||1);      // hands-on time: working-hours based
+  const wf=(CAL_PER_UNIT[pu]||24)/(CAL_PER_UNIT[cu]||24);    // waits: calendar based
+  base.touch = x.touchTime!=null ? x.touchTime*tf : null;
+  base.wait  = x.waitTime!=null  ? x.waitTime*wf  : null;
+  base.capacity = x.capacityPerDay!=null ? x.capacityPerDay : null;
+  base.effCapacity = base.capacity;   // the child's ceiling already has its rework priced in — never double-count
+  base.rework = x.rftPct!=null ? Math.max(0,Math.min(100,100-x.rftPct)) : null;
+  return base;
+}
+/* maps this step could link to — everything in the workspace/library except the open map */
+function linkCandidates(){
+  const cur=state.model&&state.model.mapId;
+  if(state.ws) return Object.keys(state.ws.catalog.maps).filter(mid=>mid!==cur)
+    .map(mid=>({mapId:mid, title:((state.ws.digests[mid]||{}).title)||state.ws.catalog.maps[mid].title||"Untitled"}))
+    .sort((a,b)=>a.title.localeCompare(b.title));
+  return Object.values(state.library.flows).filter(f=>f.model&&f.model.mapId&&f.model.mapId!==cur)
+    .map(f=>({mapId:f.model.mapId, title:f.name||"Untitled"}))
+    .sort((a,b)=>a.title.localeCompare(b.title));
+}
+/* every map that links TO mapId — computed by inverting links.out, "used by: N flows" for free */
+function backlinksTo(mapId){
+  if(!mapId) return [];
+  if(state.ws) return Object.entries(state.ws.digests)
+    .filter(([mid,d])=>mid!==mapId && d && d.links && (d.links.out||[]).includes(mapId))
+    .map(([mid,d])=>({mapId:mid, title:d.title||"Untitled"}));
+  return Object.values(state.library.flows)
+    .filter(f=>f.model && f.model.mapId!==mapId && (f.model.nodes||[]).some(n=>isLinkNode(n)&&n.linksTo.mapId===mapId))
+    .map(f=>({mapId:f.model.mapId, title:f.name||"Untitled"}));
+}
+
+/* ---- drill-in / breadcrumb navigation ---- */
+function openLinked(node){
+  const info=linkInfo(node); if(!info) return;
+  if(info.tomb){ toast("That map no longer exists — the link is a tombstone"); return; }
+  if(info.unknown){ toast("The linked map isn't available in this copy"); return; }
+  const here = state.ws && state.ws.open ? {kind:"ws", id:state.ws.open.mapId, name:state.model.name||"Untitled"}
+             : state.currentId ? {kind:"local", id:state.currentId, name:state.model.name||"Untitled"} : null;
+  state._linkNav=(state.crumbs||[]).concat(here?[here]:[]);
+  if(state.ws) openWsMap(info.mapId);
+  else openFlow(info.flow.id,"build");
+}
+function crumbClick(ix){
+  const c=(state.crumbs||[])[ix]; if(!c) return;
+  state._linkNav=state.crumbs.slice(0,ix);
+  if(c.kind==="ws" && state.ws) openWsMap(c.id);
+  else if(c.kind==="local" && state.library.flows[c.id]) openFlow(c.id,"build");
+  else { state._linkNav=null; toast("That map is gone"); }
+}
+function renderCrumbs(){
+  const bar=$("#crumbs"); if(!bar) return;
+  const cs=state.crumbs||[];
+  if(state.mode!=="build" || !cs.length){ bar.style.display="none"; bar.innerHTML=""; return; }
+  bar.style.display="flex";
+  bar.innerHTML=cs.map((c,i)=>`<button class="crumb" data-cix="${i}" title="Back to ${esc(c.name)}">${esc(c.name)}</button><span class="crumb-sep">▸</span>`).join("");
+  bar.querySelectorAll(".crumb").forEach(b=>b.onclick=()=>crumbClick(+b.dataset.cix));
+}
+
+/* ---- promote group → map · demote map → group ----
+   Reversibility is the whole point: promote followed by demote reproduces the original
+   flow (same steps, edges, group, positions; ids may differ). Boundary edges remember
+   their inner endpoint (e.innerTo / e.innerFrom) so demote can rewire them exactly. */
+function shiftRight(m, x0, dx, skipIds){   // instant reflow (promote/demote are one undo step, no tween)
+  if(!dx) return; const skip=new Set(skipIds||[]);
+  (m.nodes||[]).forEach(n=>{ if(!skip.has(n.id) && !n.parentId && n.x>=x0) n.x=Math.max(0,n.x+dx); });
+  (m.groups||[]).forEach(g=>{ const gx=g.collapsed?g.cx:g.x; if(gx!=null && gx>=x0){
+    if(g.collapsed) g.cx=Math.max(0,g.cx+dx); else g.x=Math.max(0,g.x+dx); } });
+  (m.comments||[]).forEach(c=>{ if(c.x!=null && c.x>=x0) c.x=Math.max(0,c.x+dx); });
+}
+async function promoteGroup(grpId){
+  const m=state.model, grp=(m.groups||[]).find(g=>g.id===grpId);
+  if(!grp || !(grp.members||[]).length){ toast("Nothing to promote — the group is empty"); return; }
+  const memIds=new Set(grp.members);
+  const members=m.nodes.filter(n=>memIds.has(n.id));
+  if(!members.length){ toast("Nothing to promote — the group is empty"); return; }
+  if(members.some(n=>n.type==="start"||n.type==="end")){ toast("Can't promote a group that contains Start or End"); return; }
+  const owner=window.prompt("Owner of the new map:", (m.meta&&m.meta.owner)||"");
+  if(owner==null) return;   // cancelled
+  // the span the group occupies (expanded: live layout; collapsed: the card slot + its stored reflow)
+  let bx0=Infinity, bx1=-Infinity, ymid=0;
+  members.forEach(n=>{ const L=_lay[n.id]||{w:viewW()};
+    bx0=Math.min(bx0,n.x); bx1=Math.max(bx1,n.x+(L.w||viewW())); ymid+=n.y; });
+  ymid=Math.round(ymid/members.length);
+  // boundary edges → the child's start/end; entry/exit fall back to the flow-order extremes
+  const internal=m.edges.filter(e=>memIds.has(e.from)&&memIds.has(e.to));
+  const inEdges =m.edges.filter(e=>!memIds.has(e.from)&&memIds.has(e.to));
+  const outEdges=m.edges.filter(e=>memIds.has(e.from)&&!memIds.has(e.to));
+  const sorted=members.slice().sort((a,b)=>(a.x||0)-(b.x||0));
+  const entries=[...new Set(inEdges.map(e=>e.to))];  if(!entries.length) entries.push(sorted[0].id);
+  const exits  =[...new Set(outEdges.map(e=>e.from))]; if(!exits.length) exits.push(sorted[sorted.length-1].id);
+  const sid=memIds.has("start")?uid("n_"):"start", eid=memIds.has("end")?uid("n_"):"end";
+  const child=migratePlatform({
+    name: grp.label||"Group", mapId:mintMapId(), schemaVersion:SCHEMA_VERSION,
+    settings: clone(m.settings||{timeUnit:"hrs",bottleneckMode:"absolute"}),
+    nodes: [{id:sid,type:"start",label:"From: "+(m.name||"parent flow"),x:Math.max(0,bx0-220),y:ymid}]
+      .concat(members.map(clone))
+      .concat([{id:eid,type:"end",label:"Continues in: "+(m.name||"parent flow"),x:bx1+70,y:ymid}]),
+    edges: internal.map(clone)
+      .concat(entries.map(id=>({id:uid("e"),from:sid,to:id})))
+      .concat(exits.map(id=>({id:uid("e"),from:id,to:eid}))),
+    groups:[], comments:(m.comments||[]).filter(c=>c.nodeId&&memIds.has(c.nodeId)).map(clone)
+  });
+  child.meta=Object.assign(clone(m.meta||defaultMeta()),{owner:owner.trim(), reviewedAt:null, importedFrom:null});
+  if(m.segments) child.segments=clone(m.segments);   // member seg overrides keep their dimension
+  // measured rows for the member steps travel with them
+  const memStep=new Set(members.map(n=>String(n.stepId)).filter(Boolean));
+  if(Array.isArray(m.data)&&m.data.length){
+    child.data=m.data.filter(r=>memStep.has(String(r.StepID)));
+    if(!child.data.length) delete child.data;
+    m.data=m.data.filter(r=>!memStep.has(String(r.StepID))); state.data=m.data;
+  }
+  // persist the child first — if the write fails, the parent is untouched
+  if(state.ws){
+    try{ await wsAddModel(child); await wsWriteCatalog(); wsBuildIndex(); }
+    catch(e){ console.warn(e); toast("Couldn't create the new map in the workspace folder"); return; }
+  } else {
+    const id=uid("flow_");
+    state.library.flows[id]={id,name:child.name,model:child,updatedAt:Date.now()};
+    saveLibrary();
+  }
+  // the linked step that stands in for the group (label/colour/details carry over for demote)
+  const ln={id:uid("t_"), type:"touch", label:grp.label||"Group",
+            x:grp.collapsed?grp.cx:bx0, y:grp.collapsed?grp.cy:ymid, linksTo:{mapId:child.mapId}};
+  if(grp.color) ln.color=grp.color;
+  if(grp.valueNote) ln.valueNote=grp.valueNote;
+  ln._reflowDx = grp.collapsed ? (grp._reflowDx||0) : (bx0+viewW())-bx1;   // demote undoes this shift
+  m.nodes=m.nodes.filter(n=>!memIds.has(n.id));
+  m.edges=m.edges.filter(e=>!(memIds.has(e.from)&&memIds.has(e.to)));
+  inEdges.forEach(e=>{ e.innerTo=e.to; e.to=ln.id; });
+  outEdges.forEach(e=>{ e.innerFrom=e.from; e.from=ln.id; });
+  m.comments=(m.comments||[]).filter(c=>!(c.nodeId&&memIds.has(c.nodeId)));
+  m.groups=m.groups.filter(g=>g.id!==grp.id);
+  m.groups.forEach(g=>{ if(Array.isArray(g.members)) g.members=g.members.filter(id=>!memIds.has(id)); });
+  if(!grp.collapsed) shiftRight(m, bx1, ln._reflowDx, [ln.id]);   // collapsed already reflowed when it folded
+  m.nodes.push(ln);
+  rebuildSegPer(); selectNode(ln.id); render(); scheduleSave();
+  if(linkReaches(child.mapId, m.mapId)) toast("Promoted — ⚠ this created a roll-up cycle (flagged, excluded from roll-ups)");
+  else toast(`Promoted to its own map — double-click the card to open “${child.name}”`);
+}
+async function demoteLinked(nodeId){
+  const m=state.model, ln=m.nodes.find(n=>n.id===nodeId);
+  if(!isLinkNode(ln)) return;
+  const info=linkInfo(ln);
+  if(!info || info.tomb || info.unknown){ toast("The linked map can't be found — nothing to fold back in"); return; }
+  const others=backlinksTo(info.mapId).filter(b=>b.mapId!==m.mapId);
+  const title=info.title||ln.label||"the linked map";
+  const warn=others.length?`\n\n⚠ ${others.length} other map${others.length===1?"":"s"} link${others.length===1?"s":""} to it (${others.map(o=>o.title).slice(0,3).join(", ")}${others.length>3?"…":""}) — their links will become tombstones.`:"";
+  if(!window.confirm(`Fold “${title}” back into this map as a group?\n\nIts file is deleted afterwards.${warn}`)) return;
+  // the ONE place hierarchy opens a child file — an edit operation, not a roll-up
+  let child=null;
+  try{
+    if(state.ws){ const {text}=await state.ws.adapter.read(info.path); child=migratePlatform(JSON.parse(text)); }
+    else child=migratePlatform(clone(info.flow.model));
+  }catch(e){}
+  if(!child || !Array.isArray(child.nodes)){ toast("Couldn't read the linked map's file"); return; }
+  const isTerm=n=>n.type==="start"||n.type==="end";
+  const inner=child.nodes.filter(n=>!isTerm(n));
+  if(!inner.length){ toast("The linked map has no steps to bring in"); return; }
+  // fresh ids where the child's collide with anything already in the parent
+  const taken=new Set(m.nodes.map(n=>n.id));
+  const idMap={};
+  inner.forEach(n=>{ if(taken.has(n.id)){ idMap[n.id]=uid(n.type==="wait"?"w_":"t_"); } });
+  const rid=id=>idMap[id]||id;
+  inner.forEach(n=>{ if(idMap[n.id]){ if(n.stepId===n.id) n.stepId=idMap[n.id]; n.id=idMap[n.id]; } });
+  const termIds=new Set(child.nodes.filter(isTerm).map(n=>n.id));
+  const innerIds=new Set(inner.map(n=>n.id));
+  const internal=(child.edges||[]).filter(e=>!termIds.has(e.from)&&!termIds.has(e.to))
+    .map(e=>Object.assign({},e,{from:rid(e.from),to:rid(e.to)}));
+  const sortedIn=inner.slice().sort((a,b)=>(a.x||0)-(b.x||0));
+  const entryDefault=(()=>{ const e=(child.edges||[]).find(x=>termIds.has(x.from)&&innerIds.has(rid(x.to))); return e?rid(e.to):sortedIn[0].id; })();
+  const exitDefault =(()=>{ const e=(child.edges||[]).find(x=>termIds.has(x.to)&&innerIds.has(rid(x.from))); return e?rid(e.from):sortedIn[sortedIn.length-1].id; })();
+  // make room again, then land the members at their stored positions
+  shiftRight(m, ln.x+viewW(), -(ln._reflowDx||0), [ln.id]);
+  m.nodes=m.nodes.filter(n=>n.id!==ln.id).concat(inner);
+  m.edges=m.edges.filter(e=>e.from!==ln.id||e.to!==ln.id);
+  m.edges.forEach(e=>{
+    if(e.to===ln.id){ const t=rid(e.innerTo); e.to=innerIds.has(t)?t:entryDefault; delete e.innerTo; }
+    if(e.from===ln.id){ const f=rid(e.innerFrom); e.from=innerIds.has(f)?f:exitDefault; delete e.innerFrom; }
+  });
+  m.edges=m.edges.concat(internal);
+  (child.comments||[]).forEach(c=>{ const cc=clone(c); if(cc.nodeId) cc.nodeId=rid(cc.nodeId);
+    if(!cc.nodeId || innerIds.has(cc.nodeId)) m.comments.push(cc); });
+  if(Array.isArray(child.data)&&child.data.length){
+    m.data=(Array.isArray(m.data)?m.data:[]).concat(child.data); state.data=m.data; }
+  const g={id:uid("grp"), label:child.name||ln.label||"Group", members:inner.map(n=>n.id),
+           showInfo:true, collapsed:false};
+  if(ln.color) g.color=ln.color;
+  if(ln.valueNote) g.valueNote=ln.valueNote;
+  m.groups.push(g);   // no rect yet — renderCanvas fits it on the next paint (same path as imports)
+  // the child map's file goes away — the decomposition is undone
+  try{
+    if(state.ws){
+      const ws=state.ws;
+      try{ await ws.adapter.remove(info.path); }catch(e){}
+      try{ await ws.adapter.remove(WS_DIGEST_DIR+info.mapId+".json"); }catch(e){}
+      delete ws.catalog.maps[info.mapId]; delete ws.digests[info.mapId]; idbDel("digests",info.mapId).catch(()=>{});
+      await wsWriteCatalog(); wsBuildIndex();
+    } else { delete state.library.flows[info.flow.id]; delete _linkDigCache[info.mapId]; saveLibrary(); }
+  }catch(e){ console.warn(e); }
+  rebuildSegPer(); selectGroup(g.id); render(); scheduleSave();
+  toast(`Folded “${title}” back in as a group`);
+}
+
+/* ============================================================
    DATA BINDING  (FlowData: StepID, Segment, Period, TouchTimeAvg, WaitTimeAvg, WIP/Volume)
    ============================================================ */
 function rowsFor(stepId){
@@ -2763,6 +3103,8 @@ function rowsFor(stepId){
     (state.period==="ALL"  || String(r.Period)===state.period));
 }
 function metricFor(node){
+  // a linked step (phase 3) reports the child map's digest totals — see linkMetricFor
+  if(isLinkNode(node)) return linkMetricFor(node);
   // a step with sub-steps reports their rollup: touch = Σ children, pace/capacity = the
   // slowest child (chain constraint). Its own manual fields are ignored while children exist.
   if(node.type==="touch" && node.children && node.children.length){
@@ -2869,7 +3211,7 @@ function rollup(){
   const S=state.model.settings||{};
   const demand = S.demand!=null && S.demand!=="" ? +S.demand : null;
   let touch=0, wait=0, unclassified=0; const waits=[]; const flow=[]; const dw={}; const qOut={};
-  state.model.nodes.forEach(n=>{ if(n.type==="touch" && !n.classification && !n.excludeStats) unclassified++; });
+  state.model.nodes.forEach(n=>{ if(n.type==="touch" && !n.classification && !n.excludeStats && !isLinkNode(n)) unclassified++; });
   /* capacity web — per on-path touch step: demand at the step, load vs effective capacity, pace.
      Loads use each step's own demand (incoming × visits), so rework loop-backs raise the load. */
   const per={}; let flowCap=null, busiest=null;
@@ -2893,6 +3235,11 @@ function rollup(){
   order.forEach(n=>{ const v=visits[n.id]||0; if(v<=0 || n.excludeStats) return; const mt=metricFor(n);
     if(n.type==="touch" && mt.touch!=null && mt.touch>0){ const tc=v*mt.touch; touch+=tc;
       flow.push({node:n, kind:"touch", time:tc, visits:v, base:mt.touch}); }
+    /* a linked step carries the child map's wait too, so parent lead time and flow
+       efficiency stay honest; it also competes for the longest-wait bottleneck */
+    if(n.type==="touch" && mt.linked && mt.wait!=null && mt.wait>0){ const wt=v*mt.wait; wait+=wt;
+      flow.push({node:n, kind:"wait", time:wt, visits:v, base:mt.wait});
+      waits.push({node:n, wait:wt, wip:null, visits:v, derived:false}); }
     if(n.type==="wait"){
       let base=mt.wait, derived=false;
       const t=downTouch(n.id), dpace=t&&per[t.id]?per[t.id].pace:null;   // downstream clearing pace
@@ -2929,6 +3276,7 @@ function rollup(){
     if(rw!=null){ rcount++; rft=(rft==null?1:rft)*(1-rw/100);
       if(!worst || rw>worst.rework) worst={node:n, rework:rw};
       if(th!=null && vol!=null) lost += th*vol*rw/100; }
+    if(isLinkNode(n)) return;   // the child map owns its own staffing — RFT multiplied through above
     if(n.performer==="bot") return;
     const key=(n.owner||"").trim()||"Unassigned";
     const o=owners[key]||(owners[key]={owner:key, demandHrs:0, staffedHrs:0, steps:0, hasDemand:false, hasStaff:false});
@@ -2989,6 +3337,7 @@ function groupRollup(grp){
   state.model.nodes.forEach(n=>{ if(!mem.has(n.id)||n.excludeStats) return;
     const v=visits[n.id]||0; if(v<=0) return; const mt=metricFor(n);
     if(n.type==="touch" && mt.touch!=null && mt.touch>0) touch += v*mt.touch;
+    if(n.type==="touch" && mt.linked && mt.wait!=null && mt.wait>0) wait += v*mt.wait;
     if(n.type==="wait"){
       const base = mt.wait!=null ? mt.wait : (dw[n.id]!=null ? dw[n.id] : null);
       if(base!=null && base>0) wait += v*base; } });
@@ -3037,6 +3386,7 @@ function render(){
   { const ft=$("#flowToggle"); if(ft) ft.classList.toggle("tool-on",(state.model.settings&&state.model.settings.showFlow)!==false); }
   { const nt=$("#notesToggle"); if(nt) nt.classList.toggle("tool-on",showNotes()); }
   { const t=$("#flowTitle"); if(t){ t.readOnly=state.viewer; if(document.activeElement!==t) t.value=state.model.name||""; fitTitle(t); } }
+  renderCrumbs();
   renderSegChips();
   const r=rollup();
   { const sb=$("#simBtn"); if(sb){
@@ -3078,10 +3428,11 @@ function renderHome(){
     const bn=(r.flag&&r.flag.node)?esc(r.flag.node.label):"—";
     const meta=(f.model&&f.model.meta)||{};
     const ai=(meta.importedFrom && !meta.reviewedAt)?'<div class="fc-chips">'+importChip(meta.importedFrom)+'</div>':"";
+    const ub=backlinksTo(f.model&&f.model.mapId);
     return `<div class="flowcard" data-id="${f.id}">
       <div class="fc-name">${esc(f.name||"Untitled")}</div>${ai}
       <div class="fc-stat"><span class="fc-eff">${eff}</span> flow efficiency</div>
-      <div class="fc-sub">${(f.model.nodes||[]).length} nodes · bottleneck: ${bn}</div>
+      <div class="fc-sub">${(f.model.nodes||[]).length} nodes · bottleneck: ${bn}${ub.length?` · <span title="Linked from: ${esc(ub.map(b=>b.title).join(", "))}">used by ${ub.length} flow${ub.length===1?"":"s"}</span>`:""}</div>
       <div class="fc-actions">
         <button class="open" data-act="open">Open ▶</button>
         <button data-act="meta">Details</button>
@@ -3737,6 +4088,106 @@ function edgeAtPoint(px, py, excludeId){
 }
 let _lay={}; // last layout map, for connection-drag hit-testing
 
+/* the linked-step card (phase 3): borrows the collapsed group's look — striped outer ring,
+   lens-sized card — but its chip shows the CHILD map's live digest metrics (lead time,
+   capacity ceiling, bottleneck, RFT) so the parent stays honest without opening anything.
+   Tombstones and roll-up cycles render as visible flags — never a crash or a silent zero. */
+function drawLinkCard(g,n,L,r){
+  const info=linkInfo(n), mt=metricFor(n);
+  const hue=n.color||"var(--accent)", w=L.w, bt=L.bt, u=unit();
+  const txt=(x,y,str,cls,extra)=>{ const t=el("text",Object.assign({x,y,class:cls},extra||{})); t.textContent=str; return t; };
+  // striped outer ring — the collapsed-group grammar: one card standing for a whole flow
+  g.appendChild(el("rect",{x:-5,y:bt-5,width:w+10,height:L.h+10,rx:18,fill:"none",
+    stroke:hue,"stroke-opacity":"0.7","stroke-width":1.5,"stroke-dasharray":"7 5","pointer-events":"none"}));
+  g.appendChild(el("rect",{class:"nbox",x:0,y:bt,width:w,height:L.h,rx:14,fill:"var(--panel)",stroke:hue,"stroke-width":1.5}));
+  const WELL=26;
+  g.appendChild(el("rect",{x:12,y:bt+12,width:WELL,height:WELL,rx:7,fill:hue}));
+  g.appendChild(useIc("ic-linkmap",16,bt+16,WELL-8,"#0f1720"));
+  const canOpen=info && !info.tomb && !info.unknown;
+  const x=(info&&info.digest&&info.digest.metrics)||{};
+  const short=L.h<130;
+  if(short){
+    g.appendChild(txt(TITLE_X,bt+(L.h<80?26:22),truncToWidth(n.label||(info&&info.title)||"Linked map",w-TITLE_X-70,F_LABEL),"nlabel"));
+    if(L.h>=80){
+      const lead=(mt.touch!=null||mt.wait!=null)?(mt.touch||0)+(mt.wait||0):null;
+      const sub= info&&info.tomb ? "⚠ map not found"
+               : mt.cyclic ? "⟳ roll-up cycle — see details"
+               : `${lead!=null?fmt(lead)+" "+u+" lead":"linked map — no data yet"}${mt.effCapacity!=null?` · ${fmt(mt.effCapacity)}/day`:""}`;
+      g.appendChild(txt(TITLE_X,bt+40,sub,"nmeta",info&&info.tomb?{fill:"var(--nva)"}:mt.cyclic?{fill:"var(--warn)"}:{}));
+    }
+  } else {
+    g.appendChild(txt(TITLE_X,bt+20,"LINKED MAP","nowner"));
+    let ty=bt+34; L.titleLines.forEach(ln=>{ g.appendChild(txt(TITLE_X,ty,ln,"nlabel")); ty+=LBL_LH; });
+    if(info&&info.tomb){
+      g.appendChild(txt(12,bt+80,"⚠ MAP NOT FOUND","",{fill:"var(--nva)","font-size":"11","font-weight":"800","letter-spacing":".5"}));
+      g.appendChild(txt(12,bt+97,"The linked map was deleted or moved","nmeta"));
+      g.appendChild(txt(12,bt+111,"out of the library. Nothing rolls up","nmeta"));
+      g.appendChild(txt(12,bt+125,"until the link is fixed or removed.","nmeta"));
+    } else if(mt.cyclic){
+      g.appendChild(txt(12,bt+80,"⟳ ROLL-UP CYCLE","",{fill:"var(--warn)","font-size":"11","font-weight":"800","letter-spacing":".5"}));
+      g.appendChild(txt(12,bt+97,"These maps link back to each other.","nmeta"));
+      g.appendChild(txt(12,bt+111,"Drilling in still works; its numbers","nmeta"));
+      g.appendChild(txt(12,bt+125,"stay out of roll-ups until resolved.","nmeta"));
+    } else if(info&&info.unknown){
+      g.appendChild(txt(12,bt+80,"Linked map","nmeta"));
+      g.appendChild(txt(12,bt+94,"Numbers aren't available in this copy.","nmeta"));
+    } else {
+      // two metric columns straight from the child's digest — collapsed-group geometry
+      const NUMF=`800 21px ${FONT_STACK}`, F_ROW=`10px ${FONT_STACK}`, F_ROWB=`700 10px ${FONT_STACK}`;
+      const padL=12, midX=Math.round(w/2), colTop=bt+64, colW=midX-padL-12, rowY0=colTop+44, rowH=12.5;
+      g.appendChild(el("line",{x1:midX,y1:colTop-2,x2:midX,y2:bt+L.h-12,stroke:"var(--line)","stroke-width":1}));
+      const dnum=(x0,label,numStr,unitStr,cat)=>{ let lx=x0;
+        if(cat){ g.appendChild(useIc(METRICS_SPEC.categories[cat].icon, x0, colTop-4.5, 9, `var(--cat-${cat})`)); lx=x0+13; }
+        g.appendChild(txt(lx,colTop+4,truncToWidth(label,midX-padL-(cat?28:14),F_META),"nowner"));
+        g.appendChild(txt(x0,colTop+26,numStr,"",{"font-size":"21","font-weight":"800",fill:"var(--ink)"}));
+        if(unitStr){ const nw=measure(numStr,NUMF); g.appendChild(txt(x0+nw+5,colTop+26,unitStr,"nmeta",{"font-size":"10"})); } };
+      const drow=(colX,i,key,val,valColor)=>{ const y=rowY0+i*rowH, vs=String(val);
+        g.appendChild(txt(colX,y,key,"",{"font-size":"10",fill:"var(--faint)"}));
+        g.appendChild(txt(colX+colW,y,vs,"",{"font-size":"10","font-weight":"700","text-anchor":"end",fill:valColor||"var(--muted)"}));
+        const x1=colX+measure(key,F_ROW)+4, x2=colX+colW-measure(vs,F_ROWB)-4;
+        if(x2-x1>6) g.appendChild(el("line",{x1,y1:y-3,x2,y2:y-3,stroke:"var(--line)","stroke-width":1,"stroke-dasharray":"1 2.5"})); };
+      const lead=(mt.touch!=null||mt.wait!=null)?(mt.touch||0)+(mt.wait||0):null;
+      dnum(padL,"TURNAROUND", lead!=null?fmt(lead):"—", lead!=null?u:"", "speed");   // short keys — the collapsed-group card's grammar
+      drow(padL,0,"Touch",mt.touch!=null?`${fmt(mt.touch)} ${u}`:"—");
+      drow(padL,1,"Wait",mt.wait!=null?`${fmt(mt.wait)} ${u}`:"—");
+      const rx2=midX+12;
+      dnum(rx2,"CAPACITY", mt.effCapacity!=null?fmt(mt.effCapacity):"—", mt.effCapacity!=null?"/day":"", "capacity");
+      drow(rx2,0,"Bottleneck",x.bottleneck&&x.bottleneck.step?truncToWidth(x.bottleneck.step,colW-58,F_ROWB):"—",
+        x.bottleneck?"var(--nva)":null);
+      drow(rx2,1,"RFT",x.rftPct!=null?Math.round(x.rftPct)+"%":"—");
+      if(L.h>=150) g.appendChild(txt(padL,bt+L.h-8,"live from the linked map","nmeta",{"font-style":"italic","font-size":"9",fill:"var(--faint)"}));
+    }
+  }
+  // OPEN pill (top-right) — double-click anywhere on the card does the same
+  if(L.h>=80){
+    const pl=info&&info.tomb?"MISSING":"OPEN ↗", pillW=54;
+    const op=el("g",{class:"subchip"});
+    op.appendChild(el("rect",{x:w-pillW-10,y:bt+13,width:pillW,height:18,rx:6,fill:info&&info.tomb?"var(--nva)":hue}));
+    op.appendChild(txt(w-pillW/2-10,bt+26,pl,"",{fill:"#0f1720","font-size":"9.5","font-weight":"800","text-anchor":"middle"}));
+    const tip=el("title"); tip.textContent=info&&info.tomb?"The linked map no longer exists":"Open the linked map (double-click works too)";
+    op.appendChild(tip);
+    op.addEventListener("mousedown",ev=>ev.stopPropagation());
+    op.addEventListener("click",ev=>{ ev.stopPropagation(); if(canOpen) openLinked(n); });
+    g.appendChild(op);
+  }
+  if(editable()){
+    const zy=short?bt+10:bt+24, zh=short?22:(L.titleLines.length>1?LBL_LH+18:22);
+    const zr=el("rect",{class:"vedit",x:TITLE_X-6,y:zy,width:w-TITLE_X-64,height:zh,rx:6});
+    zr.addEventListener("mousedown",ev=>ev.stopPropagation());
+    zr.addEventListener("click",ev=>{ ev.stopPropagation(); editCardField({
+      x:n.x+TITLE_X-6, y:n.y+zy, w:w-TITLE_X-64, h:24,
+      value:n.label, placeholder:"Step name", onCommit:v=>{ n.label=v||undefined; } }); });
+    g.appendChild(zr);
+  }
+  if(r.flag && r.flag.node.id===n.id){
+    const fw=92;
+    g.appendChild(el("rect",{x:w-fw-6,y:bt-11,width:fw,height:18,rx:6,fill:"var(--nva)"}));
+    g.appendChild(useIc("ic-flag",w-fw-2,bt-9,13,"#2a0a04"));
+    g.appendChild(txt(w-fw+15,bt+2,"BOTTLENECK","",{fill:"#2a0a04","font-size":"9.5","font-weight":"700"}));
+  }
+  g.addEventListener("dblclick",ev=>{ ev.stopPropagation(); if(canOpen) openLinked(n); });
+}
+
 function renderCanvas(r){
   const m=state.model, svg=$("#canvas"); svg.innerHTML="";
   svg.setAttribute("class", editable()?"build":"");
@@ -3744,7 +4195,10 @@ function renderCanvas(r){
   const mwQ = maxWip();
   // per-node share of total lead time (drives the time-segment position + %)
   const tl={}; { let acc=0; const tot=r.turnaround||0;
-    r.flow.forEach(f=>{ tl[f.node.id]={start: tot>0?acc/tot*100:0, pct: tot>0?f.time/tot*100:0}; acc+=f.time; });
+    // a linked step contributes two consecutive entries (its child's touch + wait) → one merged band
+    r.flow.forEach(f=>{ const pct=tot>0?f.time/tot*100:0, cur=tl[f.node.id];
+      if(cur) cur.pct+=pct; else tl[f.node.id]={start: tot>0?acc/tot*100:0, pct};
+      acc+=f.time; });
     // sub-steps inherit their slice of the parent's band (child touch × parent visits)
     r.flow.forEach(f=>{ const p=f.node; if(p.type!=="touch"||!hasSubs(p)) return;
       let cacc=(tl[p.id]||{start:0}).start;
@@ -3969,7 +4423,9 @@ function renderCanvas(r){
     if(n.excludeStats) g.setAttribute("opacity","0.6");   // excluded from flow stats — visibly quieter
     const col=nodeColors(n), L=lay[n.id], w=L.w, bt=L.bt, mt=L.mt;
 
-    if(L.kind==="frame"){ // expanded meta step: dashed hue frame + header; child cards draw themselves
+    if(isLinkNode(n)){ // linked step (phase 3): a whole child map viewed from outside
+      drawLinkCard(g,n,L,r);
+    } else if(L.kind==="frame"){ // expanded meta step: dashed hue frame + header; child cards draw themselves
       const hue=typeHue(n);
       g.appendChild(el("rect",{class:"nbox",x:0,y:bt,width:w,height:L.h,rx:16,fill:col.fill,stroke:hue,"stroke-width":1.5,"stroke-dasharray":"7 5"}));
       g.appendChild(el("rect",{x:0,y:bt,width:w,height:L.h,rx:16,fill:hue,"fill-opacity":"0.05","pointer-events":"none"}));
@@ -4590,7 +5046,8 @@ function renderRibbon(r){
       lab.textContent=fmt(seg.time); s.appendChild(lab); }
     // interactivity: tooltip + two-way canvas highlight + click to focus
     s._tip={ label:n.label,
-      kind: seg.kind==="touch" ? (n.performer==="bot"?"Bot step":"Human step")+(hasSubs(n)?` · ${n.children.length} sub-steps`:"") : "Queue wait",
+      kind: isLinkNode(n) ? (seg.kind==="touch"?"Linked map · hands-on":"Linked map · waiting")
+          : seg.kind==="touch" ? (n.performer==="bot"?"Bot step":"Human step")+(hasSubs(n)?` · ${n.children.length} sub-steps`:"") : "Queue wait",
       line2:`${fmt(seg.time)} ${u} · ${pct<1?"<1":Math.round(pct)}% of turnaround`,
       passes:(seg.visits!=null && Math.abs(seg.visits-1)>0.01) ? `avg ${seg.visits.toFixed(2)} passes` : null };
     s.addEventListener("mouseenter",()=>segHover(s,n.id,true));
@@ -4640,6 +5097,7 @@ function renderInspector(){
   if(state.selected.type==="group") return renderGroupInspector();
   const n=state.model.nodes.find(x=>x.id===state.selected.id);
   if(!n){ insp.classList.remove("show"); return; }
+  if(isLinkNode(n)) return renderLinkInspector(n);
   const u=unit(); const r=rollup(); const linking=state.linkingFrom===n.id;
   const linkBanner=`<div class="linkbanner ${linking?'show':''}">Click a target node to draw the arrow… (click empty space to cancel)</div>`;
 
@@ -4718,6 +5176,7 @@ function renderInspector(){
         </div>
       </div>`);
     body+=segSection(n,u);
+    body+=linkSection(n);
     body+=section("advanced","Advanced",`${excludeRow(n)}${advanced(n,true)}`);
   } else if(n.type==="wait"){
     body+=section("info","Info",field("Owner","owner",n.owner||"","text"));
@@ -4854,6 +5313,19 @@ function segSection(n,u){
     `${blocks}<div class="sub" style="margin:2px 0 0">Blank = the step's base number. Segments are defined on the map details panel.</div>`,
     "per-segment");
 }
+/* link-a-step drawer (phase 3): turn a plain step into a linked step — the peer-to-peer
+   "continues in: …" chaining path; promote/demote is the group-shaped one */
+function linkSection(n){
+  if(n.parentId || n.type!=="touch" || isLinkNode(n)) return "";
+  const cands=linkCandidates();
+  if(!cands.length) return "";
+  return section("link","Link to another map",
+    `<div class="field"><label>This step stands for a whole flow</label>
+      <select id="linkSet"><option value="">— not linked —</option>
+        ${cands.map(c=>`<option value="${esc(c.mapId)}">${esc(c.title)}</option>`).join("")}</select>
+      <div class="sub" style="margin:4px 0 0">The card then shows that map's live lead time, capacity and bottleneck, and double-click drills in. Also how an end-of-map "continues in: …" hand-off works. Its own numbers here stop counting.</div>
+    </div>`);
+}
 /* drawer checkbox: keep the box on the map but leave its numbers out of every flow stat */
 function excludeRow(n){
   return `<label class="checkrow"><input type="checkbox" data-bindchk="excludeStats" ${n.excludeStats?"checked":""}/>
@@ -4928,6 +5400,13 @@ function wireInspector(n){
     if(!c||j<0||j>=c.length) return; [c[i],c[j]]=[c[j],c[i]]; render(); }));
   const bp=insp.querySelector("#backToParent"); if(bp) bp.addEventListener("click",()=>selectNode(n.parentId));
   const pr=insp.querySelector("#promoteSub"); if(pr) pr.addEventListener("click",()=>promoteSub(n.id));
+  /* link this step to another map (phase 3) */
+  const ls=insp.querySelector("#linkSet"); if(ls) ls.addEventListener("change",()=>{
+    if(!ls.value) return;
+    n.linksTo={mapId:ls.value};
+    if(linkCyclic(n)) toast("Linked — ⚠ these maps now link back to each other (kept out of roll-ups until resolved)");
+    else toast("Linked — the card now carries that map's live numbers");
+    render(); });
 }
 function renderEdgeInspector(){
   const e=state.model.edges.find(x=>x.id===state.selected.id);
@@ -5041,7 +5520,10 @@ function renderGroupInspector(){
         <div class="memberlist">${memberRows}</div>
       </div>
     </div>
-    <div class="insp-foot"><button class="del" id="delGroup">🗑 Delete group</button></div>`;
+    <div class="insp-foot">
+      <button id="promoteGrp" title="Move these steps into their own map — this group becomes a linked step carrying that map's live numbers">⇗ Promote to map</button>
+      <button class="del" id="delGroup">🗑 Delete group</button>
+    </div>`;
   wireGroupInspector(grp);
 }
 function wireGroupInspector(grp){
@@ -5058,6 +5540,63 @@ function wireGroupInspector(grp){
   const gn=insp.querySelector("[data-gnote]"); if(gn) gn.addEventListener("change",()=>{ grp.valueNote=gn.value.trim()||undefined; render(); });
   const cl=insp.querySelector("#inspClose"); if(cl) cl.addEventListener("click",()=>selectNode(null));
   const del=insp.querySelector("#delGroup"); if(del) del.addEventListener("click",()=>{ removeAnno("groups",grp.id); selectNode(null); });
+  const pm=insp.querySelector("#promoteGrp"); if(pm) pm.addEventListener("click",()=>promoteGroup(grp.id));
+}
+
+/* inspector for a linked step (phase 3): where the link lives, what the child reports,
+   and the three actions — open, demote (fold back in), detach. */
+function renderLinkInspector(n){
+  const insp=$("#inspector");
+  const info=linkInfo(n), mt=metricFor(n), u=unit();
+  const lead=(mt.touch!=null||mt.wait!=null)?(mt.touch||0)+(mt.wait||0):null;
+  const x=(info&&info.digest&&info.digest.metrics)||{};
+  let stateRow="";
+  if(info&&info.tomb) stateRow=`<span class="insp-chip hot">⚠ Map not found</span>`;
+  else if(mt.cyclic) stateRow=`<span class="insp-chip warn">⟳ Roll-up cycle</span>`;
+  const target = info&&info.tomb
+    ? `<div class="sub">The linked map was deleted or moved out of the library. Restore its file, or detach the link — nothing rolls up meanwhile (no silent zeros).</div>`
+    : `<div class="sub">Linked to <b>${esc(info&&info.title||"Untitled")}</b>${info&&info.path?` <span class="h4note">· ${esc(info.path)}</span>`:""}</div>`;
+  const cycleNote = mt.cyclic
+    ? `<div class="sub" style="margin-top:6px">These maps link back to each other. Drilling in still works; this step's numbers stay out of roll-ups until the loop is broken.</div>` : "";
+  const metrics = info&&!info.tomb&&!info.unknown&&info.digest&&!mt.cyclic ? `
+    <div class="insp-sec"><h4>Live numbers <span class="h4note">· from the linked map's digest</span></h4>
+      <table class="gmetrics" style="width:100%">
+        <thead><tr><th>${ML("turnaround")} (${u})</th><th>${ML("touch")}</th><th>${ML("wait")}</th></tr></thead>
+        <tbody><tr><td>${fmt(lead)}</td><td>${fmt(mt.touch)}</td><td>${fmt(mt.wait)}</td></tr></tbody></table>
+      <div class="sub" style="margin-top:6px">${ML("capacity")}: <b>${mt.effCapacity!=null?fmt(mt.effCapacity)+"/day":"—"}</b>
+        · ${ML("rft")}: <b>${x.rftPct!=null?Math.round(x.rftPct)+"%":"—"}</b>
+        ${x.bottleneck&&x.bottleneck.step?` · ${ML("bottleneck")}: <b>${esc(x.bottleneck.step)}</b>`:""}</div>
+      <div class="sub" style="margin-top:4px">They update whenever the linked map is saved — nothing to maintain here.</div>
+    </div>` : "";
+  const usedBy=backlinksTo(state.model.mapId).length;
+  insp.innerHTML=`<div class="insp-head">
+      <div class="insp-htop">
+        <div class="insp-iconwell" style="--hue:${n.color||"var(--accent)"}"><svg><use href="#ic-linkmap"/></svg></div>
+        <input class="insp-title" data-bind="label" value="${esc(n.label||"")}" placeholder="Linked step" />
+        <button class="insp-close" id="inspClose" title="Close">✕</button>
+      </div>
+      ${stateRow?`<div class="insp-hrow">${stateRow}</div>`:""}
+    </div>
+    <div class="insp-body">
+      <div class="insp-sec"><h4>Linked map</h4>${target}${cycleNote}
+        <div class="ws-row" style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
+          ${info&&!info.tomb&&!info.unknown?`<button class="btn" id="openLink">↗ Open</button>
+          <button class="btn" id="demoteLink" title="Bring its steps back into this map as a group and delete its file">⇊ Fold back in</button>`:""}
+          <button class="btn" id="detachLink" title="Keep this step, drop the link — it goes back to carrying its own numbers">✂ Detach link</button>
+        </div>
+      </div>
+      ${metrics}
+      ${usedBy?`<div class="sub" style="margin:0 2px">This map itself is used by ${usedBy} other flow${usedBy===1?"":"s"}.</div>`:""}
+    </div>
+    <div class="insp-foot"><button class="del" id="delNode">🗑 Delete step</button></div>`;
+  insp.querySelector("#inspClose").addEventListener("click",()=>selectNode(null));
+  const lb=insp.querySelector("[data-bind]");
+  lb.addEventListener("change",()=>{ n.label=lb.value.trim()||undefined; render(); });
+  const ob=insp.querySelector("#openLink"); if(ob) ob.addEventListener("click",()=>openLinked(n));
+  const db=insp.querySelector("#demoteLink"); if(db) db.addEventListener("click",()=>demoteLinked(n.id));
+  const xb=insp.querySelector("#detachLink"); if(xb) xb.addEventListener("click",()=>{
+    delete n.linksTo; delete n._reflowDx; toast("Link detached — the step carries its own numbers again"); render(); });
+  const del=insp.querySelector("#delNode"); if(del) del.addEventListener("click",()=>deleteNode(n.id));
 }
 
 /* ---------- linking ---------- */
@@ -6161,7 +6700,7 @@ function importSheetFile(){ $("#fileData").click(); }
 
 /* data-bearing nodes (the ones a data row can feed) */
 /* leaf nodes only: a meta step's numbers are derived from its sub-steps, so the sheet lists the sub-steps */
-function dataNodes(){ return (state.model?state.model.nodes:[]).filter(n=>(n.type==="touch"||n.type==="wait") && n.stepId && !hasSubs(n)); }
+function dataNodes(){ return (state.model?state.model.nodes:[]).filter(n=>(n.type==="touch"||n.type==="wait") && n.stepId && !hasSubs(n) && !isLinkNode(n)); }
 function dataMatchSummary(){
   const nodes=dataNodes(); const ids=new Set(state.data.map(r=>String(r.StepID)));
   const missing=nodes.filter(n=>!ids.has(String(n.stepId)));
@@ -6259,6 +6798,23 @@ function buildFlowText(){
   L.push("STEPS (in flow order)");
   ordered.forEach((n,i)=>{
     const mt=metricFor(n), per=(cap.per||{})[n.id];
+    if(isLinkNode(n)){   // a whole child map viewed from outside — numbers from its digest
+      const info=linkInfo(n);
+      L.push(`${i+1}. [LINKED MAP] ${n.label}  →  "${(info&&info.title)||"?"}"`);
+      if(info&&info.tomb) L.push(`     ⚠ target missing — the linked map was deleted/moved (tombstone; excluded from totals)`);
+      else if(mt.cyclic) L.push(`     ⚠ roll-up cycle — these maps link to each other; excluded from totals until resolved`);
+      else {
+        const seg=[];
+        const lead=(mt.touch!=null||mt.wait!=null)?(mt.touch||0)+(mt.wait||0):null;
+        if(lead!=null) seg.push(`lead ${num(lead)} ${u} (touch ${num(mt.touch||0)} / wait ${num(mt.wait||0)})`);
+        if(mt.effCapacity!=null) seg.push(`capacity ${num(mt.effCapacity)}/day`);
+        if(mt.rework!=null) seg.push(`RFT ${num(100-mt.rework)}%`);
+        const bn=info&&info.digest&&info.digest.metrics&&info.digest.metrics.bottleneck;
+        if(bn&&bn.step) seg.push(`its bottleneck: ${bn.step}`);
+        L.push(`     ${seg.length?seg.join(" · "):"no data in the linked map yet"}  (live from its digest)`);
+      }
+      return;
+    }
     if(n.type==="wait"){
       L.push(`${i+1}. [QUEUE] ${n.label}`);
       const seg=[];
@@ -6751,6 +7307,7 @@ function buildSimHud(){
    ============================================================ */
 function setMode(m){ state.mode=m; state.selected=null; cancelLink(true); if(state.tool) setTool(null); render(); }   // m: "home" | "build"
 function goHome(){ if(state.currentId||(state.ws&&state.ws.open)) scheduleSave();
+  state.crumbs=[]; state._linkNav=null; renderCrumbs();
   state.mode="home"; resetThemeRoot(); updateChrome(); renderHome();
   if(state.ws) wsReconcile(); }   // returning to the gallery re-checks the folder in the background
 
