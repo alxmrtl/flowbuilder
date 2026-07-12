@@ -7,6 +7,7 @@
 <script src="vendor/xlsx.full.min.js"></script>
 <script src="vendor/jspdf.umd.min.js"></script>
 <script src="vendor/minisearch.umd.js"></script>
+<script src="vendor/fflate.umd.js"></script>
 <style>
   :root{
     --bg:#0f1720; --panel:#16212e; --panel2:#1d2a3a; --line:#2b3a4d;
@@ -117,6 +118,17 @@
   .convert-err{margin-top:8px;padding:8px 10px;border-radius:8px;background:rgba(217,91,74,.12);border:1px solid var(--nva);color:var(--nva);font-size:13px}
   .convert-report{margin-top:12px;padding:10px 12px;border-radius:9px;background:var(--panel2);border:1px solid var(--line);font-size:12px;line-height:1.5;white-space:pre-wrap;max-height:220px;overflow:auto}
   .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:12px}
+  /* ---- Import Visio preview (Tier 2 — deterministic .vsdx conversion) ---- */
+  .vz-counts{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin:12px 0}
+  .vz-count{background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:8px 11px}
+  .vz-count .k{font-size:10.5px;letter-spacing:.5px;text-transform:uppercase;color:var(--faint);font-weight:700}
+  .vz-count .v{font-size:15px;font-weight:700;margin-top:2px}
+  .vz-count .v small{font-size:11px;color:var(--muted);font-weight:500}
+  .vz-list{margin-top:8px;max-height:170px;overflow:auto;border:1px solid var(--line);border-radius:9px;
+    background:var(--panel2);padding:8px 11px;font-size:12.5px;line-height:1.55}
+  .vz-list b{color:var(--warn)}
+  .vz-page{display:flex;align-items:center;gap:8px;margin:6px 0 2px}
+  #home.vz-drop{outline:2px dashed var(--accent);outline-offset:-10px;border-radius:12px}
   /* ---- bottleneck-threshold modal ---- */
   .bn-row{display:flex;align-items:center;justify-content:space-between;gap:14px;margin:14px 0 4px}
   .bn-row label{font-weight:600;white-space:nowrap}
@@ -653,6 +665,7 @@
   .build .group:hover .del-handle,.build .comment:hover .del-handle{opacity:1;pointer-events:all}
   .edge{fill:none;stroke:var(--faint);stroke-width:2}
   .edge.hot{stroke:var(--nva)}
+  .edge.primary{stroke:var(--va);stroke-width:2.5}   /* happy path — the desired route; bottleneck red still wins */
   .edge.sel{stroke:var(--accent);stroke-width:2.5}
   .edge.insert-target{stroke:var(--accent);stroke-width:4}
   .edge-hit{fill:none;stroke:transparent;stroke-width:14;cursor:pointer}
@@ -881,6 +894,7 @@
     <button class="btn" id="exportSheet" title="Download a stats sheet (CSV) with one row per step — fill it in, then Import sheet to load the numbers."><svg class="t-ic"><use href="#ic-download"/></svg>Export sheet</button>
     <button class="btn primary" id="importSheet" title="Load a filled-out stats sheet (Excel/CSV) to populate this flow's numbers."><svg class="t-ic"><use href="#ic-upload"/></svg>Import sheet</button>
     <button class="btn" id="convertDoc" title="Build a new flow from source material — a transcript, a Visio map, an Excel sheet, a job-aid. Copy the prompt into any AI, paste the result back."><svg class="t-ic"><use href="#ic-doc"/></svg>Convert docs</button>
+    <button class="btn" id="importVisio" title="Convert a Visio drawing (.vsdx) into a flow — read directly in your browser, no AI involved. You'll see a preview of what maps over before anything is created."><svg class="t-ic"><use href="#ic-upload"/></svg>Import Visio</button>
   </div>
   <span class="divider"></span>
   <div class="hdr-group" id="shareGroup">
@@ -895,6 +909,7 @@
   </div>
   <button class="btn iconbtn" id="howData" title="How saving &amp; data work">ℹ</button>
   <input type="file" id="fileData" accept=".xlsx,.xls,.csv" style="display:none" />
+  <input type="file" id="fileVsdx" accept=".vsdx" style="display:none" />
 </header>
 
 <!-- How saving & data work explainer -->
@@ -997,6 +1012,22 @@
   </div>
 </div>
 
+<!-- Import Visio — Tier 2: deterministic in-browser .vsdx conversion (the non-AI sibling of Convert docs) -->
+<div class="overlay" id="visioOverlay">
+  <div class="modal">
+    <div class="modal-h"><h3>Import Visio drawing</h3><button class="x" id="visioClose">✕</button></div>
+    <div id="visioBody"></div>
+    <div id="visioErr" class="convert-err" style="display:none"></div>
+    <div class="modal-actions">
+      <button class="btn" id="visioCancel">Cancel</button>
+      <button class="btn primary" id="visioAccept">Create draft flow</button>
+    </div>
+    <p class="mut small">Structure imports faithfully — types, labels, connections, lanes, positions.
+      Timing and people numbers usually don't exist in a Visio file, so the map arrives
+      <i>structurally complete, metrically empty</i>, flagged as an unreviewed draft. Nothing is invented.</p>
+  </div>
+</div>
+
 <!-- Home / flow library — becomes the folder-backed Workspace view when a library folder is connected -->
 <section id="home">
   <div class="home-bar">
@@ -1009,7 +1040,7 @@
     <button class="btn" id="exportLib">Export library</button>
     <button class="btn" id="wsConnect" style="display:none" title="Connect a shared folder (e.g. a synced SharePoint/OneDrive library) — every flow becomes a file the whole team can browse and search">⛁ Connect folder</button>
     <button class="btn iconbtn" id="wsSettingsBtn" style="display:none" title="Workspace settings — vocabulary, refresh, disconnect">⚙</button>
-    <input type="file" id="fileImport" accept=".json" style="display:none" />
+    <input type="file" id="fileImport" accept=".json,.vsdx" style="display:none" />
   </div>
   <div class="ws-filter" id="wsFilter" style="display:none"></div>
   <div class="ws-banner" id="wsBanner" style="display:none"></div>
@@ -1297,7 +1328,8 @@ SOURCE MATERIAL (label each source):
      nomenclature + METRICS_SPEC · state · helpers · PLATFORM FOUNDATIONS
      (mapId/meta/migrate) · LIBRARY (localStorage) · digest builder ·
      WORKSPACE (folder adapter, catalog/reconcile, search, meta/vocab UI) ·
-     flow CRUD + Convert docs · DIMENSION ENGINE (segments) · DATA BINDING ·
+     flow CRUD + Convert docs · VISIO IMPORT (.vsdx, phase 2.5) ·
+     DIMENSION ENGINE (segments) · DATA BINDING ·
      metrics engine (rollup) ·
      RENDER (home, stats, canvas, ribbon, inspector) · theming · exports ·
      simulate-a-day · WIRING · BOOT
@@ -1461,6 +1493,13 @@ function truncToWidth(text, maxW, font){
 const SCHEMA_VERSION = 2;
 const mintMapId = () => "m_" + (window.crypto && crypto.randomUUID ? crypto.randomUUID()
   : Date.now().toString(36) + Math.random().toString(36).slice(2,10));
+/* one governance chip for every import route — the "unreviewed" flag reads honestly per source */
+function importChip(imp){
+  const visio=imp && imp.type==="visio";
+  const label=visio?"Visio import · unreviewed":"AI import · unreviewed";
+  const title=(visio?"Converted from a Visio drawing":"Imported by AI conversion")+" and not yet reviewed by a person — treat as a draft";
+  return `<span class="fc-chip ai" title="${title}">${label}</span>`;
+}
 const defaultMeta = () => ({ owner:"", area:"", team:"", status:"draft",
   reviewedAt:null, reviewCadenceDays:null, tags:[], custom:{}, importedFrom:null });
 /* idempotent, silent: give any model (old or new) identity + meta; never touches nodes.
@@ -1969,7 +2008,7 @@ function wsCardHtml(id){
   if(m.area) chips.push(`<span class="fc-chip">${esc(m.area)}</span>`);
   if(m.team) chips.push(`<span class="fc-chip">${esc(m.team)}</span>`);
   if(m.owner) chips.push(`<span class="fc-chip">${esc(m.owner)}</span>`);
-  if(m.importedFrom && !m.reviewedAt) chips.push(`<span class="fc-chip ai" title="Imported by AI conversion and not yet reviewed by a person — treat as a draft">AI import · unreviewed</span>`);
+  if(m.importedFrom && !m.reviewedAt) chips.push(importChip(m.importedFrom));
   return `<div class="flowcard" data-mid="${esc(id)}">
     <div class="fc-name">${esc(d.title||e.title||"Untitled")}</div>
     <div class="fc-chips">${chips.join("")}</div>
@@ -2025,7 +2064,7 @@ function showMetaPanel(ctx){
       ? `<select data-metacustom="${esc(f.id)}"><option value="">—</option>${f.options.map(o=>`<option${o===val?" selected":""}>${esc(o)}</option>`).join("")}</select>`
       : `<input data-metacustom="${esc(f.id)}" value="${esc(val)}" placeholder="—"/>`;
     return fld(f.id,f.label||f.id,inner); }).join("");
-  const ai=meta.importedFrom?`<div class="meta-ai"><span>🤖 Imported ${meta.importedFrom.type==="ai-doc"?"by AI conversion":"from "+esc(meta.importedFrom.type)}${meta.importedFrom.date?" · "+esc(meta.importedFrom.date):""}${meta.importedFrom.fidelity?" · "+esc(String(meta.importedFrom.fidelity).toLowerCase()):""}.${meta.reviewedAt?" Reviewed "+esc(String(meta.reviewedAt).slice(0,10))+".":" Not yet reviewed."}</span>${meta.reviewedAt?"":'<button class="btn" id="metaReviewed">Mark reviewed</button>'}</div>`:"";
+  const ai=meta.importedFrom?`<div class="meta-ai"><span>🤖 Imported ${meta.importedFrom.type==="ai-doc"?"by AI conversion":meta.importedFrom.type==="visio"?"from Visio"+(meta.importedFrom.source?" ("+esc(meta.importedFrom.source)+")":""):"from "+esc(meta.importedFrom.type)}${meta.importedFrom.date?" · "+esc(meta.importedFrom.date):""}${meta.importedFrom.fidelity?" · "+esc(String(meta.importedFrom.fidelity).toLowerCase()):""}.${meta.reviewedAt?" Reviewed "+esc(String(meta.reviewedAt).slice(0,10))+".":" Not yet reviewed."}</span>${meta.reviewedAt?"":'<button class="btn" id="metaReviewed">Mark reviewed</button>'}</div>`:"";
   /* segments editor (phase 2): dimension name + members with demand shares. An org schema.json
      may declare shared dimensions so segment labels stay comparable across maps. */
   const segs=model.segments, segRow=(s)=>`<div class="seged-row" data-segid="${esc(s.id||"")}">
@@ -2285,6 +2324,7 @@ function validateImportModel(obj){
     if(SIDES_OK.includes(raw.toSide)) e.toSide=raw.toSide;
     if(raw.splitPct!=null && Number.isFinite(Number(raw.splitPct))) e.splitPct=Number(raw.splitPct);
     if(typeof raw.label==="string"&&raw.label.trim()) e.label=raw.label.trim();
+    if(raw.primary===true) e.primary=true;   // happy-path highlight (set by hand or by the Visio importer)
     m.edges.push(e); });
 
   (Array.isArray(obj.groups)?obj.groups:[]).forEach(raw=>{ if(!raw||typeof raw!=="object") return;
@@ -2327,6 +2367,303 @@ function loadModel(m){
   state._notesOpen=new Set(); state._notesAnim={}; state._notePick=null; state._editComment=null; state._stepPick=null;   // per-flow transients
   undoStack=[]; redoStack=[]; _undoBase=JSON.stringify(m);   // undo history is per open flow
   rebuildSegPer(); render();
+}
+
+/* ============================================================
+   VISIO IMPORT  (org platform — phase 2.5)
+   Tier 2 of R4: deterministic, fully in-browser .vsdx → flow conversion —
+   the non-AI sibling of Convert docs (never routes through the prompt flow).
+   A .vsdx is an OPC package: a zip (vendor/fflate) of XML parts.
+   Two classic traps are handled once, here:
+   · NAMESPACE — Visio 2012 XML lives in a *default* namespace
+     (http://schemas.microsoft.com/office/visio/2012/main), so tag-name
+     lookups by qualified name silently miss everything. Every lookup
+     below matches by localName only (vzKids / getElementsByTagNameNS "*").
+   · GEOMETRY — PinX/PinY are inches with Y pointing UP from the page's
+     bottom-left corner. Convert with yDown = pageHeight − PinY *before*
+     scaling, or the map renders mirrored / off-screen.
+   Unknown/custom stencils NEVER drop content: they become generic steps
+   with an attached note (risk register: "wild custom stencils").
+   ============================================================ */
+/* --- namespace-proof XML helpers --- */
+function vzKids(el,name){ const out=[]; if(!el) return out;
+  for(let c=el.firstElementChild;c;c=c.nextElementSibling) if(c.localName===name) out.push(c);
+  return out; }
+const vzAll=(el,name)=>el?Array.from(el.getElementsByTagNameNS("*",name)):[];
+const vzNum=v=>{ const n=parseFloat(v); return Number.isFinite(n)?n:null; };
+
+/* one <Shape> (with its decoration sub-shapes) → a flat record */
+function vzReadShape(sh,masters){
+  const s={ id:sh.getAttribute("ID"), masterId:sh.getAttribute("Master"),
+            name:sh.getAttribute("NameU")||sh.getAttribute("Name")||"",
+            pinX:null,pinY:null,w:null,h:null,locX:null,locY:null,
+            oneD:false,lineWeight:null,structure:null,text:"",props:[] };
+  s.master=(s.masterId!=null && masters[s.masterId])||"";
+  vzKids(sh,"Cell").forEach(c=>{ const n=c.getAttribute("N"),v=c.getAttribute("V");
+    if(n==="PinX")s.pinX=vzNum(v); else if(n==="PinY")s.pinY=vzNum(v);
+    else if(n==="Width")s.w=vzNum(v); else if(n==="Height")s.h=vzNum(v);
+    else if(n==="LocPinX")s.locX=vzNum(v); else if(n==="LocPinY")s.locY=vzNum(v);
+    else if(n==="LineWeight")s.lineWeight=vzNum(v);
+    else if(n==="BeginX"||n==="EndX")s.oneD=true; });   // routed endpoints ⇒ a connector, whatever its master
+  vzKids(sh,"Section").forEach(sec=>{ const N=sec.getAttribute("N");
+    if(N==="User") vzKids(sec,"Row").forEach(row=>{
+      if(row.getAttribute("N")==="msvStructureType"){
+        const c=vzKids(row,"Cell").find(x=>x.getAttribute("N")==="Value");
+        if(c) s.structure=String(c.getAttribute("V")||"").toLowerCase(); } });
+    if(N==="Prop"||N==="Property") vzKids(sec,"Row").forEach(row=>{   // Shape Data rows
+      let label=null,value=null,unit=null;
+      vzKids(row,"Cell").forEach(c=>{ const n=c.getAttribute("N");
+        if(n==="Label") label=c.getAttribute("V");
+        else if(n==="Value"){ value=c.getAttribute("V"); unit=c.getAttribute("U"); } });
+      const lab=String(label||row.getAttribute("N")||"").trim();
+      if(lab||value!=null) s.props.push({label:lab,value:String(value==null?"":value).trim(),unit}); }); });
+  s.text=vzAll(sh,"Text").map(t=>t.textContent).join(" ").replace(/\s+/g," ").trim();
+  return s;
+}
+
+/* .vsdx bytes → {pages:[{name,pageH,shapes,connects}]}; throws with a human message */
+function parseVsdx(bytes){
+  if(typeof fflate==="undefined") throw new Error("Zip library missing (vendor/fflate.umd.js)");
+  let files; try{ files=fflate.unzipSync(bytes); }catch(e){ throw new Error("That file isn't a readable .vsdx (couldn't open the package)."); }
+  const dec=new TextDecoder();
+  const xml=p=>{ const f=files[p]; if(!f) return null;
+    const doc=new DOMParser().parseFromString(dec.decode(f),"application/xml");
+    return doc.getElementsByTagName("parsererror").length?null:doc; };
+  const masters={};
+  vzAll(xml("visio/masters/masters.xml"),"Master").forEach(m=>{
+    masters[m.getAttribute("ID")]=(m.getAttribute("NameU")||m.getAttribute("Name")||"").trim(); });
+  /* page list: pages.xml (names + heights) joined to part files via its rels; glob fallback */
+  const rels={};
+  vzAll(xml("visio/pages/_rels/pages.xml.rels"),"Relationship").forEach(r=>{ rels[r.getAttribute("Id")]=r.getAttribute("Target"); });
+  const pages=[];
+  vzAll(xml("visio/pages/pages.xml"),"Page").forEach(pg=>{
+    const rel=vzKids(pg,"Rel")[0];
+    const rid=rel&&Array.from(rel.attributes).reduce((a,x)=>x.localName==="id"?x.value:a,null);
+    const part=(rels[rid]||"").replace(/^\.?\//,"");
+    let pageH=null;
+    vzAll(vzKids(pg,"PageSheet")[0],"Cell").forEach(c=>{ if(c.getAttribute("N")==="PageHeight") pageH=vzNum(c.getAttribute("V")); });
+    pages.push({name:pg.getAttribute("NameU")||pg.getAttribute("Name")||("Page "+(pages.length+1)),
+                path:part?"visio/pages/"+part:null, pageH});
+  });
+  if(!pages.length) Object.keys(files)
+    .filter(p=>/^visio\/pages\/page\d+\.xml$/i.test(p))
+    .sort((a,b)=>parseInt(a.match(/\d+/)[0],10)-parseInt(b.match(/\d+/)[0],10))
+    .forEach((p,i)=>pages.push({name:"Page "+(i+1),path:p,pageH:null}));
+  const out=[];
+  pages.forEach(pg=>{
+    const doc=pg.path?xml(pg.path):null; if(!doc) return;
+    const shapes=[];
+    const walk=root=>vzKids(root,"Shape").forEach(sh=>{
+      const s=vzReadShape(sh,masters);
+      const inner=vzKids(sh,"Shapes")[0];
+      /* Containers/swimlanes do NOT re-parent their members in the XML (membership is
+         logical/spatial), so children under a *mastered* shape are just its decoration —
+         keep the unit whole. Master-less group shapes are pure structure: recurse. */
+      if(inner && !s.master) walk(inner); else shapes.push(s);
+    });
+    vzKids(doc.documentElement,"Shapes").forEach(walk);
+    const connects=vzAll(doc.documentElement,"Connect").map(c=>({
+      sheet:c.getAttribute("FromSheet"), cell:c.getAttribute("FromCell")||"", to:c.getAttribute("ToSheet") }));
+    out.push({name:pg.name,pageH:pg.pageH,shapes,connects});
+  });
+  if(!out.length) throw new Error("No drawing pages found inside that .vsdx.");
+  return {pages:out};
+}
+
+/* --- Shape Data → step metrics: the R3 alias table (org vocabulary joins in) --- */
+const VZ_METRIC_FIELDS={touch:"touchTimeManual",wait:"waitTimeManual",wip:"wip",rework:"reworkPct",people:"people",hoursPerDay:"hoursPerDay"};
+const VZ_BUILTIN_ALIASES={
+  touch:["cycle time","process time","touch time","processing time","work time","handling time","task time"],
+  wait:["wait time","waiting time","queue time","idle time","delay"],
+  wip:["wip","queue size","backlog","work in progress","in queue"],
+  rework:["rework","rework %","rework rate","rework pct","% rework"],
+  people:["people","staff","fte","ftes","headcount","resources"],
+  hoursPerDay:["hours per day","hours/day","daily hours","available hours"] };
+const vzNorm=s=>String(s||"").toLowerCase().replace(/[^a-z0-9%]+/g,"");
+function vzAliasTable(){
+  const t={};
+  Object.entries(VZ_BUILTIN_ALIASES).forEach(([id,ws])=>ws.forEach(w=>t[vzNorm(w)]=id));
+  Object.keys(VZ_METRIC_FIELDS).forEach(id=>{
+    const spec=METRICS_SPEC.metrics[id]||METRICS_SPEC.inputs[id];   // people/hoursPerDay live under inputs
+    if(spec&&spec.l) t[vzNorm(spec.l)]=id;
+    const v=state.vocab&&state.vocab[id]; if(v) t[vzNorm(v)]=id; });  // the org's own term matches too
+  return t;
+}
+const VZ_OWNER_PROPS=new Set(["owner","role","team","performedby","who","responsible"]);
+
+/* one parsed page → {model, report}; deterministic, invents nothing */
+function vsdxPageToModel(page,baseName,multiPage){
+  const report={shapesTotal:0,steps:0,connTotal:0,edges:0,lanes:0,groups:0,
+                propsMatched:0,propsNoted:0,happy:0,unmapped:[],skipped:[]};
+  /* connector endpoints from <Connect>: Begin* glues the tail, End* the head */
+  const ends={};
+  page.connects.forEach(c=>{ const e=ends[c.sheet]||(ends[c.sheet]={});
+    if(/^Begin/.test(c.cell)) e.from=c.to; else if(/^End/.test(c.cell)) e.to=c.to; });
+  const isLane=s=>s.structure==="swimlane"||s.structure==="container"||s.structure==="list"
+    ||/swimlane|container|separator|phase list|cff/i.test(s.master);
+  const isConn=s=>!isLane(s)&&(s.oneD||!!ends[s.id]||/connector/i.test(s.master));
+  const lanes=[],conns=[],units=[];
+  page.shapes.forEach(s=>{
+    if(isLane(s)) lanes.push(s);
+    else if(isConn(s)) conns.push(s);
+    else if(s.pinX==null||s.pinY==null){ report.skipped.push({name:s.text||s.master||s.name||("shape "+s.id),why:"no position"}); }
+    else units.push(s);
+  });
+  report.shapesTotal=units.length; report.connTotal=conns.length;
+  /* degree (from glued connectors) — used to orient terminators with unhelpful text */
+  const inD={},outD={};
+  conns.forEach(c=>{ const e=ends[c.id]||{};
+    if(e.from!=null) outD[e.from]=(outD[e.from]||0)+1;
+    if(e.to!=null) inD[e.to]=(inD[e.to]||0)+1; });
+  /* GEOMETRY: flip Y (Visio Y grows upward), then one uniform scale chosen so the
+     tightest pair of shapes still clears a card; snap to the layout grid */
+  const pageH=page.pageH!=null?page.pageH:Math.max(...units.map(s=>s.pinY))+1;
+  const pts=units.map(s=>({x:s.pinX,y:pageH-s.pinY}));
+  let minD=Infinity;
+  for(let i=0;i<pts.length;i++) for(let j=i+1;j<pts.length;j++)
+    minD=Math.min(minD,Math.hypot(pts[i].x-pts[j].x,pts[i].y-pts[j].y));
+  const S=(Number.isFinite(minD)&&minD>0)?Math.min(320,Math.max(60,(NODE_W+56)/minD)):140;
+  const snapG=v=>Math.round(v/GRID)*GRID;
+  /* classify each 2-D unit */
+  const aliases=vzAliasTable(), comments=[], nodes=[], vidToNid={};
+  const KNOWN=/process|task|step|activity|operation|sub-?process|predefined/i;
+  units.forEach(s=>{
+    const m=s.master, ml=m.toLowerCase(), txt=s.text.toLowerCase();
+    const n={ id:uid("n_"), label:s.text||m||"Step",
+              x:snapG(s.pinX*S-NODE_W/2), y:snapG((pageH-s.pinY)*S-NODE_H/2) };
+    let unknown=false;
+    if(/terminat|start\/end|\bstart\b|\bend\b/.test(ml)||(!m&&/^(start|begin|end|stop|finish)\b/.test(txt))){
+      n.type=/end|stop|finish|complete|done|deliver|close/.test(txt)?"end"
+        :/start|begin|open|trigger|receive|request/.test(txt)?"start"
+        :!(inD[s.id])?"start":!(outD[s.id])?"end":"touch";   // mid-flow terminator → a step, not a wall
+    }
+    else if(/decision/.test(ml)) n.type="touch";              // decisions become Human Steps; branch labels live on the edges
+    else if(/delay|wait|queue/.test(ml)) n.type="wait";
+    else if(KNOWN.test(ml)) n.type="touch";
+    else { n.type="touch"; unknown=true; }                     // custom/unknown stencil → generic step, nothing dropped
+    /* Shape Data rows → metrics via aliases; anything unrecognized lands in valueNote verbatim */
+    const noted=[];
+    s.props.forEach(p=>{
+      const key=vzNorm(p.label);
+      if(VZ_OWNER_PROPS.has(key)&&p.value){ n.owner=p.value; return; }
+      const mid=aliases[key], num=parseFloat(p.value);
+      /* numbers are taken as authored (no unit conversion — converting would be inventing) */
+      if(mid&&Number.isFinite(num)&&n.type!=="start"&&n.type!=="end"){ n[VZ_METRIC_FIELDS[mid]]=num; report.propsMatched++; }
+      else if(p.label&&p.value){ noted.push(p.label+": "+p.value); report.propsNoted++; }
+    });
+    if(noted.length) n.valueNote=noted.join("\n");
+    if(unknown){
+      report.unmapped.push({name:s.text||s.name||("shape "+s.id),master:m||"no master"});
+      comments.push({ text:`Visio shape “${s.text||s.name||s.id}” (stencil “${m||"no master"}”) wasn't recognized — imported as a generic step so nothing was dropped.`,
+                      type:"note", nodeId:n.id });
+    }
+    vidToNid[s.id]=n.id; nodes.push(n); report.steps++;
+  });
+  /* connectors → edges; a clearly heavier line than the page's norm reads as the drawn happy path */
+  const weights=conns.map(c=>c.lineWeight).filter(w=>w!=null&&w>0).sort((a,b)=>a-b);
+  const medW=weights.length?weights[Math.floor(weights.length/2)]:null;
+  const edges=[];
+  conns.forEach(c=>{
+    const e=ends[c.id]||{};
+    const from=vidToNid[e.from], to=vidToNid[e.to];
+    if(!from||!to||from===to){ report.skipped.push({name:c.text||c.master||("connector "+c.id),why:"not glued at both ends"}); return; }
+    const edge={id:uid("e_"),from,to};
+    if(c.text) edge.label=c.text;
+    if(medW!=null&&c.lineWeight!=null&&c.lineWeight>=medW*1.5){ edge.primary=true; report.happy++; }
+    edges.push(edge); report.edges++;
+  });
+  /* swimlanes/containers → Groups; the lane title becomes each member step's owner.
+     Membership is spatial (Visio's own rule): a step belongs to the SMALLEST lane whose
+     rectangle contains its pin. Lane-title-as-owner is what feeds the R5 swimlane view
+     (phase 5): lanes can be reconstructed later from owner alone. */
+  const laneRect=l=>{ const w=l.w||0,h=l.h||0,lx=l.locX!=null?l.locX:w/2,ly=l.locY!=null?l.locY:h/2;
+    return {x1:l.pinX-lx,y1:l.pinY-ly,x2:l.pinX-lx+w,y2:l.pinY-ly+h,area:w*h}; };
+  const sortedLanes=lanes.map(l=>({l,r:laneRect(l)})).sort((a,b)=>a.r.area-b.r.area);
+  const groups=[], laneMembers=new Map();
+  units.forEach(s=>{
+    const hit=sortedLanes.find(({r})=>s.pinX>=r.x1&&s.pinX<=r.x2&&s.pinY>=r.y1&&s.pinY<=r.y2);
+    if(!hit) return;
+    const label=(hit.l.text||hit.l.master||"Lane").trim();
+    const n=nodes.find(x=>x.id===vidToNid[s.id]);
+    if(n&&!n.owner) n.owner=label;   // Shape-Data Owner (more specific) wins over the lane
+    if(!laneMembers.has(hit.l)) laneMembers.set(hit.l,[]);
+    laneMembers.get(hit.l).push(vidToNid[s.id]);
+  });
+  laneMembers.forEach((members,l)=>{
+    groups.push({id:uid("grp_"),label:(l.text||l.master||"Lane").trim(),members}); report.groups++; });
+  report.lanes=lanes.length;
+  lanes.filter(l=>!laneMembers.has(l)).forEach(l=>report.skipped.push({name:l.text||l.master||"lane",why:"container with no steps inside"}));
+  const model={ name:baseName+(multiPage?" — "+page.name:""),
+    settings:{timeUnit:"hrs",bottleneckMode:"absolute"}, nodes, edges, groups, comments };
+  return {model,report};
+}
+
+/* ---- Import Visio UX: file → per-page conversion → honest preview → draft map ---- */
+function handleVsdxFile(file){
+  file.arrayBuffer().then(buf=>{
+    const parsed=parseVsdx(new Uint8Array(buf));
+    const base=String(file.name||"Visio import").replace(/\.vsdx$/i,"");
+    const pages=parsed.pages.map(pg=>({name:pg.name, ...vsdxPageToModel(pg,base,parsed.pages.length>1)}))
+                            .filter(p=>p.model.nodes.length);
+    if(!pages.length) throw new Error("No recognizable shapes on any page of that drawing.");
+    state._vz={fileName:file.name,pages,pageIx:0};
+    renderVisioPreview();
+    $("#visioErr").style.display="none";
+    $("#visioOverlay").classList.add("show");
+  }).catch(err=>toast((err&&err.message)||"Couldn't read that .vsdx"));
+}
+function renderVisioPreview(){
+  const vz=state._vz; if(!vz) return;
+  const {report:r}=vz.pages[vz.pageIx];
+  const pageSel=vz.pages.length>1
+    ? `<div class="vz-page"><label class="mut">Page</label><select id="vzPage">${vz.pages.map((p,i)=>
+        `<option value="${i}" ${i===vz.pageIx?"selected":""}>${esc(p.name)}</option>`).join("")}</select>
+        <span class="mut small">one flow per page — run the import again for the others</span></div>` : "";
+  const count=(k,v,sub)=>`<div class="vz-count"><div class="k">${k}</div><div class="v">${v}${sub?` <small>${sub}</small>`:""}</div></div>`;
+  const unmappedHtml=r.unmapped.length
+    ? `<div class="vz-list"><b>${r.unmapped.length} shape${r.unmapped.length===1?"":"s"} not recognized</b> — imported as generic steps with a note, so nothing is lost:<br>${
+        r.unmapped.map(u=>`· ${esc(u.name)} <span class="mut">(stencil: ${esc(u.master)})</span>`).join("<br>")}</div>` : "";
+  const skipped=r.skipped.length
+    ? `<div class="vz-list">${r.skipped.length} item${r.skipped.length===1?"":"s"} skipped: ${
+        r.skipped.map(s=>`${esc(s.name)} <span class="mut">(${esc(s.why)})</span>`).join(" · ")}</div>` : "";
+  $("#visioBody").innerHTML=`
+    <p class="mut">Read directly from <b>${esc(vz.fileName)}</b> — no AI involved, nothing invented.</p>
+    ${pageSel}
+    <div class="vz-counts">
+      ${count("Shapes → steps",`${r.shapesTotal} → ${r.steps}`)}
+      ${count("Connectors → arrows",`${r.connTotal} → ${r.edges}`)}
+      ${count("Lanes → groups",`${r.lanes} → ${r.groups}`,r.groups?"lane title → step owner":"")}
+      ${r.propsMatched||r.propsNoted?count("Shape Data",`${r.propsMatched} matched`,`${r.propsNoted} kept as notes`):""}
+      ${r.happy?count("Happy path",`${r.happy} arrow${r.happy===1?"":"s"}`,"drawn heavier in Visio"):""}
+    </div>
+    ${unmappedHtml}${skipped}`;
+  const sel=$("#visioBody").querySelector("#vzPage");
+  if(sel) sel.onchange=()=>{ state._vz.pageIx=+sel.value; renderVisioPreview(); };
+}
+async function acceptVisioImport(){
+  const vz=state._vz; if(!vz) return;
+  const err=$("#visioErr"); err.style.display="none";
+  let model;
+  try{ model=validateImportModel(clone(vz.pages[vz.pageIx].model)); }
+  catch(ex){ err.textContent=(ex&&ex.message)||"Couldn't build a flow from that page."; err.style.display="block"; return; }
+  /* Tier-2 provenance: same governance rail as Convert docs — a visible unreviewed draft */
+  migratePlatform(model);
+  model.meta.importedFrom={type:"visio",source:vz.fileName,date:new Date().toISOString().slice(0,10)};
+  model.meta.status="draft";
+  if(state.ws){
+    try{ const res=await wsAddModel(model); await wsWriteCatalog(); wsBuildIndex();
+      $("#visioOverlay").classList.remove("show"); state._vz=null;
+      await openWsMap(res.mapId); }
+    catch(e){ err.textContent="Couldn't write the flow into the workspace folder."; err.style.display="block"; return; }
+  } else {
+    const id=uid("flow_");
+    state.library.flows[id]={id,name:model.name,model,updatedAt:Date.now()};
+    saveLibrary();
+    $("#visioOverlay").classList.remove("show"); state._vz=null;
+    openFlow(id,"build");
+  }
+  /* positions came from Visio — offer Tidy, never force it */
+  toast("Imported from Visio as a draft — layout kept as drawn; Tidy can straighten it");
 }
 
 /* ============================================================
@@ -2740,7 +3077,7 @@ function renderHome(){
     const eff=r.eff!=null?Math.round(r.eff*100)+"%":"—";
     const bn=(r.flag&&r.flag.node)?esc(r.flag.node.label):"—";
     const meta=(f.model&&f.model.meta)||{};
-    const ai=(meta.importedFrom && !meta.reviewedAt)?'<div class="fc-chips"><span class="fc-chip ai" title="Imported by AI conversion and not yet reviewed by a person — treat as a draft">AI import · unreviewed</span></div>':"";
+    const ai=(meta.importedFrom && !meta.reviewedAt)?'<div class="fc-chips">'+importChip(meta.importedFrom)+'</div>':"";
     return `<div class="flowcard" data-id="${f.id}">
       <div class="fc-name">${esc(f.name||"Untitled")}</div>${ai}
       <div class="fc-stat"><span class="fc-eff">${eff}</span> flow efficiency</div>
@@ -3425,6 +3762,10 @@ function renderCanvas(r){
       k.x=n.x+SUB_PADF+i*(viewW()+SUB_GAP); k.y=topY+SUB_HEAD-KL.bt; });
   }});
 
+  // imported groups (Visio lanes, Convert-docs groups) arrive as members-only — no rect until
+  // a layout exists; fit them once here, before anything reads grp.x/w (NaN canvas otherwise)
+  (m.groups||[]).forEach(grp=>{ if((grp.x==null||grp.w==null)&&Array.isArray(grp.members)) fitGroupBox(grp); });
+
   // attached notes have no live geometry — only floating (visible) ones stretch the canvas,
   // plus any open stacks dropping below their step (so exports don't clip them)
   const anno=[...(m.groups||[]),...(showNotes()?(m.comments||[]).filter(c=>!c.nodeId):[])];
@@ -3444,7 +3785,9 @@ function renderCanvas(r){
     requestAnimationFrame(()=>{ const st=$("#stage"); st.scrollLeft=P*z; st.scrollTop=P*z; }); }
 
   const defs=el("defs");
-  [["arrow","var(--faint)"],["arrowHot","var(--nva)"]].forEach(([id,col])=>{
+  /* arrowPrimary only exists when a happy path is drawn — keeps untouched maps byte-identical */
+  [["arrow","var(--faint)"],["arrowHot","var(--nva)"],
+   ...(m.edges.some(e=>e.primary)?[["arrowPrimary","var(--va)"]]:[])].forEach(([id,col])=>{
     const mk=el("marker",{id,viewBox:"0 0 10 10",refX:"9",refY:"5",markerWidth:"7",markerHeight:"7",orient:"auto-start-reverse"});
     mk.appendChild(el("path",{d:"M0,0 L10,5 L0,10 z",fill:col})); defs.appendChild(mk); });
   svg.appendChild(defs);
@@ -3534,7 +3877,7 @@ function renderCanvas(r){
         fill:hot?"var(--nva)":"var(--wait)","fill-opacity":hot?"0.16":"0.13","pointer-events":"none"}));
     }
     const edgeSel = state.selected && state.selected.type==="edge" && state.selected.id===e.id;
-    const ep=el("path",{d,class:"edge"+(hot?" hot":"")+(edgeSel?" sel":"")+(eOff?" seg-off":""),"marker-end":`url(#${hot?'arrowHot':'arrow'})`});
+    const ep=el("path",{d,class:"edge"+(hot?" hot":"")+(!hot&&e.primary?" primary":"")+(edgeSel?" sel":"")+(eOff?" seg-off":""),"marker-end":`url(#${hot?'arrowHot':e.primary?'arrowPrimary':'arrow'})`});
     ep.dataset.eid=e.id;                         // the simulator finds edge paths by id
     svg.appendChild(ep);
     if(editable()){ const hit=el("path",{d,class:"edge-hit"});
@@ -4609,12 +4952,17 @@ function renderEdgeInspector(){
         ${sideRow}
         ${field("Split %","splitPct",e.splitPct==null?"":e.splitPct,"number","For branching — share of items down this path")}
         ${field("Label","label",e.label||"","text")}
+        <label style="display:flex;align-items:flex-start;gap:8px;margin-top:8px;cursor:pointer;line-height:1.35">
+          <input type="checkbox" id="edgePrimary" ${e.primary?"checked":""} style="margin-top:2px;accent-color:var(--va)"/>
+          <span>Happy path<br><span class="sub">Highlight this arrow as the desired route — useful where branches diverge</span></span>
+        </label>
       </div>
     </div>
     <div class="insp-foot"><button class="del" id="delEdge">🗑 Delete connector</button></div>`;
   insp.querySelectorAll("[data-bind]").forEach(inp=>inp.addEventListener("change",()=>{
     let v=inp.value; if(inp.type==="number") v=v===""?undefined:parseFloat(v);
     e[inp.dataset.bind]=v===""?undefined:v; render(); }));
+  insp.querySelector("#edgePrimary").addEventListener("change",ev=>{ e.primary=ev.target.checked||undefined; render(); });
   $("#inspClose").addEventListener("click",()=>selectNode(null));
   $("#delEdge").addEventListener("click",()=>{ state.model.edges=state.model.edges.filter(x=>x.id!==e.id); selectNode(null); });
 }
@@ -5947,6 +6295,7 @@ function buildFlowText(){
       let line=`- ${a.label} → ${b.label}`;
       if(e.splitPct!=null && outCount[e.from]>1) line+=`  (${e.splitPct}% of cases)`;
       if((e.label||"").trim()) line+=`  [${e.label.trim()}]`;
+      if(e.primary) line+=`  (happy path)`;
       L.push(line);
     });
     L.push("");
@@ -6088,7 +6437,7 @@ function buildExportSVG(){
     .eflow{font-size:10.5px;font-weight:600;paint-order:stroke;stroke:var(--bg);stroke-width:3.5px;stroke-linejoin:round}
     .eflow tspan{stroke:var(--bg);stroke-width:3.5px;paint-order:stroke}
     .nowner{fill:var(--faint);font-size:9px;letter-spacing:.6px;font-weight:700}
-    .edge{fill:none;stroke:var(--faint);stroke-width:2}.edge.hot{stroke:var(--nva)}
+    .edge{fill:none;stroke:var(--faint);stroke-width:2}.edge.hot{stroke:var(--nva)}${(state.model.edges||[]).some(e=>e.primary)?".edge.primary{stroke:var(--va);stroke-width:2.5}":""}
     .anchor,.edge-hit,.temp-edge,.del-handle,.guide,.canvas-hint,.vedit,.anno-resize,.note-picker{display:none}
     #simLayer,.sim-dot,.sim-rim,.sim-count{display:none}
     .nbox{filter:none}`;
@@ -6508,6 +6857,26 @@ $("#convertCreate").onclick=async()=>{
   rp.style.display="block";
   $("#convertCreate").innerHTML='<svg class="t-ic"><use href="#ic-flow"/></svg>Open flow';
 };
+/* ---- Import Visio (Tier 2): button, hidden input, home drag-drop, preview modal ---- */
+$("#importVisio").onclick=()=>$("#fileVsdx").click();
+$("#fileVsdx").onchange=e=>{ const f=e.target.files[0]; if(f) handleVsdxFile(f); e.target.value=""; };
+$("#visioClose").onclick=$("#visioCancel").onclick=()=>{ $("#visioOverlay").classList.remove("show"); state._vz=null; };
+$("#visioOverlay").onclick=e=>{ if(e.target.id==="visioOverlay"){ $("#visioOverlay").classList.remove("show"); state._vz=null; } };
+$("#visioAccept").onclick=()=>acceptVisioImport();
+/* drop a .vsdx anywhere on the home/workspace grid */
+(()=>{ const home=$("#home"); let depth=0;
+  home.addEventListener("dragover",e=>{ e.preventDefault(); });
+  home.addEventListener("dragenter",e=>{ e.preventDefault(); depth++; home.classList.add("vz-drop"); });
+  home.addEventListener("dragleave",()=>{ if(--depth<=0){ depth=0; home.classList.remove("vz-drop"); } });
+  home.addEventListener("drop",e=>{ e.preventDefault(); depth=0; home.classList.remove("vz-drop");
+    const f=e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files[0]; if(!f) return;
+    if(/\.vsdx$/i.test(f.name)) handleVsdxFile(f);
+    else if(/\.json$/i.test(f.name)){ const rd=new FileReader();
+      rd.onload=()=>{ try{ const obj=JSON.parse(rd.result); state.ws?wsImportObj(obj):importFlowFromObj(obj); }
+        catch(err){ toast("Invalid JSON"); } }; rd.readAsText(f); }
+    else toast("Drop a .vsdx (Visio) or .json (Flow Builder) file"); });
+})();
+
 $("#effClose").onclick=()=>$("#effOverlay").classList.remove("show");
 $("#effOverlay").onclick=e=>{ if(e.target.id==="effOverlay") $("#effOverlay").classList.remove("show"); };
 $("#bnClose").onclick=()=>$("#bnOverlay").classList.remove("show");
@@ -6582,7 +6951,9 @@ $("#exportHtml").onclick=()=>{
 $("#newFlow").onclick=()=>{ state.ws ? wsNewFlow() : newFlow(); };
 $("#exportLib").onclick=()=>download("flow-builder-library.json", JSON.stringify(state.library,null,2),"application/json");
 $("#importFlow").onclick=()=>$("#fileImport").click();
-$("#fileImport").onchange=e=>{ const f=e.target.files[0]; if(!f) return; const rd=new FileReader();
+$("#fileImport").onchange=e=>{ const f=e.target.files[0]; if(!f) return;
+  if(/\.vsdx$/i.test(f.name)){ handleVsdxFile(f); e.target.value=""; return; }   // Import… accepts Visio too
+  const rd=new FileReader();
   rd.onload=()=>{ try{ const obj=JSON.parse(rd.result); state.ws ? wsImportObj(obj) : importFlowFromObj(obj); }
     catch(err){ toast("Invalid JSON"); } }; rd.readAsText(f); e.target.value=""; };
 $("#homeGrid").addEventListener("click",ev=>{
