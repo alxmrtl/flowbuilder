@@ -399,6 +399,113 @@
   .vocab-table input:focus{border-color:var(--accent);outline:none}
   .vocab-table input:placeholder-shown{opacity:.75}
 
+  /* ---- Dashboards + governance (org platform — phase 4) ---- */
+  .dash-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 28px 0}
+  .dash-row .dr-label{font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--faint)}
+  .dash-chip{display:inline-flex;flex-direction:column;align-items:flex-start;gap:1px;background:var(--panel);
+    border:1px solid var(--line);color:var(--ink);border-radius:9px;padding:6px 12px;font-size:13px;font-weight:600}
+  .dash-chip small{font-size:10px;font-weight:500;color:var(--faint)}
+  .dash-chip:hover{border-color:var(--accent)}
+  .dash-chip.on{border-color:var(--accent);color:var(--accent)}
+  .home-grid.dashview{display:block}
+  .dash-head{display:flex;align-items:center;gap:14px;margin-bottom:14px;flex-wrap:wrap}
+  .dash-head h2{margin:0;font-size:20px}
+  .dash-sub{font-size:12px;color:var(--faint);display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:3px}
+  .dash-me{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--faint);text-transform:uppercase;
+    letter-spacing:.05em;font-weight:700}
+  .dash-me input{background:var(--panel2);border:1px solid var(--line);color:var(--ink);border-radius:7px;
+    padding:6px 9px;font-size:13px;font-family:inherit;width:170px;text-transform:none;letter-spacing:0;font-weight:500}
+  .dash-me input:focus{border-color:var(--accent);outline:none}
+  .dash-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:14px;align-items:start}
+  .dw{background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);overflow:hidden}
+  .dw-h{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 14px;border-bottom:1px solid var(--line);
+    font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+  .dw-hide{background:transparent;border:0;color:var(--faint);font-size:12px;padding:0 2px;opacity:0}
+  .dw:hover .dw-hide{opacity:1}
+  .dw-hide:hover{color:var(--nva)}
+  .dw-b{padding:8px 14px 12px;display:flex;flex-direction:column;gap:2px}
+  .dw-b>.btn.ghost{align-self:flex-start;margin-top:6px}
+  .dw-empty{color:var(--faint);font-size:12.5px;padding:10px 0}
+  .dw-note{color:var(--faint);font-size:12px;margin:6px 0 2px}
+  .dwr{display:flex;align-items:center;gap:9px;padding:6px 4px;border-radius:8px;font-size:13px;min-height:24px}
+  .dwr[data-mid]{cursor:pointer}
+  .dwr[data-mid]:hover{background:var(--panel2)}
+  .dwr-t{font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .dwr-sub{color:var(--faint);font-size:11.5px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .dwr-v{margin-left:auto;color:var(--muted);font-size:12px;white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+  .dwr.tall{align-items:flex-start;flex-wrap:wrap}
+  .dwr.gqw{flex-wrap:wrap}
+  .gqw-msg{flex:1 1 100%;color:var(--muted);font-size:11.5px;padding-left:2px}
+  .dw.dw-areaScorecards{grid-column:1/-1}
+  .hdot{width:8px;height:8px;border-radius:50%;display:inline-block}
+  .hdot.ok{background:var(--va)} .hdot.warn{background:var(--warn)} .hdot.hot{background:var(--nva)}
+  .mini-track{flex:1 1 60px;max-width:150px;height:7px;border-radius:4px;background:var(--panel2);overflow:hidden;display:inline-block}
+  .mini-track i{display:block;height:100%;background:var(--accent);border-radius:4px}
+  .mini-track i.eff{background:var(--va)} .mini-track i.rft{background:var(--cat-quality)}
+  .mini-track i.wt{background:var(--wait)} .mini-track i.cb{background:var(--va)}
+  .dv-bars{flex:1 1 160px;display:flex;flex-direction:column;gap:3px;min-width:120px}
+  .dv-line{display:flex;align-items:center;gap:6px;height:12px}
+  .dv-line i{display:block;height:7px;border-radius:4px;min-width:2px}
+  .dv-line small{color:var(--faint);font-size:10.5px;white-space:nowrap}
+  .dv-dem{background:var(--accent)} .dv-cap{background:var(--va)}
+  .dv-bars.hot .dv-dem{background:var(--nva)}
+  .nf-tally{display:flex;gap:6px;flex-wrap:wrap;padding:4px 0 8px}
+  .nf-chip{font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:11px;border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+  .nf-chip.nt-frustration{color:#f5a79e;border-color:#d95b4a}
+  .nf-chip.nt-waste{color:#f2bd7e;border-color:#d98a2b}
+  .nf-chip.nt-idea{color:#9fd8f2;border-color:#3d9cc9}
+  .nf-text{font-weight:500;white-space:normal}
+  .tr-row{display:grid;grid-template-columns:minmax(110px,1.4fr) 44px 44px minmax(70px,1fr) minmax(90px,1.2fr) minmax(90px,1.2fr) minmax(70px,1fr);
+    gap:8px;align-items:center;padding:7px 4px;border-radius:8px;font-size:12.5px}
+  .tr-row.head{font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--faint);border-bottom:1px solid var(--line)}
+  .tr-row .dwr-sub{display:block}
+  .tr-act{color:var(--muted);font-size:11.5px}
+  .sc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px}
+  .scorecard{border:1px solid var(--line);border-radius:11px;padding:12px;background:var(--panel2)}
+  .sc-name{font-weight:700;font-size:15px}
+  .sc-sub{color:var(--faint);font-size:11.5px;margin:2px 0 8px}
+  .sc-stats{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .sc-stats div b{display:block;font-size:15px}
+  .sc-stats div small{color:var(--faint);font-size:10.5px}
+  .sc-stats div.hot b{color:var(--nva)}
+  .sc-bn{margin-top:9px;font-size:11.5px;color:var(--warn)}
+  .dash-hiddenrow{margin-top:12px;color:var(--faint);font-size:12px;display:flex;align-items:center;gap:8px}
+  /* governance */
+  .gov-meters{display:flex;gap:10px;flex-wrap:wrap;margin:8px 0 4px}
+  .gov-meter{border:1px solid var(--line);border-radius:11px;padding:10px 14px;background:var(--panel2);min-width:110px}
+  .gov-meter.wide{flex:1 1 220px}
+  .gov-meter.warn{border-color:var(--warn)}
+  .gm-v{font-size:20px;font-weight:700} .gm-v small{font-size:12px;color:var(--faint);font-weight:500}
+  .gm-k{font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--faint);font-weight:700;margin-top:2px}
+  .conf-bar{height:10px;border-radius:5px;background:var(--cat-speed);overflow:hidden;margin:6px 0 4px}
+  .conf-bar.big{height:16px;border-radius:8px;margin:8px 0 4px}
+  .conf-bar .cb-meas{display:block;height:100%;background:var(--va)}
+  .gov-cov{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 10px}
+  .gov-q{margin-top:12px;max-height:340px;overflow:auto;display:flex;flex-direction:column;gap:2px}
+  .gq-row{display:flex;align-items:center;gap:10px;padding:7px 8px;border-radius:8px;font-size:12.5px;cursor:pointer}
+  .gq-row:hover{background:var(--panel2)}
+  .gq-chip{font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:2px 8px;border-radius:10px;
+    border:1px solid var(--line);color:var(--muted);white-space:nowrap;flex:0 0 auto}
+  .gq-chip.s4{color:var(--nva);border-color:var(--nva)}
+  .gq-chip.s3{color:var(--warn);border-color:var(--warn)}
+  .gq-chip.s2{color:var(--accent);border-color:var(--accent)}
+  .gq-title{font-weight:600;flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .gq-area{color:var(--faint);font-size:11px;flex:0 0 auto}
+  .gq-msg{color:var(--muted);margin-left:auto;text-align:right;flex:1 1 auto}
+  .gq-row .btn{flex:0 0 auto}
+  /* dashboard create/edit */
+  .tpl-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px;margin:6px 0 4px}
+  .tpl-card{display:flex;flex-direction:column;gap:3px;align-items:flex-start;text-align:left;background:var(--panel2);
+    border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:10px 12px;font-size:12px}
+  .tpl-card span{color:var(--muted);font-size:11px}
+  .tpl-card small{color:var(--faint);font-size:10.5px;font-style:italic}
+  .tpl-card:hover{border-color:var(--accent)}
+  .tpl-card.on{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
+  #dashBody select[multiple]{width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--ink);
+    border-radius:8px;padding:6px;font-size:12.5px;font-family:inherit}
+  #dashBody .modal-actions{align-items:center;display:flex;gap:10px}
+  #dashBody .btn.del:hover{border-color:var(--nva);color:var(--nva)}
+
   /* ---- Layout ---- */
   main{flex:1 1 auto;min-height:0;display:flex;position:relative}
   #stage{flex:1;position:relative;overflow:auto;background:
@@ -1054,6 +1161,7 @@
     <button class="btn iconbtn" id="wsSettingsBtn" style="display:none" title="Workspace settings — vocabulary, refresh, disconnect">⚙</button>
     <input type="file" id="fileImport" accept=".json,.vsdx" style="display:none" />
   </div>
+  <div class="dash-row" id="dashRow" style="display:none"></div>
   <div class="ws-filter" id="wsFilter" style="display:none"></div>
   <div class="ws-banner" id="wsBanner" style="display:none"></div>
   <div class="home-grid" id="homeGrid"></div>
@@ -1073,6 +1181,36 @@
   <div class="modal wide">
     <div class="modal-h"><h3>Workspace</h3><button class="x" id="wsClose">✕</button></div>
     <div id="wsBody"></div>
+  </div>
+</div>
+
+<!-- Dashboard create/edit — template + metadata-query scope + pins (phase 4, §7 dashboards-as-data) -->
+<div class="overlay" id="dashOverlay">
+  <div class="modal wide">
+    <div class="modal-h"><h3 id="dashModalTitle">New dashboard</h3><button class="x" id="dashClose">✕</button></div>
+    <div id="dashBody"></div>
+  </div>
+</div>
+
+<!-- Governance — derived meters + the one curation queue (phase 4, §8) -->
+<div class="overlay" id="govOverlay">
+  <div class="modal wide">
+    <div class="modal-h"><h3>Governance</h3><button class="x" id="govClose">✕</button></div>
+    <div id="govBody"></div>
+  </div>
+</div>
+
+<!-- Save conflict — the D6 three-way choice when a file changed on disk since it was opened -->
+<div class="overlay" id="conflictOverlay">
+  <div class="modal">
+    <div class="modal-h"><h3>Someone else saved this map</h3></div>
+    <p id="conflictMsg"></p>
+    <div class="menubtns">
+      <button class="btn" id="confTheirs">⟳ Reload theirs — discard my changes</button>
+      <button class="btn" id="confCopy">⎘ Save mine as a copy — keep both</button>
+      <button class="btn" id="confMine">⚠ Overwrite with mine</button>
+    </div>
+    <div class="meta-note" style="margin-top:8px">SharePoint/OneDrive version history still keeps whatever gets overwritten.</div>
   </div>
 </div>
 
@@ -1339,11 +1477,14 @@ SOURCE MATERIAL (label each source):
    FILE MAP (banner-delimited sections, in order):
      nomenclature + METRICS_SPEC · state · helpers · PLATFORM FOUNDATIONS
      (mapId/meta/migrate) · LIBRARY (localStorage) · digest builder ·
-     WORKSPACE (folder adapter, catalog/reconcile, search, meta/vocab UI) ·
+     WORKSPACE (folder adapter, catalog/reconcile, search, meta/vocab UI,
+     etag save-conflict + soft presence) ·
      flow CRUD + Convert docs · VISIO IMPORT (.vsdx, phase 2.5) ·
      DIMENSION ENGINE (segments) · LINKS / HIERARCHY (linked steps,
-     promote/demote, roll-ups from digests, backlinks) · DATA BINDING ·
-     metrics engine (rollup) ·
+     promote/demote, roll-ups from digests, backlinks) ·
+     AGGREGATES + GOVERNANCE (estate rollups, curation queue, CSV mirror) ·
+     DASHBOARDS (templates + scope query + pins, widget catalog, viewer) ·
+     DATA BINDING · metrics engine (rollup) ·
      RENDER (home, stats, canvas, ribbon, inspector) · theming · exports ·
      simulate-a-day · WIRING · BOOT
    ============================================================ */
@@ -1451,6 +1592,7 @@ const state = {
   wsPending: null,        // a persisted directory handle awaiting a permission re-grant (needs a user gesture)
   crumbs: [],             // drill-in breadcrumb trail [{kind:"ws"|"local", id, name}] — transient, cleared on goHome
   _linkNav: null,         // trail handed to the next openFlow/openWsMap by a link drill-in; null = normal open (clears crumbs)
+  dashOpen: null,         // dashboard id currently open on the home screen (phase 4); null = the map grid
 };
 
 /* ---------- helpers ---------- */
@@ -1460,8 +1602,8 @@ const el = (tag, attrs={}) => { const e=document.createElementNS(NS,tag);
 const uid = p => p + Math.random().toString(36).slice(2,8);
 const esc = s => String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const clone = o => JSON.parse(JSON.stringify(o));
-function toast(msg){ const t=$("#toast"); t.textContent=msg; t.classList.add("show");
-  clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove("show"),2200); }
+function toast(msg,ms){ const t=$("#toast"); t.textContent=msg; t.classList.add("show");
+  clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove("show"),ms||2200); }
 const unit = () => (state.model && state.model.settings && state.model.settings.timeUnit) || "hrs";
 const fmt = n => (n==null||isNaN(n)) ? "—" : (Math.round(n*10)/10).toLocaleString();
 /* time-unit conversion for hands-on work: 1 "day" of hands-on time = 8 working hours.
@@ -1609,13 +1751,14 @@ function rollupFor(model){
    The compact cross-map extract of one flow: everything the workspace layer (search,
    dashboards, links, roll-ups) reads about a map, in a few KB, so the full file only
    ever opens to edit it. Derived purely from the model — writing it twice is harmless. */
-const DIGEST_VERSION = 3;   // v3: metricsBySegment + segments block (phase 2) · v2: queue labels join text.steps
+const DIGEST_VERSION = 4;   // v4: noteCounts + ownerSteps (phase 4) · v3: metricsBySegment + segments block · v2: queue labels join text.steps
 function buildDigest(model){
   migratePlatform(model);
   const sm=state.model, sd=state.data, ss=state.segment, sp=state.period;
   state.model=model; state.data=Array.isArray(model.data)?model.data:[]; state.segment="ALL"; state.period="ALL";
   let r=null, measured=0, modelled=0;
   const stepLabels=[], people=new Set(), tools=new Set(); let fte=0, stepN=0, queueN=0;
+  const ownerSteps=[];   // per-step expectations for the "My processes" dashboard — owner + touch time, map unit
   _digStack.push(model.mapId);   // links: cycles must terminate, not recurse (see linkDigest)
   try{
     try{ r=rollup(); }catch(e){ r=null; }
@@ -1626,14 +1769,16 @@ function buildDigest(model){
         if(n.people!=null && n.people>0) fte+=n.people;
         if(n.tool) tools.add(String(n.tool));
         if(isLinkNode(n)){   // roll-up: the child's FTE, roster and confidence counts carry up
-          const cd=linkDigest(n.linksTo.mapId);
+          const cd=linkCyclic(n)?null:linkDigest(n.linksTo.mapId);   // cyclic links stay out of roll-ups — counts too
           if(cd && cd.metrics){
             if(cd.metrics.fte) fte+=cd.metrics.fte;
             (((cd.text||{}).people)||[]).forEach(p=>people.add(p));
             const cf=cd.metrics.confidence||{};
             measured+=cf.measured||0; modelled+=cf.modelled||0; } }
         else if(!hasSubs(n) && !n.excludeStats){ const mt=metricFor(n);   // confidence mirrors the insights count
-          if(mt.hasData) measured++; else if(mt.derivedCap) modelled++; } }
+          if(mt.hasData) measured++; else if(mt.derivedCap) modelled++;
+          if(n.owner && String(n.owner).trim())
+            ownerSteps.push({owner:String(n.owner).trim(), step:n.label||"", touch:mt.touch!=null?mt.touch:null}); } }
       if(n.type==="wait"){ queueN++; if(n.label) stepLabels.push(n.label); } });
   } finally { state.model=sm; state.data=sd; state.segment=ss; state.period=sp; _digStack.pop(); }
   const cap=(r&&r.cap)||{}, qual=(r&&r.qual)||{};
@@ -1680,12 +1825,19 @@ function buildDigest(model){
     metricsBySegment: bySeg,
     segments: segs.length ? { dimension:(model.segments&&model.segments.dimension)||"", list: clone(segs) } : null,
     links: { out: links },
+    /* governance feeds (phase 4): typed-note tallies = the improvement backlog with zero new
+       authoring; ownerSteps = what each named person is on the hook for, per step */
+    noteCounts: (()=>{ const t={note:0,frustration:0,waste:0,idea:0};
+      (model.comments||[]).forEach(c=>{ if((c.text||"").trim()) t[NOTE_TYPES[c.type]?c.type:"note"]++; });
+      return t; })(),
+    ownerSteps: ownerSteps.length?ownerSteps:null,
     text: {   // the searchable substance of the map, for the workspace full-text index
       steps: stepLabels,
       people: [...people],
       tools: [...tools],
       groups: (model.groups||[]).map(g=>g.label).filter(Boolean),
-      notes: (model.comments||[]).map(c=>c.text).filter(Boolean)
+      notes: (model.comments||[]).map(c=>c.text).filter(Boolean),
+      noteTypes: (model.comments||[]).filter(c=>c.text).map(c=>NOTE_TYPES[c.type]?c.type:"note")   // aligned with .notes — the dashboards' typed feed
     }
   };
 }
@@ -1753,6 +1905,14 @@ function fsAdapter(dir){
     async remove(path){ const parts=path.split("/"); let d=dir;
       for(let i=0;i<parts.length-1;i++) d=await d.getDirectoryHandle(parts[i]);
       await d.removeEntry(parts[parts.length-1]); },
+    async listDir(prefix){   // *.json directly under a known sidecar folder (dashboards) — Graph: GET …/children
+      try{ let d=dir; for(const p of prefix.replace(/\/+$/,"").split("/")) d=await d.getDirectoryHandle(p);
+        const out=[];
+        for await (const h of d.values()) if(h.kind==="file" && h.name.endsWith(".json")){
+          const f=await h.getFile(); out.push({path:prefix+h.name, rev:String(f.lastModified)}); }
+        return out;
+      }catch(e){ return []; }   // folder doesn't exist yet — no dashboards
+    },
     async changedSince(cursor){   // cursor {path→rev} → {changed:[{path,rev}], removed:[path]}
       const now=await this.list(), seen={}, changed=[];
       now.forEach(e=>{ seen[e.path]=1; if(!cursor || cursor[e.path]!==e.rev) changed.push(e); });
@@ -1765,7 +1925,7 @@ function fsAdapter(dir){
 async function wsConnect(dir){
   const adapter=fsAdapter(dir);
   state.ws={ adapter, dirName:adapter.name, catalog:{catalogVersion:CATALOG_VERSION, maps:{}},
-             digests:{}, schema:null, vocabDoc:null, open:null, index:null,
+             digests:{}, dashboards:{}, schema:null, vocabDoc:null, open:null, index:null,
              query:"", facets:{}, reconciling:false, saveQ:Promise.resolve() };
   state.wsPending=null;
   idbSet("kv","dirHandle",dir).catch(()=>{});   // real handles persist across sessions; test fakes can't be cloned — fine
@@ -1776,6 +1936,7 @@ async function wsConnect(dir){
   try{ const v=await adapter.read(".flowbuilder/vocabulary.json"); const doc=JSON.parse(v.text);
     state.ws.vocabDoc=doc; state.vocab=(doc && doc.terms && Object.keys(doc.terms).length)?doc.terms:null; }
   catch(e){ state.vocab=null; }
+  await wsLoadDashboards();   // shared dashboard files (phase 4)
   if(state.mode==="home") renderHome();
   wsBuildIndex();
   wsReconcile();          // background: catch files added/edited/removed outside the app
@@ -1880,9 +2041,14 @@ async function wsReconcile(){
           ws.digests[mid]=digest; await wsWriteDigest(digest,e.rev); dirty=true; }catch(err){}
       }
     if(dirty) await wsWriteCatalog();
+    /* aggregates (phase 4) rebuild from the in-memory digests — never by re-reading flow files —
+       so estate rollups + the Excel/Power BI CSV mirror ride every reconcile for free */
+    if(dirty) await wsWriteAggregates();
+    await wsLoadDashboards();   // dashboards dropped into the folder by teammates appear on refresh
   } finally {
     ws.reconciling=false; wsStatusMsg("");
     if(dirty){ wsBuildIndex(); if(state.mode==="home") renderHome(); }
+    else if(state.mode==="home") renderDashRow();
   }
 }
 function wsStatusMsg(t){ const e=$("#wsStatus"); if(e) e.textContent=t||""; }
@@ -1931,6 +2097,7 @@ async function openWsMap(mapId){
     state.currentId=null; ws.open={mapId,path:e.path,rev};
     ws._lastSavedText=text; ws._lastSavedPath=e.path;
     loadModel(model); setMode("build");
+    wsPresenceNote(mapId);   // soft presence (D6): warn if someone else has this open, then leave our marker
   }catch(err){ console.warn(err); toast("Couldn't open that file"); }
 }
 async function wsNewFlow(){
@@ -1973,19 +2140,82 @@ function wsSaveCurrent(){
     try{
       let rev;
       try{ rev=await ws.adapter.write(open.path,text,open.rev); }
-      catch(e){ if(e.code==="REV_MISMATCH"){   // changed on disk since we read it (sync client, teammate)
-          rev=await ws.adapter.write(open.path,text);
-          toast("This file changed outside Flow Builder — your version was kept"); }
-        else throw e; }
+      catch(e){
+        if(e.code!=="REV_MISMATCH") throw e;
+        /* changed on disk since we read it (sync client, teammate) — the D6 three-way choice.
+           Queued saves behind this one re-serialize on saveQ, so only one dialog shows. */
+        const choice=await wsConflictChoice(open);
+        if(choice==="mine"){ rev=await ws.adapter.write(open.path,text); }
+        else if(choice==="theirs"){ await wsConflictReloadTheirs(open); return; }
+        else if(choice==="copy"){ await wsConflictSaveCopy(open,model); return; }
+        else { toast("Not saved — the file changed on disk. Your edits stay here until you choose."); return; }
+      }
       open.rev=rev; ws._lastSavedText=text; ws._lastSavedPath=open.path;
       const digest=buildDigest(model);
       ws.catalog.maps[model.mapId]={path:open.path,rev,title:digest.title,savedAt:digest.savedAt};
       ws.digests[model.mapId]=digest;
-      await wsWriteDigest(digest,rev); await wsWriteCatalog(); wsBuildIndex();
+      await wsWriteDigest(digest,rev); await wsWriteCatalog(); wsBuildIndex(); wsAggSoon();
       // links (phase 3): saving here bypasses the reconcile diff — queue parents for its next pass
       if(backlinksTo(model.mapId).length) (ws._staleParents=ws._staleParents||new Set()).add(model.mapId);
     }catch(e){ console.warn("workspace save failed",e); toast("Couldn't save to the workspace folder"); }
   });
+}
+/* ---- D6: etag conflict — reload theirs / save mine as a copy / overwrite ---- */
+function wsConflictChoice(open){
+  return new Promise(resolve=>{
+    const ws=state.ws, title=(ws.digests[open.mapId]||{}).title||"This map";
+    $("#conflictMsg").innerHTML=`<b>${esc(title)}</b> was saved by someone else (or a sync client) after you opened it. What should happen to <b>your</b> version?`;
+    const ov=$("#conflictOverlay"); ov.classList.add("show");
+    const done=v=>{ ov.classList.remove("show"); ov.onclick=null; resolve(v); };
+    $("#confTheirs").onclick=()=>done("theirs");
+    $("#confCopy").onclick =()=>done("copy");
+    $("#confMine").onclick =()=>done("mine");
+    ov.onclick=e=>{ if(e.target===ov) done(null); };
+  });
+}
+async function wsConflictReloadTheirs(open){   // discard my edits, take what's on disk
+  const ws=state.ws;
+  const {text,rev}=await ws.adapter.read(open.path);
+  const theirs=migratePlatform(JSON.parse(text));
+  const digest=buildDigest(clone(theirs));
+  ws.catalog.maps[theirs.mapId]={path:open.path,rev,title:digest.title,savedAt:digest.savedAt};
+  ws.digests[theirs.mapId]=digest;
+  await wsWriteDigest(digest,rev); await wsWriteCatalog(); wsBuildIndex(); wsAggSoon();
+  if(ws.open && ws.open.mapId===open.mapId){   // still looking at this map — swap the editor to theirs
+    ws.open.rev=rev; ws._lastSavedText=text; ws._lastSavedPath=open.path;
+    loadModel(theirs); if(state.mode==="build") render();
+  }
+  toast("Reloaded the version from the folder — your edits were discarded");
+}
+async function wsConflictSaveCopy(open,model){   // my version becomes a new map; theirs keeps the file
+  const ws=state.ws;
+  const copy=clone(model); copy.mapId=mintMapId(); copy.name=(copy.name||"Flow")+" (my copy)";
+  const res=await wsAddModel(copy);
+  await wsWriteCatalog(); wsBuildIndex(); wsAggSoon();
+  if(ws.open && ws.open.mapId===open.mapId){   // keep editing — but now inside the copy
+    ws.open={mapId:res.mapId,path:res.path,rev:res.rev};
+    state.model.mapId=copy.mapId; state.model.name=copy.name;
+    ws._lastSavedText=JSON.stringify(clone(state.model),null,2); ws._lastSavedPath=res.path;
+    if(state.mode==="build") render();
+  }
+  toast(`Saved as “${copy.name}” — the original keeps the other person's version`);
+}
+/* ---- D6: soft presence — a best-effort marker file, ignored when stale ---- */
+const WS_PRESENCE_DIR=".flowbuilder/presence/";
+const PRESENCE_STALE_MIN=30;
+function userName(){ return ((state.library&&state.library.userName)||"").trim(); }
+function agoStr(ms){ const m=Math.round(ms/60000);
+  return m<1?"moments":m<60?m+" min":Math.round(m/60)+" hr"; }
+async function wsPresenceNote(mapId){
+  const ws=state.ws; if(!ws) return;
+  try{
+    const {text}=await ws.adapter.read(WS_PRESENCE_DIR+mapId+".json");
+    const p=JSON.parse(text), age=Date.now()-Date.parse(p.at||0);
+    if(p.name && p.name!==(userName()||"Someone") && age>=0 && age<PRESENCE_STALE_MIN*60000)
+      toast(`${p.name} opened this ${agoStr(age)} ago — you may both be editing`, 6000);
+  }catch(e){}   // no marker / unreadable — nothing to warn about
+  try{ await ws.adapter.write(WS_PRESENCE_DIR+mapId+".json",
+    JSON.stringify({name:userName()||"Someone", at:new Date().toISOString()})); }catch(e){}
 }
 async function wsImportObj(obj){
   const models = obj && obj.flows && typeof obj.flows==="object" ? Object.values(obj.flows).map(f=>(f&&f.model)||f)
@@ -2224,6 +2454,9 @@ function showWsModal(){
       <input data-vocab="${id}" value="${esc((state.vocab||{})[id]||"")}" placeholder="${esc(m.l)}"/>`; }).join("");
   $("#wsBody").innerHTML=`
     <div class="ws-row"><b>${esc(ws.dirName)}</b><span class="mut">· ${n} map${n===1?"":"s"} · library lives in the folder — anyone who connects it sees the same maps</span></div>
+    <div class="ws-sec"><h4>You</h4><div class="ws-row">
+      <input id="wsUserName" value="${esc(userName())}" placeholder="Your name — as it appears on steps" style="background:var(--panel2);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit;min-width:240px"/>
+      <span class="mut">Used by the “My processes” dashboard and the “someone else has this open” warning. Stays in this browser.</span></div></div>
     <div class="ws-sec"><h4>Folder</h4><div class="ws-row">
       <button class="btn" id="wsRefresh">⟳ Refresh from folder</button>
       <button class="btn" id="wsPick">Connect a different folder…</button>
@@ -2233,6 +2466,7 @@ function showWsModal(){
       <div class="meta-note" style="margin:0 0 6px">Leave a box empty to keep the Flow Builder term. Org terms appear everywhere labels render — cards, analysis, exports, the metrics explainer. Files always store the standard ids, so renaming is safe.</div>
       <div class="vocab-table"><div class="vh">Flow Builder standard</div><div class="vh">Your term</div>${rows}</div>
       <div class="modal-actions"><button class="btn primary" id="vocabSave">Save vocabulary</button></div></div>`;
+  $("#wsBody").querySelector("#wsUserName").onchange=e=>{ state.library.userName=e.target.value.trim(); saveLibrary(); };
   $("#wsBody").querySelector("#wsRefresh").onclick=()=>{ wsReconcile(); toast("Checking the folder…"); };
   $("#wsBody").querySelector("#wsDisc").onclick=wsDisconnect;
   $("#wsBody").querySelector("#wsPick").onclick=async()=>{
@@ -3091,6 +3325,616 @@ async function demoteLinked(nodeId){
 }
 
 /* ============================================================
+   AGGREGATES + GOVERNANCE  (org platform — phase 4)
+   Estate rollups + a derived governance queue, built PURELY from
+   digests — never from full maps. That's the cheapness contract:
+   hundreds of maps render a portfolio without opening a single one.
+   Written to .flowbuilder/aggregates/estate.json by reconcile, and
+   mirrored as aggregates/*.csv so Excel / Power BI read the estate
+   with zero integration. Rows carry mapIds + term ids, never paths;
+   labels resolve through ML() at render time.
+   ============================================================ */
+const AGG_VERSION=1;
+const WS_AGG_JSON=".flowbuilder/aggregates/estate.json";
+const AGG_CSV_MAPS="aggregates/maps.csv";
+const AGG_CSV_ROLLUP="aggregates/rollup.csv";
+
+/* every digest visible right now — the workspace's live set, or (local mode)
+   digests built+cached from the browser library, so dashboards work folder-less */
+function allDigests(){
+  if(state.ws) return state.ws.digests;
+  const out={};
+  Object.values(state.library.flows).forEach(f=>{
+    if(f.model && f.model.mapId){ const d=linkDigest(f.model.mapId); if(d) out[f.model.mapId]=d; } });
+  return out;
+}
+/* cross-map compare needs one unit: hands-on time is working-hours based,
+   waits are calendar — the same split linkMetricFor applies map-to-map */
+const aggTouchHrs=(v,u)=> v==null?null: v*(HRS_PER_UNIT[u]||1);
+const aggWaitHrs =(v,u)=> v==null?null: v*24/(CAL_PER_UNIT[u]||24);
+const r1=v=> v==null?null: Math.round(v*10)/10;
+
+/* mapIds sitting on a link cycle (walk digests' links.out back to self) */
+function digestCycles(digests){
+  const bad=new Set();
+  for(const [mid,d] of Object.entries(digests)){
+    const out=((d&&d.links)||{}).out||[]; if(!out.length) continue;
+    const seen=new Set(), q=[...out]; let g=0;
+    while(q.length && g++<2000){
+      const x=q.shift();
+      if(x===mid){ bad.add(mid); break; }
+      if(seen.has(x)) continue; seen.add(x);
+      const dd=digests[x];
+      (((dd&&dd.links)||{}).out||[]).forEach(y=>{ if(!seen.has(y)) q.push(y); });
+    }
+  }
+  return bad;
+}
+/* per-map governance facts — all DERIVED (§8): meta the org already fills,
+   confidence the engine already tracks, integrity from the link graph */
+function govFacts(d, digests, cycles, now){
+  const m=d.meta||{}, x=d.metrics||{};
+  const tombs=(((d.links||{}).out)||[]).filter(t=>!digests[t]);
+  let reviewOverdueDays=null;
+  if(m.reviewCadenceDays>0){
+    const base=m.reviewedAt?Date.parse(m.reviewedAt):(Date.parse(d.savedAt)||now);
+    const due=base+m.reviewCadenceDays*864e5;
+    if(now>due) reviewOverdueDays=Math.floor((now-due)/864e5);
+  }
+  return {
+    unowned: !(m.owner && String(m.owner).trim()),
+    reviewOverdueDays,
+    unreviewedImport: !!(m.importedFrom && !m.reviewedAt),
+    tombstonedLinks: tombs,
+    cyclic: cycles.has(d.mapId),
+    measured:(x.confidence||{}).measured||0,
+    modelled:(x.confidence||{}).modelled||0
+  };
+}
+/* the whole estate, folded: one row per map + rollup rows per team / area / org.
+   Pure over {mapId→digest}; deterministic apart from builtAt + review-age. */
+function buildAggregates(digests, now){
+  now=now||Date.now();
+  const cycles=digestCycles(digests);
+  const maps=[], acc={};
+  const mk=(level,area,team)=>({level, area:area||"", team:team||"", maps:0,
+    _people:new Set(), fte:0, _lead:[], _eff:[], _rft:[], demandPerDay:0, capacityPerDay:0, _dc:false,
+    _bn:{}, confMeasured:0, confModelled:0, mapsWithMeasured:0,
+    unowned:0, reviewOverdue:0, unreviewedImports:0, tombstonedLinks:0, cyclic:0,
+    notesNote:0, notesFrustration:0, notesWaste:0, notesIdea:0});
+  const accFor=(level,area,team)=>{ const k=level+"¦"+(area||"")+"¦"+(team||"");
+    return acc[k]||(acc[k]=mk(level,area,team)); };
+  for(const d of Object.values(digests)){
+    if(!d || !d.mapId) continue;
+    const m=d.meta||{}, x=d.metrics||{}, g=govFacts(d,digests,cycles,now);
+    const u=x.timeUnit||"hrs", nc=d.noteCounts||{};
+    const tH=aggTouchHrs(x.touchTime,u), wH=aggWaitHrs(x.waitTime,u);
+    const leadH=(tH!=null||wH!=null)?(tH||0)+(wH||0):null;
+    const row={ mapId:d.mapId, title:d.title||"Untitled",
+      area:m.area||"", team:m.team||"", owner:m.owner||"", status:m.status||"draft",
+      steps:x.steps||0, queues:x.queues||0, people:x.people||0, fte:r1(x.fte)||0,
+      leadTimeHrs:r1(leadH), touchHrs:r1(tH), waitHrs:r1(wH),
+      flowEffPct: x.flowEff!=null?Math.round(x.flowEff*100):null,
+      rftPct: x.rftPct!=null?Math.round(x.rftPct):null,
+      demandPerDay:r1(x.demandPerDay), capacityPerDay:r1(x.capacityPerDay),
+      bottleneckStep: x.bottleneck?x.bottleneck.step:"", bottleneckWhy: x.bottleneck?x.bottleneck.why:"",
+      confMeasured:g.measured, confModelled:g.modelled,
+      notesNote:nc.note||0, notesFrustration:nc.frustration||0, notesWaste:nc.waste||0, notesIdea:nc.idea||0,
+      reviewedAt:m.reviewedAt?String(m.reviewedAt).slice(0,10):"",
+      reviewOverdueDays:g.reviewOverdueDays, unowned:g.unowned?1:0,
+      unreviewedImport:g.unreviewedImport?1:0, tombstonedLinks:g.tombstonedLinks.length,
+      cyclic:g.cyclic?1:0, savedAt:d.savedAt||"" };
+    maps.push(row);
+    const buckets=[accFor("org","","")];
+    if(row.area) buckets.push(accFor("area",row.area,""));
+    if(row.area||row.team) buckets.push(accFor("team",row.area,row.team||"—"));
+    for(const b of buckets){
+      b.maps++;
+      (((d.text||{}).people)||[]).forEach(p=>b._people.add(p));
+      b.fte+=row.fte||0;
+      if(row.leadTimeHrs!=null) b._lead.push(row.leadTimeHrs);
+      if(row.flowEffPct!=null) b._eff.push(row.flowEffPct);
+      if(row.rftPct!=null) b._rft.push(row.rftPct);
+      if(row.demandPerDay!=null){ b.demandPerDay+=row.demandPerDay; b._dc=true; }
+      if(row.capacityPerDay!=null){ b.capacityPerDay+=row.capacityPerDay; b._dc=true; }
+      if(row.bottleneckStep) b._bn[row.bottleneckStep]=(b._bn[row.bottleneckStep]||0)+1;
+      b.confMeasured+=row.confMeasured; b.confModelled+=row.confModelled;
+      if(row.confMeasured>0) b.mapsWithMeasured++;
+      if(row.unowned) b.unowned++;
+      if(row.reviewOverdueDays!=null) b.reviewOverdue++;
+      if(row.unreviewedImport) b.unreviewedImports++;
+      b.tombstonedLinks+=row.tombstonedLinks; if(row.cyclic) b.cyclic++;
+      b.notesNote+=row.notesNote; b.notesFrustration+=row.notesFrustration;
+      b.notesWaste+=row.notesWaste; b.notesIdea+=row.notesIdea;
+    }
+  }
+  const avg=a=>a.length?r1(a.reduce((s,v)=>s+v,0)/a.length):null;
+  const lvl={org:0,area:1,team:2};
+  const rollup=Object.values(acc).map(b=>({ level:b.level, area:b.area, team:b.team,
+    maps:b.maps, people:b._people.size, fte:r1(b.fte),
+    leadTimeHrs:avg(b._lead), flowEffPct:avg(b._eff), rftPct:avg(b._rft),
+    demandPerDay:b._dc?r1(b.demandPerDay):null, capacityPerDay:b._dc?r1(b.capacityPerDay):null,
+    topBottlenecks:Object.entries(b._bn).sort((p,q)=>q[1]-p[1]).slice(0,3)
+      .map(([s,n])=>n>1?`${s} ×${n}`:s).join("; "),
+    confMeasured:b.confMeasured, confModelled:b.confModelled,
+    measuredPct:(b.confMeasured+b.confModelled)?Math.round(b.confMeasured/(b.confMeasured+b.confModelled)*100):null,
+    mapsWithMeasured:b.mapsWithMeasured,
+    unowned:b.unowned, reviewOverdue:b.reviewOverdue, unreviewedImports:b.unreviewedImports,
+    tombstonedLinks:b.tombstonedLinks, cyclic:b.cyclic,
+    notesNote:b.notesNote, notesFrustration:b.notesFrustration, notesWaste:b.notesWaste, notesIdea:b.notesIdea
+  })).sort((a,b)=>(lvl[a.level]-lvl[b.level])||a.area.localeCompare(b.area)||a.team.localeCompare(b.team));
+  maps.sort((a,b)=>a.title.localeCompare(b.title)||a.mapId.localeCompare(b.mapId));
+  return { aggVersion:AGG_VERSION, builtAt:new Date(now).toISOString(), maps, rollup };
+}
+
+/* ---- CSV mirror (the "why not Power BI?" answer: you can, on top of us) ---- */
+const AGG_MAP_COLS=["mapId","title","area","team","owner","status","steps","queues","people","fte",
+  "leadTimeHrs","touchHrs","waitHrs","flowEffPct","rftPct","demandPerDay","capacityPerDay",
+  "bottleneckStep","bottleneckWhy","confMeasured","confModelled",
+  "notesNote","notesFrustration","notesWaste","notesIdea",
+  "reviewedAt","reviewOverdueDays","unowned","unreviewedImport","tombstonedLinks","cyclic","savedAt"];
+const AGG_ROLLUP_COLS=["level","area","team","maps","people","fte","leadTimeHrs","flowEffPct","rftPct",
+  "demandPerDay","capacityPerDay","topBottlenecks","confMeasured","confModelled","measuredPct",
+  "mapsWithMeasured","unowned","reviewOverdue","unreviewedImports","tombstonedLinks","cyclic",
+  "notesNote","notesFrustration","notesWaste","notesIdea"];
+const aggCsvOf=(rows,cols)=>[cols.join(",")]
+  .concat(rows.map(r=>cols.map(c=>csvCell(r[c]==null?"":r[c])).join(","))).join("\n");
+
+/* write JSON + CSVs into the folder; a no-op when nothing changed so
+   reconcile stays inside the 1,000-map connect budget (in-memory fold + skip) */
+async function wsWriteAggregates(){
+  const ws=state.ws; if(!ws) return;
+  const agg=buildAggregates(ws.digests);
+  const stable=JSON.stringify({maps:agg.maps.map(m=>{const c=Object.assign({},m); delete c.savedAt; return c;}), rollup:agg.rollup});
+  if(stable===ws._lastAggText) return;
+  try{
+    await ws.adapter.write(WS_AGG_JSON, JSON.stringify(agg,null,2));
+    await ws.adapter.write(AGG_CSV_MAPS, aggCsvOf(agg.maps,AGG_MAP_COLS));
+    await ws.adapter.write(AGG_CSV_ROLLUP, aggCsvOf(agg.rollup,AGG_ROLLUP_COLS));
+    ws._lastAggText=stable;
+  }catch(e){ console.warn("aggregates write failed",e); }
+}
+let _aggT=null;
+function wsAggSoon(){ if(!state.ws) return; clearTimeout(_aggT); _aggT=setTimeout(wsWriteAggregates,2500); }
+
+/* ---- the ONE curation queue (§8): freshness + ownership + integrity, per map ---- */
+const GOV_KINDS={
+  tombstone:        {sev:4, chip:"broken link",  msg:()=>"Links to a map that no longer exists"},
+  cycle:            {sev:3, chip:"cycle",        msg:()=>"In a link cycle — excluded from roll-ups"},
+  "review-overdue": {sev:3, chip:"stale",        msg:g=>`Review overdue by ${g.reviewOverdueDays} day${g.reviewOverdueDays===1?"":"s"}`},
+  "unreviewed-import":{sev:2, chip:"unreviewed", msg:()=>"Imported map awaiting a human review"},
+  unowned:          {sev:2, chip:"unowned",      msg:()=>"No owner set"}
+};
+function govQueue(digests, now){
+  now=now||Date.now();
+  const cycles=digestCycles(digests), rows=[];
+  for(const d of Object.values(digests)){
+    if(!d||!d.mapId) continue;
+    const g=govFacts(d,digests,cycles,now), m=d.meta||{};
+    const add=kind=>rows.push({mapId:d.mapId, title:d.title||"Untitled", area:m.area||"",
+      kind, sev:GOV_KINDS[kind].sev, msg:GOV_KINDS[kind].msg(g)});
+    g.tombstonedLinks.forEach(()=>add("tombstone"));
+    if(g.cyclic) add("cycle");
+    if(g.reviewOverdueDays!=null) add("review-overdue");
+    if(g.unreviewedImport) add("unreviewed-import");
+    if(g.unowned) add("unowned");
+  }
+  return rows.sort((a,b)=>(b.sev-a.sev)||a.title.localeCompare(b.title));
+}
+/* governance panel — meters up top, the queue underneath; works ws + local */
+function showGovPanel(){
+  const digs=allDigests(), agg=buildAggregates(digs), q=govQueue(digs);
+  const org=agg.rollup.find(r=>r.level==="org")||{maps:0};
+  const meter=(k,v,cls)=>`<div class="gov-meter ${cls||""}"><div class="gm-v">${v}</div><div class="gm-k">${k}</div></div>`;
+  const confT=(org.confMeasured||0)+(org.confModelled||0);
+  const confBar=confT?`<div class="conf-bar" title="${org.confMeasured} steps measured · ${org.confModelled} modelled">
+      <i class="cb-meas" style="width:${Math.round(org.confMeasured/confT*100)}%"></i></div>
+    <div class="gm-k">data confidence — ${org.measuredPct}% measured, rest modelled</div>`
+    :`<div class="gm-k">no step data yet — confidence appears once maps carry numbers</div>`;
+  const areaCov=agg.rollup.filter(r=>r.level==="area");
+  $("#govBody").innerHTML=`
+    <div class="gov-meters">
+      ${meter("maps in the estate",org.maps)}
+      ${meter("with measured data",`${org.mapsWithMeasured||0} <small>of ${org.maps}</small>`)}
+      ${meter("reviews overdue",org.reviewOverdue||0,org.reviewOverdue?"warn":"")}
+      ${meter("unowned",org.unowned||0,org.unowned?"warn":"")}
+      ${meter("broken / cyclic links",(org.tombstonedLinks||0)+(org.cyclic||0),(org.tombstonedLinks||org.cyclic)?"warn":"")}
+      <div class="gov-meter wide">${confBar}</div>
+    </div>
+    ${areaCov.length?`<div class="gov-cov">${areaCov.map(a=>`<span class="fc-chip" title="${a.mapsWithMeasured} of ${a.maps} maps carry measured data">${esc(a.area)} · ${a.maps} map${a.maps===1?"":"s"}</span>`).join("")}</div>`:""}
+    ${q.length?`<div class="gov-q">${q.map((r,i)=>`
+      <div class="gq-row" data-mid="${esc(r.mapId)}" data-i="${i}">
+        <span class="gq-chip s${r.sev}">${GOV_KINDS[r.kind].chip}</span>
+        <span class="gq-title">${esc(r.title)}</span>
+        <span class="gq-area">${esc(r.area)}</span>
+        <span class="gq-msg">${esc(r.msg)}</span>
+        <button class="btn ghost" data-act="details">Details</button>
+      </div>`).join("")}</div>`
+    :'<div class="home-empty">Nothing needs curation — the estate is clean. 🎉</div>'}`;
+  $("#govBody").querySelectorAll(".gq-row").forEach(el=>{
+    const mid=el.dataset.mid;
+    el.querySelector("[data-act=details]").onclick=ev=>{ ev.stopPropagation();
+      $("#govOverlay").classList.remove("show");
+      showMetaPanel(state.ws?{kind:"ws",id:mid}:{kind:"local",id:localIdOf(mid)}); };
+    el.onclick=()=>{ $("#govOverlay").classList.remove("show"); openByMapId(mid); };
+  });
+  $("#govOverlay").classList.add("show");
+}
+function localIdOf(mapId){ const f=Object.values(state.library.flows).find(x=>x.model&&x.model.mapId===mapId); return f?f.id:null; }
+function openByMapId(mapId){
+  if(state.ws){ if(state.ws.catalog.maps[mapId]) openWsMap(mapId); return; }
+  const id=localIdOf(mapId); if(id) openFlow(id,"build");
+}
+
+/* ============================================================
+   DASHBOARDS  (org platform — phase 4)
+   A dashboard is a tiny piece of DATA, not software (§7):
+   { template, scope, pins, overrides, sharing } in
+   .flowbuilder/dashboards/<id>.json (browser library when no folder).
+   Template = versioned widget layout per altitude; scope = a metadata
+   query resolved against the catalog at RENDER time (retagged maps
+   join automatically); pins = hand-picked additions; personal widget
+   tweaks live in localStorage and never fork the shared file. Every
+   widget reads digest/aggregate fields only — the future dashboard
+   builder just composes this same catalog into the same JSON shape.
+   ============================================================ */
+const WS_DASH_DIR=".flowbuilder/dashboards/";
+const DASH_TEMPLATES={
+  "my-processes@1":{name:"My processes", who:"you — an individual contributor", asks:"What am I part of, and how is it doing?",
+    me:true, widgets:["myMaps","mySteps","notesFeed"]},
+  "ops-health@1":{name:"Ops health", who:"a manager", asks:"Where is today's constraint?",
+    widgets:["bottleneckBoard","capVsDemand","queueWaits","notesFeed"]},
+  "compare-teams@1":{name:"Compare teams", who:"a director", asks:"Which of my teams needs help?",
+    widgets:["teamRows","notesFeed"]},
+  "portfolio@1":{name:"Portfolio", who:"a VP / exec", asks:"Consistent measures across areas — and is the estate governed?",
+    widgets:["areaScorecards","coverageMeter","reviewMeter","confidenceBar","integrityQueue"]}
+};
+function dashTemplate(tid){
+  if(DASH_TEMPLATES[tid]) return DASH_TEMPLATES[tid];
+  const base=String(tid||"").split("@")[0];   // version-tolerant: a newer file still resolves to its family
+  const k=Object.keys(DASH_TEMPLATES).find(x=>x.split("@")[0]===base);
+  return k?DASH_TEMPLATES[k]:DASH_TEMPLATES["ops-health@1"];
+}
+async function wsLoadDashboards(){
+  const ws=state.ws; if(!ws) return;
+  const out={};
+  for(const e of await ws.adapter.listDir(WS_DASH_DIR)){
+    try{ const {text}=await ws.adapter.read(e.path); const doc=JSON.parse(text);
+      if(doc && doc.template) out[e.path.slice(WS_DASH_DIR.length,-5)]={path:e.path, doc}; }
+    catch(err){}
+  }
+  ws.dashboards=out;
+}
+function dashAll(){
+  if(state.ws) return Object.fromEntries(Object.entries(state.ws.dashboards||{}).map(([id,e])=>[id,e.doc]));
+  return state.library.dashboards||{};
+}
+function dashGet(id){ return dashAll()[id]||null; }
+async function dashSave(id,doc){
+  if(state.ws){
+    try{ await state.ws.adapter.write(WS_DASH_DIR+id+".json", JSON.stringify(doc,null,2));
+      state.ws.dashboards[id]={path:WS_DASH_DIR+id+".json", doc}; }
+    catch(e){ console.warn(e); toast("Couldn't write the dashboard file"); }
+  } else { state.library.dashboards=state.library.dashboards||{}; state.library.dashboards[id]=doc; saveLibrary(); }
+}
+async function dashDelete(id){
+  if(state.ws){ try{ await state.ws.adapter.remove(WS_DASH_DIR+id+".json"); }catch(e){}
+    delete state.ws.dashboards[id]; }
+  else if(state.library.dashboards){ delete state.library.dashboards[id]; saveLibrary(); }
+  if(state.dashOpen===id) state.dashOpen=null;
+}
+function dashFreshId(title){
+  const taken=new Set(Object.keys(dashAll())), slug=wsSlug(title||"dashboard");
+  for(let i=0;i<999;i++){ const id=slug+(i?"-"+(i+1):""); if(!taken.has(id)) return id; }
+  return slug+"-"+Date.now();
+}
+/* scope = metadata query + pins, resolved NOW against live digests — never a stored list */
+function dashScopeIds(doc, digs){
+  const sc=doc.scope||{};
+  const ids=Object.keys(digs).filter(id=>{
+    const m=(digs[id]&&digs[id].meta)||{};
+    return Object.entries(sc).every(([k,v])=>{
+      if(v==null||v==="") return true;
+      if(k==="tags"){ const want=Array.isArray(v)?v:[v]; return want.every(t=>(m.tags||[]).includes(t)); }
+      if(k==="status") return (m.status||"draft")===v;
+      if(k==="owner"||k==="area"||k==="team") return (m[k]||"")===v;
+      return ((m.custom||{})[k]||"")===v;   // org schema.json fields are queryable too
+    });
+  });
+  (doc.pins||[]).forEach(p=>{ if(digs[p] && !ids.includes(p)) ids.push(p); });
+  return ids;
+}
+/* personal widget tweaks — a localStorage diff, "reset to standard" = delete it (§7 inheritance) */
+const DASH_PREF_KEY="flowbuilder.dashPrefs";
+function dashPrefKey(id){ return (state.ws?"ws:"+state.ws.dirName:"local")+"/"+id; }
+function dashPrefs(){ try{ return JSON.parse(localStorage.getItem(DASH_PREF_KEY))||{}; }catch(e){ return {}; } }
+function dashSetPref(id,wid,hidden){
+  const all=dashPrefs(), k=dashPrefKey(id), p=all[k]||(all[k]={widgets:{}});
+  if(hidden==null) delete p.widgets[wid]; else p.widgets[wid]={hidden:!!hidden};
+  if(!Object.keys(p.widgets).length) delete all[k];
+  try{ localStorage.setItem(DASH_PREF_KEY, JSON.stringify(all)); }catch(e){}
+}
+function dashClearPrefs(id){ const all=dashPrefs(); delete all[dashPrefKey(id)];
+  try{ localStorage.setItem(DASH_PREF_KEY, JSON.stringify(all)); }catch(e){} }
+function dashWidgetHidden(doc,id,wid){
+  const pers=((dashPrefs()[dashPrefKey(id)]||{}).widgets||{})[wid];
+  if(pers && typeof pers.hidden==="boolean") return pers.hidden;
+  const o=(((doc.overrides||{}).widgets)||{})[wid];
+  return !!(o && o.hidden);
+}
+const sameName=(a,b)=>String(a||"").trim().toLowerCase()===String(b||"").trim().toLowerCase();
+const fmtHrs=h=> h==null?"—" : h>=48?fmt(h/24)+" days" : fmt(h)+" hrs";
+const pctBar=(pct,cls)=>`<span class="mini-track"><i class="${cls||""}" style="width:${pct==null?0:Math.max(0,Math.min(100,pct))}%"></i></span>`;
+
+/* ---- the widget catalog: every widget reads digests/aggregates only ---- */
+const dwMapRow=(ctx,mid,right)=>{ const d=ctx.digs[mid]||{}, x=d.metrics||{};
+  return `<div class="dwr" data-mid="${esc(mid)}"><span class="dwr-t">${esc(d.title||"Untitled")}</span>${right}</div>`; };
+const DASH_WIDGETS={
+  myMaps:{label:()=>"Maps naming me", render(ctx){
+    if(!ctx.me) return `<div class="dw-empty">Set your name (top right of this dashboard) to find the maps that mention you.</div>`;
+    if(!ctx.ids.length) return `<div class="dw-empty">No maps in this scope name “${esc(ctx.me)}” yet.</div>`;
+    return ctx.ids.map(mid=>{ const d=ctx.digs[mid], x=d.metrics||{}, m=d.meta||{};
+      const hot=x.demandPerDay!=null&&x.capacityPerDay!=null&&x.demandPerDay>x.capacityPerDay;
+      const dot=hot?"hot":x.bottleneck?"warn":"ok";
+      return dwMapRow(ctx,mid,`<span class="fc-chip status-${esc(m.status||"draft")}">${esc(m.status||"draft")}</span>
+        <span class="dwr-v"><i class="hdot ${dot}"></i>${x.flowEff!=null?Math.round(x.flowEff*100)+"% "+esc(ML("eff").toLowerCase()):"no data yet"}</span>`); }).join("");
+  }},
+  mySteps:{label:ctx=>"My steps — expected "+ML("touch").toLowerCase(), render(ctx){
+    if(!ctx.me) return `<div class="dw-empty">Set your name to see the steps you're on the hook for.</div>`;
+    const rows=[];
+    ctx.ids.forEach(mid=>{ const d=ctx.digs[mid];
+      ((d&&d.ownerSteps)||[]).forEach(o=>{ if(sameName(o.owner,ctx.me))
+        rows.push({mid, map:d.title||"Untitled", step:o.step, touch:o.touch, u:(d.metrics||{}).timeUnit||"hrs"}); }); });
+    if(!rows.length) return `<div class="dw-empty">No steps are assigned to “${esc(ctx.me)}” in these maps.</div>`;
+    return rows.map(r=>`<div class="dwr" data-mid="${esc(r.mid)}"><span class="dwr-t">${esc(r.step)}</span>
+      <span class="dwr-sub">${esc(r.map)}</span>
+      <span class="dwr-v">${r.touch!=null?fmt(r.touch)+" "+esc(r.u):"—"}</span></div>`).join("");
+  }},
+  notesFeed:{label:()=>"Improvement backlog — wastes, frustrations, ideas", render(ctx){
+    const t={frustration:0,waste:0,idea:0,note:0};
+    ctx.ids.forEach(mid=>{ const nc=(ctx.digs[mid]||{}).noteCounts||{};
+      t.frustration+=nc.frustration||0; t.waste+=nc.waste||0; t.idea+=nc.idea||0; t.note+=nc.note||0; });
+    const total=t.frustration+t.waste+t.idea+t.note;
+    if(!total) return `<div class="dw-empty">No notes logged on these maps yet — drop waste / frustration / idea notes on steps and they land here.</div>`;
+    const head=`<div class="nf-tally">${["frustration","waste","idea","note"].filter(k=>t[k]).map(k=>
+      `<span class="nf-chip nt-${k}">${t[k]} ${esc(NOTE_TYPES[k].label.toLowerCase())}${t[k]===1?"":"s"}</span>`).join("")}</div>`;
+    const feed=[];
+    for(const mid of ctx.ids){ const d=ctx.digs[mid], tx=(d&&d.text)||{};
+      (tx.notes||[]).forEach((n,i)=>{ if(feed.length<12) feed.push({mid, map:d.title||"Untitled",
+        type:(tx.noteTypes||[])[i]||"note", text:n}); }); }
+    return head+feed.map(f=>`<div class="dwr" data-mid="${esc(f.mid)}">
+      <span class="nf-chip nt-${esc(f.type)}">${esc(NOTE_TYPES[f.type]?NOTE_TYPES[f.type].label:"Note")}</span>
+      <span class="dwr-t nf-text">${esc(f.text)}</span><span class="dwr-sub">${esc(f.map)}</span></div>`).join("");
+  }},
+  bottleneckBoard:{label:()=>ML("bottleneck")+" board", render(ctx){
+    const rows=ctx.ids.map(mid=>({mid, d:ctx.digs[mid], x:(ctx.digs[mid]||{}).metrics||{}}))
+      .filter(r=>r.x.bottleneck)
+      .sort((a,b)=>{ const s=r=>r.x.demandPerDay!=null&&r.x.capacityPerDay!=null?r.x.demandPerDay-r.x.capacityPerDay:-1e9;
+        return s(b)-s(a); });
+    if(!rows.length) return `<div class="dw-empty">No bottlenecks flagged across these maps.</div>`;
+    return rows.map(r=>{ const short=r.x.demandPerDay!=null&&r.x.capacityPerDay!=null?r.x.demandPerDay-r.x.capacityPerDay:null;
+      return `<div class="dwr" data-mid="${esc(r.mid)}">
+        <span class="gq-chip ${r.x.bottleneck.why==="load"?"s3":"s2"}">${r.x.bottleneck.why==="load"?"overloaded":"queue"}</span>
+        <span class="dwr-t">${esc(r.x.bottleneck.step)}</span><span class="dwr-sub">${esc(r.d.title||"")}</span>
+        <span class="dwr-v">${short!=null&&short>0?`short ${fmt(short)}/day`:""}</span></div>`; }).join("");
+  }},
+  capVsDemand:{label:()=>ML("demand")+" vs "+ML("flowCap").toLowerCase(), render(ctx){
+    const rows=ctx.ids.map(mid=>({mid, d:ctx.digs[mid], x:(ctx.digs[mid]||{}).metrics||{}}))
+      .filter(r=>r.x.demandPerDay!=null||r.x.capacityPerDay!=null);
+    if(!rows.length) return `<div class="dw-empty">No demand / capacity numbers on these maps yet.</div>`;
+    const max=Math.max(...rows.map(r=>Math.max(r.x.demandPerDay||0,r.x.capacityPerDay||0)),1);
+    return rows.sort((a,b)=>((b.x.demandPerDay||0)-(b.x.capacityPerDay||0))-((a.x.demandPerDay||0)-(a.x.capacityPerDay||0)))
+      .map(r=>{ const dm=r.x.demandPerDay, cp=r.x.capacityPerDay, hot=dm!=null&&cp!=null&&dm>cp;
+      return `<div class="dwr tall" data-mid="${esc(r.mid)}"><span class="dwr-t">${esc(r.d.title||"")}</span>
+        <span class="dv-bars${hot?" hot":""}">
+          <span class="dv-line" title="${ML("demand")}: ${fmt(dm)}/day"><i class="dv-dem" style="width:${dm!=null?Math.round(dm/max*100):0}%"></i><small>${fmt(dm)} in</small></span>
+          <span class="dv-line" title="${ML("flowCap")}: ${fmt(cp)}/day"><i class="dv-cap" style="width:${cp!=null?Math.round(cp/max*100):0}%"></i><small>${fmt(cp)}/day possible</small></span>
+        </span>
+        <span class="dwr-v">${hot?`⚠ short ${fmt(dm-cp)}/day`:dm!=null&&cp!=null?"✓ keeping up":""}</span></div>`; }).join("");
+  }},
+  queueWaits:{label:()=>ML("wait")+" — longest first", render(ctx){
+    const rows=ctx.ids.map(mid=>{ const d=ctx.digs[mid], x=(d||{}).metrics||{};
+        return {mid, d, wh:aggWaitHrs(x.waitTime, x.timeUnit||"hrs")}; })
+      .filter(r=>r.wh!=null).sort((a,b)=>b.wh-a.wh).slice(0,8);
+    if(!rows.length) return `<div class="dw-empty">No wait data across these maps yet.</div>`;
+    const max=Math.max(...rows.map(r=>r.wh),1);
+    return rows.map(r=>`<div class="dwr" data-mid="${esc(r.mid)}"><span class="dwr-t">${esc(r.d.title||"")}</span>
+      ${pctBar(r.wh/max*100,"wt")}<span class="dwr-v">${fmtHrs(r.wh)}</span></div>`).join("");
+  }},
+  teamRows:{label:()=>"Teams side by side", render(ctx){
+    const rows=ctx.agg.rollup.filter(r=>r.level==="team");
+    if(!rows.length) return `<div class="dw-empty">No team metadata on these maps yet — set Team in each map's Details.</div>`;
+    const header=`<div class="tr-row head"><span>Team</span><span>Maps</span><span>FTE</span>
+      <span>${esc(ML("turnaround"))}</span><span>${esc(ML("eff"))}</span><span>${esc(ML("rft"))}</span><span>Activity</span></div>`;
+    return header+rows.map(r=>`<div class="tr-row" data-team="${esc(r.team)}">
+      <span class="dwr-t">${esc(r.team)}<small class="dwr-sub">${esc(r.area)}</small></span>
+      <span>${r.maps}</span><span>${r.fte?fmt(r.fte):"—"}</span>
+      <span>${fmtHrs(r.leadTimeHrs)}</span>
+      <span>${r.flowEffPct!=null?r.flowEffPct+"%":"—"} ${pctBar(r.flowEffPct,"eff")}</span>
+      <span>${r.rftPct!=null?r.rftPct+"%":"—"} ${pctBar(r.rftPct,"rft")}</span>
+      <span class="tr-act" title="waste · frustration · idea notes logged">${r.notesWaste+r.notesFrustration+r.notesIdea?`${r.notesWaste}W · ${r.notesFrustration}F · ${r.notesIdea}I`:"—"}</span>
+    </div>`).join("");
+  }},
+  areaScorecards:{label:()=>"Area scorecards", render(ctx){
+    const rows=ctx.agg.rollup.filter(r=>r.level==="area");
+    if(!rows.length) return `<div class="dw-empty">No area metadata on these maps yet — set Area in each map's Details.</div>`;
+    return `<div class="sc-grid">`+rows.map(r=>{
+      const hot=r.demandPerDay!=null&&r.capacityPerDay!=null&&r.demandPerDay>r.capacityPerDay;
+      return `<div class="scorecard" data-area="${esc(r.area)}">
+      <div class="sc-name">${esc(r.area)}</div>
+      <div class="sc-sub">${r.maps} map${r.maps===1?"":"s"} · ${r.people} people${r.fte?` · ${fmt(r.fte)} FTE`:""}</div>
+      <div class="sc-stats">
+        <div><b>${fmtHrs(r.leadTimeHrs)}</b><small>${esc(ML("turnaround").toLowerCase())}</small></div>
+        <div><b>${r.flowEffPct!=null?r.flowEffPct+"%":"—"}</b><small>${esc(ML("eff").toLowerCase())}</small></div>
+        <div><b>${r.rftPct!=null?r.rftPct+"%":"—"}</b><small>${esc(ML("rft").toLowerCase())}</small></div>
+        <div class="${hot?"hot":""}"><b>${r.demandPerDay!=null?fmt(r.demandPerDay):"—"} / ${r.capacityPerDay!=null?fmt(r.capacityPerDay):"—"}</b><small>in / ${esc(ML("flowCap").toLowerCase())} per day</small></div>
+      </div>
+      ${r.topBottlenecks?`<div class="sc-bn">🚧 ${esc(r.topBottlenecks)}</div>`:""}
+    </div>`;}).join("")+`</div>`;
+  }},
+  coverageMeter:{label:()=>"Coverage — who has maps at all", render(ctx){
+    const org=ctx.agg.rollup.find(r=>r.level==="org")||{maps:0};
+    const areas=ctx.agg.rollup.filter(r=>r.level==="area");
+    const af=schemaFields().find(f=>f.id==="area");
+    const declared=af&&Array.isArray(af.options)?af.options:null;
+    const missing=declared?declared.filter(a=>!areas.some(r=>r.area===a)):[];
+    return `<div class="gov-meters">
+      <div class="gov-meter"><div class="gm-v">${org.maps}</div><div class="gm-k">maps in scope</div></div>
+      <div class="gov-meter"><div class="gm-v">${areas.length}${declared?` <small>of ${declared.length}</small>`:""}</div><div class="gm-k">areas covered</div></div>
+      <div class="gov-meter ${org.maps&&org.mapsWithMeasured<org.maps?"warn":""}"><div class="gm-v">${org.mapsWithMeasured||0} <small>of ${org.maps}</small></div><div class="gm-k">maps with measured data</div></div>
+    </div>${missing.length?`<div class="dw-note">No maps yet for: ${missing.map(esc).join(", ")}</div>`:""}`;
+  }},
+  reviewMeter:{label:()=>"Review status", render(ctx){
+    const org=ctx.agg.rollup.find(r=>r.level==="org")||{maps:0};
+    return `<div class="gov-meters">
+      <div class="gov-meter ${org.reviewOverdue?"warn":""}"><div class="gm-v">${org.reviewOverdue||0}</div><div class="gm-k">reviews overdue</div></div>
+      <div class="gov-meter ${org.unreviewedImports?"warn":""}"><div class="gm-v">${org.unreviewedImports||0}</div><div class="gm-k">imports unreviewed</div></div>
+      <div class="gov-meter ${org.unowned?"warn":""}"><div class="gm-v">${org.unowned||0}</div><div class="gm-k">maps unowned</div></div>
+    </div>`;
+  }},
+  confidenceBar:{label:()=>"Data confidence — measured vs modelled", render(ctx){
+    const org=ctx.agg.rollup.find(r=>r.level==="org")||{};
+    const t=(org.confMeasured||0)+(org.confModelled||0);
+    if(!t) return `<div class="dw-empty">No step data yet — confidence appears once maps carry numbers.</div>`;
+    const areas=ctx.agg.rollup.filter(r=>r.level==="area"&&(r.confMeasured+r.confModelled));
+    return `<div class="conf-bar big" title="${org.confMeasured} steps measured · ${org.confModelled} modelled">
+        <i class="cb-meas" style="width:${Math.round(org.confMeasured/t*100)}%"></i></div>
+      <div class="dw-note">${org.measuredPct}% of ${t} data-bearing steps are measured; the rest are modelled estimates.</div>
+      ${areas.map(a=>{ const at=a.confMeasured+a.confModelled;
+        return `<div class="dwr"><span class="dwr-t">${esc(a.area)}</span>${pctBar(a.confMeasured/at*100,"cb")}<span class="dwr-v">${a.measuredPct}%</span></div>`; }).join("")}`;
+  }},
+  integrityQueue:{label:()=>"Governance queue", render(ctx){
+    const sub={}; ctx.ids.forEach(i=>sub[i]=ctx.digs[i]);
+    const q=govQueue(sub).slice(0,12);
+    if(!q.length) return `<div class="dw-empty">Nothing needs curation in this scope. 🎉</div>`;
+    return q.map(r=>`<div class="dwr gqw" data-mid="${esc(r.mapId)}">
+      <span class="gq-chip s${r.sev}">${GOV_KINDS[r.kind].chip}</span>
+      <span class="dwr-t">${esc(r.title)}</span><span class="dwr-sub">${esc(r.area)}</span>
+      <span class="gqw-msg">${esc(r.msg)}</span></div>`).join("")
+      +`<button class="btn ghost" id="dwGovAll">Open the full governance panel →</button>`;
+  }}
+};
+
+/* ---- viewer: header + widget cards into the home grid area ---- */
+function openDashboard(id){ state.dashOpen=id; if(state.mode!=="home") goHome(); else renderHome(); }
+function renderDashboard(id){
+  const doc=dashGet(id); if(!doc) return false;
+  const tpl=dashTemplate(doc.template), digs=allDigests(), me=userName();
+  let ids=dashScopeIds(doc,digs);
+  if(tpl.me && me) ids=ids.filter(mid=>(((digs[mid]||{}).text||{}).people||[]).some(p=>sameName(p,me)));
+  ids.sort((a,b)=>String((digs[a]||{}).title||"").localeCompare(String((digs[b]||{}).title||"")));
+  const sub={}; ids.forEach(i=>sub[i]=digs[i]);
+  const agg=buildAggregates(sub);   // in-memory fold over digests — the VP view never opens a flow file
+  const ctx={id, doc, tpl, ids, digs, agg, me};
+  const scopeChips=Object.entries(doc.scope||{}).filter(([k,v])=>v!=null&&v!=="")
+    .map(([k,v])=>`<span class="fc-chip">${esc(k)}: ${esc(Array.isArray(v)?v.join(", "):v)}</span>`).join("")
+    +((doc.pins||[]).length?`<span class="fc-chip">📌 ${doc.pins.length} pinned</span>`:"");
+  const hiddenW=tpl.widgets.filter(w=>dashWidgetHidden(doc,id,w));
+  const grid=$("#homeGrid"); grid.classList.add("dashview");
+  $("#wsFilter").style.display="none"; $("#wsBanner").style.display="none";
+  grid.innerHTML=`
+    <div class="dash-head">
+      <button class="btn" id="dashBack">← All maps</button>
+      <div class="dash-titles"><h2>${esc(doc.title||tpl.name)}</h2>
+        <div class="dash-sub">${esc(tpl.name)} · ${ids.length} map${ids.length===1?"":"s"} in scope ${scopeChips}</div></div>
+      <div class="spacer"></div>
+      ${tpl.me?`<label class="dash-me">Your name <input id="dashMe" value="${esc(me)}" placeholder="as it appears on steps"/></label>`:""}
+      <button class="btn" id="dashEdit">Edit dashboard</button>
+    </div>
+    <div class="dash-grid">
+      ${tpl.widgets.filter(w=>!dashWidgetHidden(doc,id,w)).map(w=>`
+        <div class="dw dw-${w}" data-w="${w}">
+          <div class="dw-h"><span>${esc(DASH_WIDGETS[w].label(ctx))}</span>
+            <button class="dw-hide" title="Hide this widget (just for you)" data-w="${w}">✕</button></div>
+          <div class="dw-b">${DASH_WIDGETS[w].render(ctx)}</div>
+        </div>`).join("")}
+    </div>
+    ${hiddenW.length?`<div class="dash-hiddenrow">${hiddenW.length} widget${hiddenW.length===1?"":"s"} hidden by you —
+      <button class="btn ghost" id="dashReset">reset to the shared standard</button></div>`:""}`;
+  grid.querySelector("#dashBack").onclick=()=>{ state.dashOpen=null; renderHome(); };
+  grid.querySelector("#dashEdit").onclick=()=>showDashModal(id);
+  const meIn=grid.querySelector("#dashMe");
+  if(meIn){ meIn.onchange=()=>{ state.library.userName=meIn.value.trim(); saveLibrary(); renderHome(); }; }
+  grid.querySelectorAll(".dw-hide").forEach(b=>b.onclick=ev=>{ ev.stopPropagation();
+    dashSetPref(id,b.dataset.w,true); renderHome(); });
+  const rst=grid.querySelector("#dashReset");
+  if(rst) rst.onclick=()=>{ dashClearPrefs(id); renderHome(); };
+  const gv=grid.querySelector("#dwGovAll");
+  if(gv) gv.onclick=showGovPanel;
+  grid.querySelectorAll(".dwr[data-mid]").forEach(el=>el.onclick=()=>openByMapId(el.dataset.mid));
+  return true;
+}
+/* the dashboards strip on the home screen (ws + local) */
+function renderDashRow(){
+  const row=$("#dashRow"); if(!row) return;
+  if(state.viewer||state.mode!=="home"){ row.style.display="none"; return; }
+  const all=dashAll(), keys=Object.keys(all).sort((a,b)=>String((all[a]||{}).title||a).localeCompare(String((all[b]||{}).title||b)));
+  row.style.display="flex";
+  row.innerHTML=`<span class="dr-label">Dashboards</span>
+    ${keys.map(k=>{ const d=all[k], t=dashTemplate(d.template);
+      return `<button class="dash-chip${state.dashOpen===k?" on":""}" data-dash="${esc(k)}">${esc(d.title||t.name)}<small>${esc(t.name)}</small></button>`; }).join("")}
+    <button class="btn ghost" id="dashNew">+ New dashboard</button>
+    <span class="spacer"></span>
+    <button class="btn ghost" id="govBtn" title="Ownership, freshness, coverage, confidence and link integrity — one derived queue, no forms">🛡 Governance</button>`;
+  row.querySelectorAll(".dash-chip").forEach(b=>b.onclick=()=>openDashboard(b.dataset.dash));
+  row.querySelector("#dashNew").onclick=()=>showDashModal(null);
+  row.querySelector("#govBtn").onclick=showGovPanel;
+}
+/* ---- create / edit: pick a template + a scope from existing facet values ---- */
+let _dashCtx=null;
+function showDashModal(editId){
+  const digs=allDigests();
+  const doc=editId?clone(dashGet(editId)||{}):{template:"ops-health@1", title:"", scope:{}, pins:[], overrides:{}, sharing:"file"};
+  if(!doc.template) doc.template="ops-health@1";
+  _dashCtx={editId};
+  const vals=k=>{ const s=new Set(); Object.values(digs).forEach(d=>{ const v=((d&&d.meta)||{})[k]; if(v&&String(v).trim()) s.add(String(v).trim()); }); return [...s].sort(); };
+  const sel=(k,label)=>{ const cur=(doc.scope||{})[k]||"";
+    const opts=k==="status"?META_STATUS:vals(k);
+    return `<div class="meta-f"><label>${label}</label><select data-dsc="${k}"><option value="">— any —</option>
+      ${opts.map(v=>`<option${v===cur?" selected":""}>${esc(v)}</option>`).join("")}</select></div>`; };
+  const tplCards=Object.entries(DASH_TEMPLATES).map(([tid,t])=>`
+    <button class="tpl-card${tid===doc.template?" on":""}" data-tpl="${tid}">
+      <b>${esc(t.name)}</b><span>for ${esc(t.who)}</span><small>“${esc(t.asks)}”</small></button>`).join("");
+  const mapOpts=Object.keys(digs).sort((a,b)=>String(digs[a].title||"").localeCompare(String(digs[b].title||"")))
+    .map(mid=>`<option value="${esc(mid)}"${(doc.pins||[]).includes(mid)?" selected":""}>${esc(digs[mid].title||"Untitled")}</option>`).join("");
+  $("#dashModalTitle").textContent=editId?"Edit dashboard":"New dashboard";
+  $("#dashBody").innerHTML=`
+    <div class="tpl-row">${tplCards}</div>
+    <div class="meta-grid">
+      <div class="meta-f full"><label>Name</label><input id="dashTitle" value="${esc(doc.title||"")}" placeholder="e.g. Claims ops"/></div>
+      ${sel("area","Area")}${sel("team","Team")}${sel("owner","Owner")}${sel("status","Status")}
+      <div class="meta-f"><label>Tag</label><input data-dsc="tags" value="${esc(Array.isArray((doc.scope||{}).tags)?doc.scope.tags.join(", "):((doc.scope||{}).tags||""))}" placeholder="— any —"/></div>
+      <div class="meta-f full"><label>Pinned maps — hand-picked additions beyond the query (⌘/Ctrl-click)</label>
+        <select id="dashPins" multiple size="5">${mapOpts}</select></div>
+    </div>
+    <div class="meta-note">Scope is a live metadata query: maps tagged into it later join automatically — pins handle the exceptions. The dashboard is ${state.ws?"a small JSON file in the folder — anyone who connects sees it":"saved in this browser"}.</div>
+    <div class="modal-actions">${editId?`<button class="btn del" id="dashDel">Delete</button>`:""}
+      <span class="spacer"></span><button class="btn primary" id="dashSaveBtn">${editId?"Save":"Create"}</button></div>`;
+  const body=$("#dashBody");
+  body.querySelectorAll(".tpl-card").forEach(b=>b.onclick=()=>{ doc.template=b.dataset.tpl;
+    body.querySelectorAll(".tpl-card").forEach(x=>x.classList.toggle("on",x===b)); });
+  body.querySelector("#dashSaveBtn").onclick=async()=>{
+    const scope={};
+    body.querySelectorAll("[data-dsc]").forEach(e=>{ const v=e.value.trim(); if(!v) return;
+      if(e.dataset.dsc==="tags") scope.tags=v.split(",").map(s=>s.trim()).filter(Boolean);
+      else scope[e.dataset.dsc]=v; });
+    const pins=[...body.querySelector("#dashPins").selectedOptions].map(o=>o.value);
+    const tpl=dashTemplate(doc.template);
+    const title=body.querySelector("#dashTitle").value.trim()||tpl.name;
+    const out={template:doc.template, title, scope, pins, overrides:doc.overrides||{}, sharing:"file"};
+    const id=editId||dashFreshId(title);
+    await dashSave(id,out);
+    $("#dashOverlay").classList.remove("show"); _dashCtx=null;
+    state.dashOpen=id; renderHome();
+    toast(editId?"Dashboard saved":"Dashboard created — it stays current as maps are tagged");
+  };
+  const del=body.querySelector("#dashDel");
+  if(del) del.onclick=async()=>{ if(!window.confirm("Delete this dashboard? (Maps are untouched.)")) return;
+    await dashDelete(editId); $("#dashOverlay").classList.remove("show"); _dashCtx=null; renderHome(); toast("Dashboard deleted"); };
+  $("#dashOverlay").classList.add("show");
+}
+
+/* ============================================================
    DATA BINDING  (FlowData: StepID, Segment, Period, TouchTimeAvg, WaitTimeAvg, WIP/Volume)
    ============================================================ */
 function rowsFor(stepId){
@@ -3417,6 +4261,9 @@ function renderHome(){
   cbtn.style.display = (!ws && (supported || state.wsPending)) ? "" : "none";
   cbtn.textContent = state.wsPending ? `⟳ Reconnect “${state.wsPending.name||"workspace"}”` : "⛁ Connect folder";
   wsRenderBanner();
+  renderDashRow();   // dashboards strip (phase 4) — ws-shared files or browser-local docs
+  if(state.dashOpen){ if(renderDashboard(state.dashOpen)) return; state.dashOpen=null; renderDashRow(); }
+  $("#homeGrid").classList.remove("dashview");
   if(ws){ wsRenderFilter(); wsRenderGrid(); return; }
   $("#wsFilter").style.display="none";
   const grid=$("#homeGrid");
@@ -7548,6 +8395,11 @@ $("#wsOverlay").onclick=e=>{ if(e.target.id==="wsOverlay") $("#wsOverlay").class
 $("#metaClose").onclick=()=>{ $("#metaOverlay").classList.remove("show"); _metaCtx=null; };
 $("#metaOverlay").onclick=e=>{ if(e.target.id==="metaOverlay"){ $("#metaOverlay").classList.remove("show"); _metaCtx=null; } };
 $("#metaSave").onclick=()=>commitMetaPanel();
+/* dashboards + governance (phase 4) */
+$("#dashClose").onclick=()=>{ $("#dashOverlay").classList.remove("show"); _dashCtx=null; };
+$("#dashOverlay").onclick=e=>{ if(e.target.id==="dashOverlay"){ $("#dashOverlay").classList.remove("show"); _dashCtx=null; } };
+$("#govClose").onclick=()=>$("#govOverlay").classList.remove("show");
+$("#govOverlay").onclick=e=>{ if(e.target.id==="govOverlay") $("#govOverlay").classList.remove("show"); };
 
 /* ============================================================
    BOOT
