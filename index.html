@@ -726,6 +726,10 @@
   body.tool-cursor #stage .node .vedit{cursor:text}
   body.space-pan #stage, body.space-pan #stage *{cursor:grab}
   body.panning #stage, body.panning #stage *{cursor:grabbing}
+  .lanes{pointer-events:none}
+  .lanes .laneband{fill:var(--ink)}
+  .lanes .lanesep{stroke:var(--line);stroke-opacity:.8;stroke-width:1;stroke-dasharray:2 6}
+  .lanes .lanelbl{fill:var(--faint);font-family:var(--font);font-size:10.5px;font-weight:700;letter-spacing:.8px;text-transform:uppercase}
   .group .gbox{fill:var(--accent);fill-opacity:.05;stroke:var(--accent);stroke-opacity:.55;stroke-width:1.5;stroke-dasharray:6 4;rx:14}
   .build .group .gbox{pointer-events:all;cursor:grab}
   .group.selected .gbox{stroke-opacity:1;stroke-width:2;stroke-dasharray:none;fill-opacity:.09}
@@ -943,6 +947,10 @@
   </symbol>
   <symbol id="ic-tidy" viewBox="0 0 24 24" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
     <path d="M12 3l1.7 4.8L18.5 9.5l-4.8 1.7L12 16l-1.7-4.8L5.5 9.5l4.8-1.7L12 3Z"/><path d="M18.5 15.5l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7.7-2Z"/>
+  </symbol>
+  <symbol id="ic-lanes" viewBox="0 0 24 24" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3.5 8.2h17M3.5 15.8h17"/>
+    <rect x="5" y="3.6" width="5.6" height="3.2" rx="1"/><rect x="13.4" y="10.4" width="5.6" height="3.2" rx="1"/><rect x="7.5" y="17.2" width="5.6" height="3.2" rx="1"/>
   </symbol>
   <symbol id="ic-flow" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
     <circle cx="5" cy="5.5" r="2.2"/><circle cx="5" cy="18.5" r="2.2"/><circle cx="18.5" cy="12" r="2.2"/>
@@ -1247,7 +1255,8 @@
   </div>
   <button id="flowToggle" title="Show case volume and branch splits on the arrows — line thickness follows the flow"><svg class="t-ic"><use href="#ic-flow"/></svg>Case flow</button>
   <button id="notesToggle" title="Show notes, frustrations and waste flags on the map"><svg class="t-ic"><use href="#ic-nt-note"/></svg>Notes</button>
-  <button id="autoArrange" title="Snap boxes into neat columns — never touches your arrows"><svg class="t-ic"><use href="#ic-tidy"/></svg>Tidy</button>
+  <button id="autoArrange" title="Snap boxes into neat flow columns (switches Swimlanes off) — never touches your arrows"><svg class="t-ic"><use href="#ic-tidy"/></svg>Tidy</button>
+  <button id="laneArrange" title="Arrange into one lane per owner — the classic cross-functional layout Visio maps use. Tidy switches back."><svg class="t-ic"><use href="#ic-lanes"/></svg>Swimlanes</button>
   <button id="simBtn" title="Watch a simulated day — cases flow through the map, pile up in queues, and overloads glow"><svg class="t-ic"><use href="#ic-play"/></svg>Simulate</button>
   <div class="pb-zoom">
     <button id="zoomOut" title="Zoom out">−</button>
@@ -4232,6 +4241,7 @@ function render(){
   document.querySelectorAll("[data-cardview]").forEach(b=>b.classList.toggle("tool-on",b.dataset.cardview===view()));
   { const ft=$("#flowToggle"); if(ft) ft.classList.toggle("tool-on",(state.model.settings&&state.model.settings.showFlow)!==false); }
   { const nt=$("#notesToggle"); if(nt) nt.classList.toggle("tool-on",showNotes()); }
+  { const lb=$("#laneArrange"); if(lb) lb.classList.toggle("tool-on",!!(state.model.settings&&state.model.settings.layout==="lanes")); }
   { const t=$("#flowTitle"); if(t){ t.readOnly=state.viewer; if(document.activeElement!==t) t.value=state.model.name||""; fitTitle(t); } }
   renderCrumbs();
   renderSegChips();
@@ -4937,6 +4947,7 @@ function edgeAtPoint(px, py, excludeId){
   return best;
 }
 let _lay={}; // last layout map, for connection-drag hit-testing
+let _laneGeo=null; // swimlane band spans from the last render (lane mode only) — drag-drop owner reassign reads it
 
 /* the linked-step card (phase 3): borrows the collapsed group's look — striped outer ring,
    lens-sized card — but its chip shows the CHILD map's live digest metrics (lead time,
@@ -5132,6 +5143,30 @@ function renderCanvas(r){
     (grp.members||[]).forEach(id=>{ hidden.add(id); memberOf[id]=grp.id; }); });
   const geomOf=id=>byId[id]||collapsedById[id];
   const resolveEndpoint=id=>memberOf[id]||id;   // a member id → its collapsed group's card
+  /* swimlane bands (settings.layout === "lanes"): full-width tinted lanes re-derived from owners and
+     current positions on every render — nothing about lane geometry is ever stored on the model.
+     Band spans land in _laneGeo so dropping a step into another lane can reassign its owner. */
+  _laneGeo=null;
+  if(m.settings && m.settings.layout==="lanes" && m.nodes.length){
+    const ug=unitGraph(), keyOf=laneKeys(ug), ext={};
+    ug.unitIds.forEach(u=>{ const ent=ug.entOf(u), L=lay[u]; if(!ent||!L) return;
+      const top=ent.y+(L.bt||0), e=ext[keyOf[u]]||(ext[keyOf[u]]={y1:1/0,y2:-1/0});
+      e.y1=Math.min(e.y1,top); e.y2=Math.max(e.y2,top+L.h); });
+    const ks=Object.keys(ext).sort((a,b)=>(ext[a].y1+ext[a].y2)-(ext[b].y1+ext[b].y2));
+    if(ks.length){
+      const laneLayer=el("g",{class:"lanes"});
+      const bounds=[ext[ks[0]].y1-28];   // adjacent lanes meet halfway — contiguous bands, no gaps
+      for(let i=1;i<ks.length;i++) bounds.push((ext[ks[i-1]].y2+ext[ks[i]].y1)/2);
+      bounds.push(ext[ks[ks.length-1]].y2+28);
+      _laneGeo=ks.map((k,i)=>({key:k, y1:bounds[i], y2:bounds[i+1]}));
+      _laneGeo.forEach((b,i)=>{
+        laneLayer.appendChild(el("rect",{class:"laneband", x:-P, y:b.y1, width:maxX+2*P, height:b.y2-b.y1,
+          "fill-opacity": i%2 ? 0 : .04}));
+        if(i) laneLayer.appendChild(el("line",{class:"lanesep", x1:-P, y1:b.y1, x2:maxX+P, y2:b.y1}));
+        const t=el("text",{class:"lanelbl", x:10, y:b.y1+20}); t.textContent=b.key; laneLayer.appendChild(t); });
+      svg.insertBefore(laneLayer, defs.nextSibling);   // behind groups, edges and cards
+    }
+  }
   const hotPath=new Set(r.path.map(n=>n.id));
   /* segment view: steps this segment skips (and their arrows) dim but stay in place */
   const segView=activeSegId();
@@ -6686,6 +6721,9 @@ function onNodeDown(ev,n){ if(!editable()||state.linkingFrom) return;
   // a lone card (no arrows yet) can be dropped onto an arrow to splice into the flow
   drag.lone = !drag.group && (n.type==="touch"||n.type==="wait") && !n.children
     && !state.model.edges.some(e=>e.from===n.id||e.to===n.id);
+  // swimlane mode: freeze the bands as they look right now — mid-drag renders stretch the dragged
+  // step's own lane, so the drop test must use the lanes the user actually aimed at
+  drag.lanes0 = _laneGeo && _laneGeo.map(b=>({key:b.key, y1:b.y1, y2:b.y2}));
   window.addEventListener("mousemove",onDragMove); window.addEventListener("mouseup",onDragUp); }
 /* ----- snapping: prefer aligning with a neighbour (guides), else fall to the grid ----- */
 const snapG = v => Math.round(v/GRID)*GRID;
@@ -6737,7 +6775,21 @@ function onDragMove(ev){ if(!drag) return; const svg=$("#canvas"),rect=svg.getBo
     if(tp) tp.classList.add("insert-target"); } }
 function onDragUp(){ window.removeEventListener("mousemove",onDragMove); window.removeEventListener("mouseup",onDragUp);
   const d=drag, g=d&&d.g; drag=null; setTimeout(()=>{ if(g)g._dragged=false; },0);
-  if(d && d.armedEdge && d.moved){ const e=state.model.edges.find(x=>x.id===d.armedEdge); if(e) spliceIntoEdge(d.n, e); } }
+  if(d && d.armedEdge && d.moved){ const e=state.model.edges.find(x=>x.id===d.armedEdge); if(e){ spliceIntoEdge(d.n, e); return; } }
+  // swimlane mode: dropping a work step into another lane hands it to that lane's owner (one field,
+  // announced, undoable) — the same editing gesture every swimlane tool teaches
+  if(d && d.moved && !d.group && d.n.type==="touch" && d.lanes0
+     && state.model.settings && state.model.settings.layout==="lanes"){
+    const cy=d.n.y+NODE_H/2;
+    const band=d.lanes0.find(b=>cy>=b.y1 && cy<b.y2);
+    const cur=(d.n.owner||"").trim()||LANE_UNASSIGNED;
+    if(band && band.key!==cur){
+      if(band.key===LANE_UNASSIGNED) delete d.n.owner; else d.n.owner=band.key;
+      render();
+      toast(band.key===LANE_UNASSIGNED ? "Owner cleared — step moved to the Unassigned lane"
+                                       : `Owner changed to ${band.key}`);
+    }
+  } }
 /* splice a lone card into an existing arrow: from→card→to, sliding downstream steps right to make room */
 function spliceIntoEdge(node, edge){
   const m=state.model, from=m.nodes.find(x=>x.id===edge.from), toN=m.nodes.find(x=>x.id===edge.to);
@@ -7318,18 +7370,20 @@ function tidyGroups(){
   m.groups.forEach(fitGroupBox);
 }
 
-/* ---------- Tidy: lay nodes out as a left-to-right flow grid ---------- */
-/* ---------- Tidy: deterministic left→right grid of longest-path columns & aligned rows ----------
-   Rules (see docs): 1) columns = longest path from start (cycles/rework broken so every forward edge
-   spans ≥1 column); 2) one uniform cell + column pitch (sized to the largest lens and to case-flow
+/* ---------- Arrange engine: shared by Tidy (flow grid) and Swimlanes (lanes by owner) ----------
+   Tidy rules (see docs): 1) columns = longest path from start (cycles/rework broken so every forward
+   edge spans ≥1 column); 2) one uniform cell + column pitch (sized to the largest lens and to case-flow
    label room) so a single Tidy reads cleanly in every view, flow on or off; 3) a fixed top baseline
    with shared rows across columns — no maxH re-centring, so changing one column never drifts another;
    4) row order follows the mean row of a node's inputs (branches sit by their parent), stably
-   tie-broken → idempotent. Group/collapse handling is preserved; arrows are never re-routed. */
-function autoArrange(){
-  if(!editable()||!state.model||!state.model.nodes.length) return;
+   tie-broken → idempotent. Group/collapse handling is preserved; arrows are never re-routed.
+   Swimlanes keeps rules 1–2 and replaces the rows with one horizontal lane per owner. */
+const ARR={CELL_W:236, CELL_H:156, GAPY:44, MARGIN_X:40, HEAD_ROOM:104, BASE_GAP:44, BRANCH_BONUS:32};
+
+/* the canvas as ONE graph of movable units: real nodes (minus legacy sub-steps and collapsed-group
+   members) plus one card per collapsed group, with every edge resolved onto those units */
+function unitGraph(){
   const m=state.model;
-  const start=m.nodes.find(n=>n.type==="start")||m.nodes[0];
   const byIdNode=Object.fromEntries(m.nodes.map(n=>[n.id,n]));
   // collapsed groups fold into one card unit: members are hidden and travel with the card
   const collapsedGroups=(m.groups||[]).filter(g=>g.collapsed && (g.members||[]).length && _lay[g.id]);
@@ -7338,18 +7392,22 @@ function autoArrange(){
   const collUnit={}; collapsedGroups.forEach(g=>{ collUnit[g.id]={ id:g.id,
     get x(){return g.cx||0}, set x(v){g.cx=v}, get y(){return g.cy||0}, set y(v){g.cy=v} }; });
   const entOf=u=> collUnit[u] || byIdNode[u];
-
-  // unit set = real nodes (not legacy sub-steps, not collapsed members) + one card per collapsed group
   const unitIds=[];
   m.nodes.forEach(n=>{ if(n.parentId||collapsedOf[n.id]!=null) return; unitIds.push(n.id); });
   collapsedGroups.forEach(g=>unitIds.push(g.id));
   const unitSet=new Set(unitIds);
-
-  // resolved forward-edge graph
   const adj={}; unitIds.forEach(u=>adj[u]=new Set());
   const hasEdge=new Set();
   m.edges.forEach(e=>{ const u=resolve(e.from), v=resolve(e.to);
     if(u===v||!unitSet.has(u)||!unitSet.has(v)) return; adj[u].add(v); hasEdge.add(u); hasEdge.add(v); });
+  return {m, byIdNode, collapsedGroups, resolve, entOf, unitIds, unitSet, adj, hasEdge};
+}
+
+/* columns + ordering ingredients on top of the unit graph — everything both arrangers need */
+function arrangeCore(){
+  const core=unitGraph();
+  const {m, unitIds, unitSet, adj, hasEdge, resolve, entOf}=core;
+  const start=m.nodes.find(n=>n.type==="start")||m.nodes[0];
 
   // break cycles (rework loops) with an iterative DFS: a grey-target edge is a back edge and is dropped
   const color={}, fwd={}; unitIds.forEach(u=>fwd[u]=[]);
@@ -7391,14 +7449,57 @@ function autoArrange(){
   { const used=[...new Set(unitIds.map(u=>col[u]))].sort((a,b)=>a-b);
     const remap={}; used.forEach((c,i)=>remap[c]=i); unitIds.forEach(u=>col[u]=remap[col[u]]); }
 
-  // rows: within each column (left→right) order by the mean row of inbound neighbours so branches sit
-  // beside their parent; stable tie-breaks (spine order, then original y, then id) keep Tidy idempotent
   const preds={}; unitIds.forEach(u=>preds[u]=[]);
   unitIds.forEach(u=>fwd[u].forEach(v=>preds[v].push(u)));
   const {order}=flowWeights();
   const spineIdx={}; order.forEach((n,i)=>{ const u=resolve(n.id); if(spineIdx[u]==null) spineIdx[u]=i; });
   const si=u=> spineIdx[u]==null?1e9:spineIdx[u];
   const oy=u=>{ const e=entOf(u); return e?(e.y||0):0; };
+  return Object.assign(core,{col,fwd,preds,si,oy,startU});
+}
+
+/* horizontal: each column gap adapts to what sits in it — plain 1-to-1 steps stay tight, a case-flow
+   label opens the gap just enough to fit, and branch/merge boundaries get a little extra breathing room */
+function arrangeColX(core){
+  const {m, unitIds, unitSet, resolve, col}=core;
+  const needByBoundary={};
+  flowLabelNeeds().forEach(it=>{ const cf=col[resolve(it.a.id)], ct=col[resolve(it.b.id)];
+    if(ct===cf+1) needByBoundary[cf]=Math.max(needByBoundary[cf]||0, it.need); });
+  const fanOut={}, fanIn={};
+  m.edges.forEach(e=>{ const u=resolve(e.from), v=resolve(e.to);
+    if(u===v||!unitSet.has(u)||!unitSet.has(v)||col[v]!==col[u]+1) return; fanOut[u]=(fanOut[u]||0)+1; fanIn[v]=(fanIn[v]||0)+1; });
+  const maxCol=Math.max(0,...unitIds.map(u=>col[u]));
+  const colX={}; let acc=ARR.MARGIN_X;
+  for(let c=0;c<=maxCol;c++){ colX[c]=acc;
+    const branchy = unitIds.some(u=>col[u]===c && (fanOut[u]||0)>1) || unitIds.some(u=>col[u]===c+1 && (fanIn[u]||0)>1);
+    acc += ARR.CELL_W + Math.max(ARR.BASE_GAP + (branchy?ARR.BRANCH_BONUS:0), needByBoundary[c]||0); }
+  return colX;
+}
+
+/* shared tail: tween every unit to its cell — a card's CENTRE (= its arrow ports at y+NODE_H/2) lands
+   on the row line, and a collapsed card carries its hidden members by the same delta */
+function applyArrange(core, colX, centerYOf, msg){
+  const {unitIds, entOf, col, byIdNode, collapsedGroups}=core;
+  const targets=[];
+  unitIds.forEach(u=>{ const ent=entOf(u); if(!ent) return;
+    targets.push({ent, _u:u, x:snapG(colX[col[u]]), y:snapG(centerYOf(u) - NODE_H/2)}); });
+  const collShifts=[];
+  collapsedGroups.forEach(g=>{ const t=targets.find(x=>x._u===g.id); if(!t) return;
+    const dx=t.x-(g.cx||0), dy=t.y-(g.cy||0); if(!dx&&!dy) return;
+    g.members.forEach(id=>{ const n=byIdNode[id]; if(n) collShifts.push({node:n,dx,dy}); }); });
+  // custom arrow sides survive — arranging repositions boxes, it never re-routes connections
+  animateNodes(targets, 320, ()=>{
+    collShifts.forEach(s=>{ s.node.x=Math.max(0,s.node.x+s.dx); s.node.y=Math.max(0,s.node.y+s.dy); });
+    tidyGroups(); render(); });
+  toast(msg);
+}
+
+function autoArrange(){
+  if(!editable()||!state.model||!state.model.nodes.length) return;
+  const m=state.model;
+  if(m.settings&&m.settings.layout) delete m.settings.layout;   // Tidy = the plain flow grid → leaves swimlane mode
+  const core=arrangeCore();
+  const {unitIds, col, preds, si, oy}=core;
   const colGroups={}; unitIds.forEach(u=>{ (colGroups[col[u]]=colGroups[col[u]]||[]).push(u); });
   const row={};
   Object.keys(colGroups).map(Number).sort((a,b)=>a-b).forEach(c=>{
@@ -7407,43 +7508,84 @@ function autoArrange(){
       key[u]= ps.length ? ps.reduce((s,p)=>s+row[p],0)/ps.length : si(u); });
     list.sort((a,b)=> (key[a]-key[b]) || (si(a)-si(b)) || (oy(a)-oy(b)) || (a<b?-1:1));
     list.forEach((u,i)=>row[u]=i); });
-
-  const CELL={w:236, h:156}, GAPY=44, MARGIN_X=40, HEAD_ROOM=104, BASE_GAP=44, BRANCH_BONUS=32;
-  const layOf=n=>{ const L=_lay[n.id]||nodeLayout(n); if(L.bt==null) L.bt=NODE_H/2-L.h/2; return L; };
-  const ROW_PITCH=CELL.h+GAPY;
+  const ROW_PITCH=ARR.CELL_H+ARR.GAPY;
   const anyHdr=(m.groups||[]).some(g=>g.showInfo!==false && (g.members||[]).length);
-  const ROW0=60+(anyHdr?HEAD_ROOM:0)+CELL.h/2;   // centre-line of row 0 (constant → no drift)
+  const ROW0=60+(anyHdr?ARR.HEAD_ROOM:0)+ARR.CELL_H/2;   // centre-line of row 0 (constant → no drift)
+  applyArrange(core, arrangeColX(core), u=>ROW0+row[u]*ROW_PITCH, "Layout tidied");
+}
 
-  // horizontal: each column gap adapts to what sits in it — plain 1-to-1 steps stay tight, a case-flow
-  // label opens the gap just enough to fit, and branch/merge boundaries get a little extra breathing room
-  const needByBoundary={};
-  flowLabelNeeds().forEach(it=>{ const cf=col[resolve(it.a.id)], ct=col[resolve(it.b.id)];
-    if(ct===cf+1) needByBoundary[cf]=Math.max(needByBoundary[cf]||0, it.need); });
-  const fanOut={}, fanIn={};
-  m.edges.forEach(e=>{ const u=resolve(e.from), v=resolve(e.to);
-    if(u===v||!unitSet.has(u)||!unitSet.has(v)||col[v]!==col[u]+1) return; fanOut[u]=(fanOut[u]||0)+1; fanIn[v]=(fanIn[v]||0)+1; });
-  const maxCol2=Math.max(0,...unitIds.map(u=>col[u]));
-  const colX={}; { let acc=MARGIN_X;
-    for(let c=0;c<=maxCol2;c++){ colX[c]=acc;
-      const branchy = unitIds.some(u=>col[u]===c && (fanOut[u]||0)>1) || unitIds.some(u=>col[u]===c+1 && (fanIn[u]||0)>1);
-      acc += CELL.w + Math.max(BASE_GAP + (branchy?BRANCH_BONUS:0), needByBoundary[c]||0); } }
+/* ---------- Swimlanes: which lane does each unit belong to? ----------
+   A unit's lane is its owner. Connector nodes (Start / End / queues) usually carry no owner, so they
+   inherit the nearest owned neighbour — downstream first (a queue is the next team's inbox), then
+   upstream. Human/bot steps with no owner go to an explicit "Unassigned" lane: that's a real data gap
+   worth seeing, not something to paper over. A collapsed group takes its members' majority owner. */
+const LANE_UNASSIGNED="Unassigned";
+function laneKeys(core){
+  const {unitIds, byIdNode, collapsedGroups, adj}=core;
+  const collById={}; collapsedGroups.forEach(g=>collById[g.id]=g);
+  const raw={};
+  unitIds.forEach(u=>{
+    const g=collById[u];
+    if(g){ const cnt={};
+      (g.members||[]).forEach(id=>{ const o=((byIdNode[id]||{}).owner||"").trim(); if(o) cnt[o]=(cnt[o]||0)+1; });
+      const best=Object.entries(cnt).sort((a,b)=>b[1]-a[1])[0]; raw[u]=best?best[0]:"";
+    } else raw[u]=((byIdNode[u]||{}).owner||"").trim(); });
+  const radj={}; unitIds.forEach(u=>radj[u]=[]);
+  unitIds.forEach(u=>adj[u].forEach(v=>radj[v].push(u)));
+  const nearest=(u,nbrs)=>{ const seen=new Set([u]), q=[u];
+    for(let i=0;i<q.length;i++) for(const v of nbrs(q[i])){
+      if(seen.has(v)) continue; if(raw[v]) return raw[v]; seen.add(v); q.push(v); }
+    return ""; };
+  const out={};
+  unitIds.forEach(u=>{
+    if(raw[u]){ out[u]=raw[u]; return; }
+    const n=byIdNode[u];
+    const inherits=!n || n.type!=="touch";   // work steps stay honest; plumbing borrows a lane
+    out[u]= (inherits && (nearest(u,x=>[...adj[x]]) || nearest(u,x=>radj[x]))) || LANE_UNASSIGNED; });
+  return out;
+}
 
-  // vertical: put every card's CENTRE (= its arrow ports at y+NODE_H/2) on a shared row line, so steps
-  // of different heights — including short Start/End boxes — line up and connectors stay level
-  const targets=[];
-  unitIds.forEach(u=>{ const ent=entOf(u); if(!ent) return;
-    targets.push({ent, _u:u, x:snapG(colX[col[u]]), y:snapG(ROW0 + row[u]*ROW_PITCH - NODE_H/2)}); });
-
-  // a collapsed card moves as one; carry its hidden members by the same delta so an expand still lines up
-  const collShifts=[];
-  collapsedGroups.forEach(g=>{ const t=targets.find(x=>x._u===g.id); if(!t) return;
-    const dx=t.x-(g.cx||0), dy=t.y-(g.cy||0); if(!dx&&!dy) return;
-    g.members.forEach(id=>{ const n=byIdNode[id]; if(n) collShifts.push({node:n,dx,dy}); }); });
-  // custom arrow sides survive — Tidy repositions boxes, it never re-routes connections
-  animateNodes(targets, 320, ()=>{
-    collShifts.forEach(s=>{ s.node.x=Math.max(0,s.node.x+s.dx); s.node.y=Math.max(0,s.node.y+s.dy); });
-    tidyGroups(); render(); });
-  toast("Layout tidied");
+/* Swimlanes arrange: Tidy's columns, but the rows become one horizontal lane per owner —
+   the classic cross-functional (Visio-style) layout. Lane order = whoever acts first sits on top;
+   Unassigned always sinks to the bottom. Toggling back is just Tidy. */
+function laneArrange(){
+  if(!editable()||!state.model||!state.model.nodes.length) return;
+  const m=state.model;
+  const core=arrangeCore(), keyOf=laneKeys(core);
+  const {unitIds, col, preds, si, oy}=core;
+  const lanes=[...new Set(unitIds.map(u=>keyOf[u]))];
+  const st={}; unitIds.forEach(u=>{ const s=st[keyOf[u]]||(st[keyOf[u]]={c:1/0,s:1/0});
+    s.c=Math.min(s.c,col[u]); s.s=Math.min(s.s,si(u)); });
+  lanes.sort((a,b)=> ((a===LANE_UNASSIGNED)-(b===LANE_UNASSIGNED)) ||
+    (st[a].c-st[b].c) || (st[a].s-st[b].s) || (a<b?-1:1));
+  // sub-rows inside a lane mirror Tidy's row logic, with only same-lane predecessors pulling —
+  // a lane's main chain hugs its top line and parallel work stacks beneath it
+  const sub={}, rowsOf={};
+  lanes.forEach(k=>{
+    const colGroups={};
+    unitIds.forEach(u=>{ if(keyOf[u]!==k) return; (colGroups[col[u]]=colGroups[col[u]]||[]).push(u); });
+    let maxRows=1;
+    Object.keys(colGroups).map(Number).sort((a,b)=>a-b).forEach(c=>{
+      const list=colGroups[c], key={};
+      list.forEach(u=>{ const ps=preds[u].filter(p=>keyOf[p]===k && sub[p]!=null);
+        key[u]= ps.length ? ps.reduce((s,p)=>s+sub[p],0)/ps.length : si(u); });
+      list.sort((a,b)=> (key[a]-key[b]) || (si(a)-si(b)) || (oy(a)-oy(b)) || (a<b?-1:1));
+      list.forEach((u,i)=>sub[u]=i); maxRows=Math.max(maxRows,list.length); });
+    rowsOf[k]=maxRows; });
+  // stack the lanes: label headroom at each lane's top, group-header room when headers exist
+  const ROW_PITCH=ARR.CELL_H+ARR.GAPY;
+  const anyHdr=(m.groups||[]).some(g=>g.showInfo!==false && (g.members||[]).length);
+  const LANE_LBL=34, PAD_TOP=anyHdr?ARR.HEAD_ROOM:14, PAD_BOT=20;
+  const centerY={}; let acc=40;
+  lanes.forEach(k=>{
+    const first=acc+LANE_LBL+PAD_TOP+ARR.CELL_H/2;
+    unitIds.forEach(u=>{ if(keyOf[u]===k) centerY[u]=first+sub[u]*ROW_PITCH; });
+    acc = first + (rowsOf[k]-1)*ROW_PITCH + ARR.CELL_H/2 + PAD_BOT; });
+  m.settings=m.settings||{}; m.settings.layout="lanes";
+  const named=lanes.filter(k=>k!==LANE_UNASSIGNED).length;
+  applyArrange(core, arrangeColX(core), u=>centerY[u],
+    named ? "Swimlanes — one lane per owner · Tidy switches back"
+          : "No owners set yet — give steps an Owner to split them into lanes");
 }
 
 /* ---------- Visio-style connect: drag from a node's dot to another node ---------- */
@@ -7858,6 +8000,8 @@ function buildExportSVG(){
     .eflow{font-size:10.5px;font-weight:600;paint-order:stroke;stroke:var(--bg);stroke-width:3.5px;stroke-linejoin:round}
     .eflow tspan{stroke:var(--bg);stroke-width:3.5px;paint-order:stroke}
     .nowner{fill:var(--faint);font-size:9px;letter-spacing:.6px;font-weight:700}
+    .laneband{fill:var(--ink)}.lanesep{stroke:var(--line);stroke-opacity:.8;stroke-width:1;stroke-dasharray:2 6}
+    .lanelbl{fill:var(--faint);font-size:10.5px;font-weight:700;letter-spacing:.8px;text-transform:uppercase}
     .edge{fill:none;stroke:var(--faint);stroke-width:2}.edge.hot{stroke:var(--nva)}${(state.model.edges||[]).some(e=>e.primary)?".edge.primary{stroke:var(--va);stroke-width:2.5}":""}
     .anchor,.edge-hit,.temp-edge,.del-handle,.guide,.canvas-hint,.vedit,.anno-resize,.note-picker{display:none}
     #simLayer,.sim-dot,.sim-rim,.sim-count{display:none}
@@ -8196,6 +8340,7 @@ function setZoom(z){ state.zoom=Math.max(0.4,Math.min(2,Math.round(z*100)/100));
 $("#zoomIn").onclick=()=>setZoom(Z()+0.1);
 $("#zoomOut").onclick=()=>setZoom(Z()-0.1);
 $("#autoArrange").onclick=autoArrange;
+$("#laneArrange").onclick=laneArrange;
 $("#flowToggle").onclick=()=>{ if(!state.model) return;
   state.model.settings=state.model.settings||{};
   const on=!(state.model.settings.showFlow!==false);
