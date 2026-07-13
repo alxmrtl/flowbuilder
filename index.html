@@ -1012,8 +1012,6 @@
     <span class="hdr-label">Data</span>
     <button class="btn" id="exportSheet" title="Download a stats sheet (CSV) with one row per step — fill it in, then Import sheet to load the numbers."><svg class="t-ic"><use href="#ic-download"/></svg>Export sheet</button>
     <button class="btn primary" id="importSheet" title="Load a filled-out stats sheet (Excel/CSV) to populate this flow's numbers."><svg class="t-ic"><use href="#ic-upload"/></svg>Import sheet</button>
-    <button class="btn" id="convertDoc" title="Build a new flow from source material — a transcript, a Visio map, an Excel sheet, a job-aid. Copy the prompt into any AI, paste the result back."><svg class="t-ic"><use href="#ic-doc"/></svg>Convert docs</button>
-    <button class="btn" id="importVisio" title="Convert a Visio drawing (.vsdx) into a flow — read directly in your browser, no AI involved. You'll see a preview of what maps over before anything is created."><svg class="t-ic"><use href="#ic-upload"/></svg>Import Visio</button>
   </div>
   <span class="divider"></span>
   <div class="hdr-group" id="shareGroup">
@@ -1154,8 +1152,13 @@
     <span class="ws-chip" id="wsChip" style="display:none" title="Connected workspace folder"></span>
     <span class="ws-status" id="wsStatus"></span>
     <div class="spacer"></div>
-    <button class="btn primary" id="newFlow">+ New flow</button>
-    <button class="btn" id="importFlow">Import…</button>
+    <div class="hdr-group" id="newFlowGroup">
+      <span class="hdr-label">New flow</span>
+      <button class="btn primary" id="newFlow">+ Blank flow</button>
+      <button class="btn" id="importFlow">Import…</button>
+      <button class="btn" id="convertDoc" title="Build a new flow from source material — a transcript, a Visio map, an Excel sheet, a job-aid. Copy the prompt into any AI, paste the result back."><svg class="t-ic"><use href="#ic-doc"/></svg>Convert docs</button>
+      <button class="btn" id="importVisio" title="Convert a Visio drawing (.vsdx) into a flow — read directly in your browser, no AI involved. You'll see a preview of what maps over before anything is created."><svg class="t-ic"><use href="#ic-upload"/></svg>Add Visio</button>
+    </div>
     <button class="btn" id="exportLib">Export library</button>
     <button class="btn" id="wsConnect" style="display:none" title="Connect a shared folder (e.g. a synced SharePoint/OneDrive library) — every flow becomes a file the whole team can browse and search">⛁ Connect folder</button>
     <button class="btn iconbtn" id="wsSettingsBtn" style="display:none" title="Workspace settings — vocabulary, refresh, disconnect">⚙</button>
@@ -4746,8 +4749,8 @@ const LBL_LH=16, MET_LH=14, CAP_RY=9;
 /* ---- design-06 visual language: type hues, severity, icons (uniform cards) ---- */
 const CARD_W=236, CARD_H=156, TITLE_X=44;
 /* ---- card views (lenses): what every card shows; size adapts, positions stay put ---- */
-const VIEW_DIMS={ metrics:{w:236,h:156}, gaps:{w:236,h:156}, people:{w:236,h:118}, value:{w:236,h:140}, compact:{w:170,h:56} };
-const view  = () => (state.model&&state.model.settings&&state.model.settings.cardView)||"metrics";
+const VIEW_DIMS={ metrics:{w:236,h:156}, gaps:{w:236,h:156}, people:{w:236,h:118}, value:{w:236,h:156}, compact:{w:170,h:56} };
+const view  = () => (state.model&&state.model.settings&&state.model.settings.cardView)||"value";
 const showNotes = () => !state.model || (state.model.settings&&state.model.settings.showNotes)!==false;
 const viewW = () => VIEW_DIMS[view()].w;
 /* ---- sub-steps: a touch step can hold child steps (granularity control) ----
@@ -5382,7 +5385,6 @@ function renderCanvas(r){
       const WELL=26;
       g.appendChild(el("rect",{x:12,y:bt+12,width:WELL,height:WELL,rx:7,fill:hue}));
       g.appendChild(useIc(ICON_FOR(n), 16, bt+16, WELL-8, "#0f1720"));
-      let ty=bt+25; L.titleLines.forEach(ln=>{ g.appendChild(txt(TITLE_X,ty,ln,"nlabel")); ty+=LBL_LH; });
       // inline-edit hit zone helper (editable mode only) — sits over a field, blocks drag, opens an editor on click
       const zone=(zx,zy,zw,zh,extra,on)=>{ if(!editable()) return;
         const rr=el("rect",{class:"vedit"+(extra?" "+extra:""),x:zx,y:zy,width:Math.max(24,zw),height:zh,rx:6});
@@ -5392,37 +5394,49 @@ function renderCanvas(r){
         g.appendChild(rr); };
       // value chip cycles through the three ratings on click (unrated starts at Valued)
       const cycleValue=nn=>{ const order=["VA","NNVA","NVA"]; nn.classification=order[(order.indexOf(nn.classification)+1)%3]; render(); };
-      // title (all value cards): click to rename in place
-      zone(TITLE_X-6, bt+12, w-TITLE_X, (L.titleLines.length>1?LBL_LH+18:22), "", ()=>editCardField({
-        x:n.x+TITLE_X-6, y:n.y+bt+12, w:w-TITLE_X, h:(L.titleLines.length>1?38:24),
+      // owner / bot-name eyebrow (small all-caps, above the title) — same spot as the Metrics lens
+      const ownerStr=(n.owner||"").trim();
+      if(ownerStr){ g.appendChild(txt(TITLE_X,bt+20,truncToWidth(ownerStr.toUpperCase(), w-TITLE_X-30, F_META),"nowner")); }
+      else if(editable()){ g.appendChild(txt(TITLE_X,bt+20,"+ OWNER","nowner",{"fill-opacity":"0.5"})); }
+      zone(TITLE_X-4, bt+10, Math.min(w-TITLE_X,150), 13, "", ()=>editCardField({
+        x:n.x+TITLE_X-4, y:n.y+bt+10, w:Math.min(w-TITLE_X,150), h:13,
+        value:n.owner||"", placeholder:n.performer==="bot"?"Bot name":"Owner / team", onCommit:v=>{ n.owner=v||undefined; } }));
+      // title (all value cards): click to rename in place — nudged down when the eyebrow/edit-hint is present
+      let ty = (ownerStr||editable()) ? bt+34 : bt+25;
+      L.titleLines.forEach(ln=>{ g.appendChild(txt(TITLE_X,ty,ln,"nlabel")); ty+=LBL_LH; });
+      zone(TITLE_X-6, bt+24, w-TITLE_X, (L.titleLines.length>1?LBL_LH+18:22), "", ()=>editCardField({
+        x:n.x+TITLE_X-6, y:n.y+bt+24, w:w-TITLE_X, h:(L.titleLines.length>1?38:24),
         value:n.label, placeholder:"Step name", onCommit:v=>{ n.label=v||undefined; } }));
-      if(isQ){
-        g.appendChild(txt(12,bt+61,"WAITING — NO VALUE ADDED","",{fill:"var(--wait)","font-size":"10.5","font-weight":"800","letter-spacing":".5"}));
-        { const dwq=r.dw?r.dw[n.id]:null, wv=mt.wait!=null?mt.wait:dwq;
-          g.appendChild(txt(12,bt+80, wv!=null?`Items sit here ${mt.wait==null?"≈":""}${fmt(wv)} ${unit()} on average`:"No wait data yet","nmeta")); }
-      } else if(n.classification){
-        g.appendChild(useIc(VAL_IC[n.classification],12,bt+50,16,bandC));
-        const vname=T.cls[n.classification].name.toUpperCase();
-        g.appendChild(txt(34,bt+61,vname,"",{fill:bandC,"font-size":"11","font-weight":"800","letter-spacing":".5"}));
-        zone(8, bt+47, 26+measure(vname,`800 11px ${FONT_STACK}`), 20, "pick", ()=>cycleValue(n));
-        const note=(n.valueNote||"").trim();
-        const lines=note?wrapText(note, w-24, F_META).slice(0,3):[];
-        if(lines.length){ let ny=bt+80; lines.forEach(l=>{ g.appendChild(txt(12,ny,l,"nmeta")); ny+=14; }); }
-        else g.appendChild(txt(12,bt+80,"No details yet","nmeta",{"font-style":"italic"}));
-        zone(8, bt+70, w-16, L.h-84, "", ()=>editCardField({
-          x:n.x+8, y:n.y+bt+70, w:w-16, h:L.h-84, multiline:true,
-          value:n.valueNote, placeholder:"Add details — what happens in this step", onCommit:v=>{ n.valueNote=v||undefined; } }));
-      } else {
-        g.appendChild(txt(12,bt+61,"⚠ UNRATED","",{fill:"var(--warn)","font-size":"11","font-weight":"800","letter-spacing":".5"}));
-        g.appendChild(txt(12,bt+80,"Click to rate this step","nmeta"));
-        zone(8, bt+47, 90, 20, "pick", ()=>cycleValue(n));
-      }
+      // details — the main field: always visible and editable, no rating required first
+      const note=(n.valueNote||"").trim();
+      const lines=note?wrapText(note, w-24, F_META).slice(0,4):[];
+      if(lines.length){ let ny=bt+84; lines.forEach(l=>{ g.appendChild(txt(12,ny,l,"nmeta")); ny+=14; }); }
+      else g.appendChild(txt(12,bt+84,"No details yet","nmeta",{"font-style":"italic"}));
+      zone(8, bt+72, w-16, 56, "", ()=>editCardField({
+        x:n.x+8, y:n.y+bt+72, w:w-16, h:56, multiline:true,
+        value:n.valueNote, placeholder:isQ?"Add details — what's piling up here":"Add details — what happens in this step",
+        onCommit:v=>{ n.valueNote=v||undefined; } }));
+      // footer — rating / status, pinned to the bottom, sharing its row with the time badge on the right
       const tstr = isQ ? (mt.wait!=null?`${fmt(mt.wait)} ${unit()}`:"") : (mt.touch!=null?`${fmt(mt.touch)} ${unit()}`:"");
+      const footerY=bt+L.h-24, footerMaxW = w-24-(tstr?measure(tstr,F_META)+10:0);
+      if(isQ){
+        const qtext=truncToWidth("⏳ WAITING — NO VALUE ADDED",footerMaxW,`800 10.5px ${FONT_STACK}`);
+        g.appendChild(txt(12,footerY+14,qtext,"",{fill:"var(--wait)","font-size":"10.5","font-weight":"800","letter-spacing":".5"}));
+      } else if(n.classification){
+        const vname=truncToWidth(T.cls[n.classification].name.toUpperCase(),footerMaxW-22,`800 11px ${FONT_STACK}`);
+        g.appendChild(useIc(VAL_IC[n.classification],12,footerY+3,16,bandC));
+        g.appendChild(txt(34,footerY+14,vname,"",{fill:bandC,"font-size":"11","font-weight":"800","letter-spacing":".5"}));
+        zone(8, footerY, 26+measure(vname,`800 11px ${FONT_STACK}`), 20, "pick", ()=>cycleValue(n));
+      } else {
+        const utext=truncToWidth("⚠ UNRATED · Click to rate",footerMaxW,`800 11px ${FONT_STACK}`);
+        g.appendChild(txt(12,footerY+14,utext,"",{fill:"var(--warn)","font-size":"11","font-weight":"800","letter-spacing":".5"}));
+        zone(8, footerY, 12+measure(utext,`800 11px ${FONT_STACK}`), 20, "pick", ()=>cycleValue(n));
+      }
       if(tstr) g.appendChild(txt(w-12,bt+L.h-10,tstr,"nmeta",{"text-anchor":"end"}));
       if(!isQ && hasSubs(n)){ const chip=el("g",{class:"subchip"});
         const lbl3=`▸ ${n.children.length} SUB-STEPS`, cw3=30+lbl3.length*5.6;
-        chip.appendChild(el("rect",{x:8,y:bt+L.h-9,width:cw3,height:18,rx:6,fill:hue}));
-        chip.appendChild(txt(8+cw3/2,bt+L.h+4,lbl3,"",{fill:"#0f1720","font-size":"9.5","font-weight":"800","text-anchor":"middle"}));
+        chip.appendChild(el("rect",{x:8,y:bt+L.h+6,width:cw3,height:18,rx:6,fill:hue}));
+        chip.appendChild(txt(8+cw3/2,bt+L.h+19,lbl3,"",{fill:"#0f1720","font-size":"9.5","font-weight":"800","text-anchor":"middle"}));
         chip.addEventListener("mousedown",ev=>ev.stopPropagation());
         chip.addEventListener("click",ev=>{ ev.stopPropagation(); toggleExpand(n.id); });
         g.appendChild(chip); }
@@ -5560,7 +5574,7 @@ function renderCanvas(r){
 
       // ---- two metric columns: a primary number + the minor metrics that explain where it comes from ----
       const NUMF=`800 21px ${FONT_STACK}`;
-      const padL=12, midX=Math.round(w/2), colTop=bt+64, colW=midX-padL-12;
+      const padL=12, midX=Math.round(w/2), colTop=bt+64, colW=midX-padL-12, rx=midX+12;
       g.appendChild(el("line",{x1:midX,y1:colTop-2,x2:midX,y2:bt+L.h-12,stroke:"var(--line)","stroke-width":1}));
       // primary: tiny Speed/Capacity/Quality glyph + all-caps eyebrow + 21px number (+ unit).
       // `calc` (tooltip text) marks a derived, read-only number — rendered quieter (lighter
@@ -5594,16 +5608,16 @@ function renderCanvas(r){
       const numEdit=(field,ph)=>({value:n[field]!=null?String(n[field]):"", ph, commit:v=>{ n[field]=v===""?undefined:(isNaN(+v)?n[field]:+v); }});
       const measured = !!(n.stepId && rowsFor(n.stepId).length);   // backed by imported data → inputs are read-only
 
-      // LEFT = primary quantity/rate + its drivers
+      // RIGHT = primary quantity/rate + its drivers
       if(isQ){
-        drawNum(padL,ML("wip").toUpperCase(), mt.wip!=null?fmt(mt.wip):"—","cases", mt.wip!=null?null:"var(--faint)","capacity", measured?"Averaged from imported data — edit at the source":null);
-        if(!measured) editField(padL-4, colTop-8, colW, 34, n.wip!=null?String(n.wip):"", v=>{ n.wip=v===""?undefined:(isNaN(+v)?n.wip:+v); }, "Items in queue");
+        drawNum(rx,ML("wip").toUpperCase(), mt.wip!=null?fmt(mt.wip):"—","cases", mt.wip!=null?null:"var(--faint)","capacity", measured?"Averaged from imported data — edit at the source":null);
+        if(!measured) editField(rx-4, colTop-8, colW, 34, n.wip!=null?String(n.wip):"", v=>{ n.wip=v===""?undefined:(isNaN(+v)?n.wip:+v); }, "Items in queue");
         const dmd=(state.model.settings&&state.model.settings.demand);
         const vv=(r.visits&&r.visits[n.id])||1;
         const arriving=dmd!=null?dmd*vv:null;
         const clears=(r.qOut&&r.qOut[n.id]!=null)?r.qOut[n.id]:null;
-        drawRow(padL,0,"Arriving",arriving!=null?fmt(arriving)+"/d":"—",null,{calc:"Cases reaching this queue each day — incoming work × how often a case passes here."});
-        drawRow(padL,1,"Clears",clears!=null?fmt(clears)+"/d":"—",clears!=null?"var(--ink)":"var(--muted)",{calc:"How fast the next step can drain this queue."});
+        drawRow(rx,0,"Arriving",arriving!=null?fmt(arriving)+"/d":"—",null,{calc:"Cases reaching this queue each day — incoming work × how often a case passes here."});
+        drawRow(rx,1,"Clears",clears!=null?fmt(clears)+"/d":"—",clears!=null?"var(--ink)":"var(--muted)",{calc:"How fast the next step can drain this queue."});
       } else {
         // pace + load come from the metric web when it can derive them (demand × visits ÷ people × hours)
         const pc=(r.cap&&r.cap.per&&r.cap.per[n.id])||null;
@@ -5611,29 +5625,29 @@ function renderCanvas(r){
         const capV=mt.effCapacity!=null?mt.effCapacity:mt.capacity;
         const load=pc&&pc.load!=null?Math.max(0,pc.load):((tp!=null&&capV!=null&&capV>0)?Math.max(0,tp/capV):null);
         const lc=load==null?"var(--faint)":SEVC[load>=0.8?"hot":load>=0.6?"warn":"calm"].c;
-        drawNum(padL, ML("pace").toUpperCase(), tp!=null?fmt(tp):"—","/day", tp!=null?null:"var(--faint)","capacity", METRICS_SPEC.metrics.pace.d);
-        const capRow=(i)=>drawRow(padL,i,"Capacity",capV!=null?fmt(capV)+"/d":"—",capV!=null?"var(--ink)":"var(--muted)",{calc:METRICS_SPEC.metrics.capacity.d});
-        const loadRow=(i)=>drawRow(padL,i,"Load",load!=null?Math.round(load*100)+"%":"—",lc,{calc:METRICS_SPEC.metrics.load.d});
+        drawNum(rx, ML("pace").toUpperCase(), tp!=null?fmt(tp):"—","/day", tp!=null?null:"var(--faint)","capacity", METRICS_SPEC.metrics.pace.d);
+        const capRow=(i)=>drawRow(rx,i,"Capacity",capV!=null?fmt(capV)+"/d":"—",capV!=null?"var(--ink)":"var(--muted)",{calc:METRICS_SPEC.metrics.capacity.d});
+        const loadRow=(i)=>drawRow(rx,i,"Load",load!=null?Math.round(load*100)+"%":"—",lc,{calc:METRICS_SPEC.metrics.load.d});
         if(isBot){ capRow(0); loadRow(1); }
         else {
-          drawRow(padL,0,"People",n.people!=null?fmt(n.people):"—",null,{edit:numEdit("people","People")});
-          drawRow(padL,1,"Hours/day",fmt(n.hoursPerDay!=null?n.hoursPerDay:AVAIL_HRS)+"h",null,{edit:numEdit("hoursPerDay","Hours per day")});
+          drawRow(rx,0,"People",n.people!=null?fmt(n.people):"—",null,{edit:numEdit("people","People")});
+          drawRow(rx,1,"Hours/day",fmt(n.hoursPerDay!=null?n.hoursPerDay:AVAIL_HRS)+"h",null,{edit:numEdit("hoursPerDay","Hours per day")});
           capRow(2); loadRow(3);
         }
       }
 
-      // RIGHT = time primary + its share of the flow's turnaround
-      const rx=midX+12, dwv=isQ&&r.dw?r.dw[n.id]:null;
+      // LEFT = time primary + its share of the flow's turnaround
+      const dwv=isQ&&r.dw?r.dw[n.id]:null;
       const time=isQ?(mt.wait!=null?mt.wait:dwv):mt.touch;
       const approx=isQ&&mt.wait==null&&dwv!=null;
       const info=tl[n.id]||{start:0,pct:0}, pct = time!=null ? info.pct : null;
       const primCalc = measured ? "Averaged from imported data — edit at the source" : null;
-      drawNum(rx, (isQ?ML("wait"):ML("touch")).toUpperCase(), time!=null?(approx?"≈"+fmt(time):fmt(time)):"—", unit(), time!=null?null:"var(--faint)","speed", primCalc);
+      drawNum(padL, (isQ?ML("wait"):ML("touch")).toUpperCase(), time!=null?(approx?"≈"+fmt(time):fmt(time)):"—", unit(), time!=null?null:"var(--faint)","speed", primCalc);
       if(!measured){ const field=isQ?"waitTimeManual":"touchTimeManual";
-        editField(rx-4, colTop-8, colW, 34, n[field]!=null?String(n[field]):"", v=>{ n[field]=v===""?undefined:(isNaN(+v)?n[field]:+v); }, `${isQ?"Wait":"Touch"} time (${unit()})`); }
-      drawRow(rx,0,"of turnaround",rowPct(pct),pct!=null?"var(--ink)":"var(--muted)",{calc:`${isQ?"Wait":"Touch"} time here as a share of the whole flow's turnaround.`});
-      if(isQ) drawRow(rx,1,"Basis",time==null?"—":(approx?"≈ estimate":"measured"),null,{calc:approx?"Estimated from queue size ÷ the next step's pace (Little's Law).":"Taken straight from the wait time you set."});
-      else drawRow(rx,1,"Rework",mt.rework!=null?fmt(mt.rework)+"%":"—",null, measured?{calc:"Averaged from imported data — edit at the source"}:{edit:numEdit("reworkPct","Rework %")});
+        editField(padL-4, colTop-8, colW, 34, n[field]!=null?String(n[field]):"", v=>{ n[field]=v===""?undefined:(isNaN(+v)?n[field]:+v); }, `${isQ?"Wait":"Touch"} time (${unit()})`); }
+      drawRow(padL,0,"of turnaround",rowPct(pct),pct!=null?"var(--ink)":"var(--muted)",{calc:`${isQ?"Wait":"Touch"} time here as a share of the whole flow's turnaround.`});
+      if(isQ) drawRow(padL,1,"Basis",time==null?"—":(approx?"≈ estimate":"measured"),null,{calc:approx?"Estimated from queue size ÷ the next step's pace (Little's Law).":"Taken straight from the wait time you set."});
+      else drawRow(padL,1,"Rework",mt.rework!=null?fmt(mt.rework)+"%":"—",null, measured?{calc:"Averaged from imported data — edit at the source"}:{edit:numEdit("reworkPct","Rework %")});
 
       // bottleneck flag — only the single biggest bottleneck
       if(r.flag && r.flag.node.id===n.id){
@@ -6027,6 +6041,10 @@ function renderInspector(){
     body+=section("advanced","Advanced",`${excludeRow(n)}${advanced(n,true)}`);
   } else if(n.type==="wait"){
     body+=section("info","Info",field("Owner","owner",n.owner||"","text"));
+    body+=section("value",T.classTitle,
+      `<div class="field"><label>Details</label>
+        <textarea data-bind="valueNote" placeholder="What's piling up here">${esc(n.valueNote||"")}</textarea>
+      </div>`);
     body+=section("metrics","Metrics",
       `${cathead("capacity")}
        ${field(ML("wip"),"wip",n.wip==null?"":n.wip,"number","Items sitting here right now")}
