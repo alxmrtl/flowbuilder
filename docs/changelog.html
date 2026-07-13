@@ -195,6 +195,10 @@ const TAGS = {
 };
 
 const HISTORY = [
+  { date: "2026-07-13", tag: "Org Platform", commit: "7d17e09",
+    title: "Fixed the \"Someone else saved this map\" pop-up appearing when no one else was there",
+    body: "When a workspace folder is synced by something like OneDrive, Dropbox or backup software, those tools quietly re-touch your files in the background even when nothing inside them has changed. Flow Builder was reading that as \"someone else edited this\" and interrupting nearly every save with the reload/keep-both/overwrite choice — with no one else actually editing. It now double-checks the file's real contents before asking: if what's on disk is the same as what you last saved, it just saves and stays out of your way. The pop-up still appears for a genuine outside change, so you're never at risk of silently clobbering a real edit from a teammate." },
+
   { date: "2026-07-13", tag: "Org Platform", commit: "e3ba58f",
     title: "Build your own dashboard — pick the widgets you want",
     body: "Alongside the four ready-made dashboards there's now a \"Custom\" option: start a dashboard and assemble it yourself from the same set of panels — bottlenecks, capacity vs. demand, queue waits, notes, team and area scorecards, coverage and confidence, and the rest. Click \"Edit layout\" on a custom dashboard to add panels from the catalog (each with a plain-language description), reorder them with up/down arrows, or remove them, all right on the board. Each panel can optionally be focused on a single area, team or owner, so you can put \"Claims bottlenecks\" next to \"Finance bottlenecks\" on one screen. The ready-made dashboards work exactly as before; to tweak one, use \"Customize a copy\" and you get your own editable version without changing the shared original. Everything reads the same summarized numbers as before — no dashboard ever opens your individual flow files." },
