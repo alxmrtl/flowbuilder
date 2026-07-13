@@ -1954,6 +1954,13 @@ function fsAdapter(dir){
   };
 }
 
+/* Two flow files are "the same map on disk" when their JSON is byte-equal after
+   normalizing whitespace/key formatting — used to tell a real external edit apart from
+   mtime churn (OneDrive/AV/sync rewriting a file with identical content). */
+function sameFlowJson(a,b){ if(a==null||b==null) return a===b;
+  try{ return JSON.stringify(JSON.parse(a))===JSON.stringify(JSON.parse(b)); }
+  catch(_){ return a===b; } }
+
 /* ---- connect / resume / disconnect ---- */
 async function wsConnect(dir){
   const adapter=fsAdapter(dir);
@@ -2175,13 +2182,22 @@ function wsSaveCurrent(){
       try{ rev=await ws.adapter.write(open.path,text,open.rev); }
       catch(e){
         if(e.code!=="REV_MISMATCH") throw e;
-        /* changed on disk since we read it (sync client, teammate) — the D6 three-way choice.
-           Queued saves behind this one re-serialize on saveQ, so only one dialog shows. */
-        const choice=await wsConflictChoice(open);
-        if(choice==="mine"){ rev=await ws.adapter.write(open.path,text); }
-        else if(choice==="theirs"){ await wsConflictReloadTheirs(open); return; }
-        else if(choice==="copy"){ await wsConflictSaveCopy(open,model); return; }
-        else { toast("Not saved — the file changed on disk. Your edits stay here until you choose."); return; }
+        /* The file's mtime moved since we read it. But mtime moves without a real edit
+           (OneDrive/Dropbox/AV rewrite it with identical bytes), so check the content
+           before crying conflict: if what's on disk equals what we last saved, this is
+           pure mtime churn — adopt the fresh rev and save silently, no dialog. */
+        const cur=await ws.adapter.read(open.path);
+        if(sameFlowJson(cur.text, ws._lastSavedText)){
+          rev=await ws.adapter.write(open.path,text);
+        } else {
+          /* genuinely changed on disk (sync client, teammate) — the D6 three-way choice.
+             Queued saves behind this one re-serialize on saveQ, so only one dialog shows. */
+          const choice=await wsConflictChoice(open);
+          if(choice==="mine"){ rev=await ws.adapter.write(open.path,text); }
+          else if(choice==="theirs"){ await wsConflictReloadTheirs(open); return; }
+          else if(choice==="copy"){ await wsConflictSaveCopy(open,model); return; }
+          else { toast("Not saved — the file changed on disk. Your edits stay here until you choose."); return; }
+        }
       }
       open.rev=rev; ws._lastSavedText=text; ws._lastSavedPath=open.path;
       const digest=buildDigest(model);
