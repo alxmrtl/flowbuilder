@@ -425,6 +425,26 @@
   .dw-hide:hover{color:var(--nva)}
   .dw-b{padding:8px 14px 12px;display:flex;flex-direction:column;gap:2px}
   .dw-b>.btn.ghost{align-self:flex-start;margin-top:6px}
+  /* custom dashboard: arrange-in-place layout mode */
+  .dash-hint{color:var(--muted);font-size:12.5px;margin:2px 0 12px}
+  .dw-focus{margin-left:6px;font-weight:600;text-transform:none;letter-spacing:0}
+  .dw-edit{display:flex;align-items:center;gap:6px;padding:7px 14px;border-bottom:1px solid var(--line);
+    background:var(--panel2);flex-wrap:wrap}
+  .dwe{background:var(--panel);border:1px solid var(--line);color:var(--ink);border-radius:7px;
+    padding:3px 8px;font-size:12px;cursor:pointer}
+  .dwe:hover:not(:disabled){border-color:var(--accent)}
+  .dwe:disabled{opacity:.35;cursor:default}
+  .dwe.rm{color:var(--nva);border-color:transparent}
+  .dwe.rm:hover{border-color:var(--nva)}
+  .dwe-f{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--faint);text-transform:uppercase;letter-spacing:.04em}
+  .dwe-f select{background:var(--panel);border:1px solid var(--line);color:var(--ink);border-radius:7px;
+    padding:2px 4px;font-size:12px;font-family:inherit;text-transform:none;letter-spacing:0}
+  .dw-add{border-style:dashed}
+  .aw-list{gap:6px}
+  .aw{display:flex;flex-direction:column;align-items:flex-start;gap:1px;text-align:left;background:var(--panel2);
+    border:1px solid var(--line);color:var(--ink);border-radius:9px;padding:8px 11px;cursor:pointer}
+  .aw b{font-size:12.5px} .aw small{color:var(--faint);font-size:11px}
+  .aw:hover{border-color:var(--accent)}
   .dw-empty{color:var(--faint);font-size:12.5px;padding:10px 0}
   .dw-note{color:var(--faint);font-size:12px;margin:6px 0 2px}
   .dwr{display:flex;align-items:center;gap:9px;padding:6px 4px;border-radius:8px;font-size:13px;min-height:24px}
@@ -1605,6 +1625,7 @@ const state = {
   crumbs: [],             // drill-in breadcrumb trail [{kind:"ws"|"local", id, name}] — transient, cleared on goHome
   _linkNav: null,         // trail handed to the next openFlow/openWsMap by a link drill-in; null = normal open (clears crumbs)
   dashOpen: null,         // dashboard id currently open on the home screen (phase 4); null = the map grid
+  dashEdit: null,         // dashboard id whose layout is being arranged (custom dashboards, phase 5) — transient
 };
 
 /* ---------- helpers ---------- */
@@ -3601,12 +3622,21 @@ const DASH_TEMPLATES={
   "portfolio@1":{name:"Portfolio", who:"a VP / exec", asks:"Consistent measures across areas — and is the estate governed?",
     widgets:["areaScorecards","coverageMeter","reviewMeter","confidenceBar","integrityQueue"]}
 };
+/* "custom@1" = a dashboard that carries its OWN widget list ({id,k,scope?} instances in
+   doc.widgets) instead of looking one up — same catalog, same JSON home, assembled by hand */
+const DASH_CUSTOM={name:"Custom", custom:true, who:"anyone", asks:"You pick the widgets and the order", widgets:[]};
 function dashTemplate(tid){
   if(DASH_TEMPLATES[tid]) return DASH_TEMPLATES[tid];
   const base=String(tid||"").split("@")[0];   // version-tolerant: a newer file still resolves to its family
+  if(base==="custom") return DASH_CUSTOM;
   const k=Object.keys(DASH_TEMPLATES).find(x=>x.split("@")[0]===base);
   return k?DASH_TEMPLATES[k]:DASH_TEMPLATES["ops-health@1"];
 }
+const isCustomDash=doc=>!!doc&&String(doc.template||"").split("@")[0]==="custom";
+const dashK=()=>"w"+Math.random().toString(36).slice(2,8);   // stable per-instance key: prefs + reorder survive duplicates
+const dashInstances=doc=>isCustomDash(doc)
+  ? (doc.widgets||[]).filter(w=>w&&DASH_WIDGETS[w.id])       // unknown ids from newer builds are skipped, not fatal
+  : dashTemplate(doc.template).widgets.map(id=>({id}));
 async function wsLoadDashboards(){
   const ws=state.ws; if(!ws) return;
   const out={};
@@ -3682,7 +3712,7 @@ const pctBar=(pct,cls)=>`<span class="mini-track"><i class="${cls||""}" style="w
 const dwMapRow=(ctx,mid,right)=>{ const d=ctx.digs[mid]||{}, x=d.metrics||{};
   return `<div class="dwr" data-mid="${esc(mid)}"><span class="dwr-t">${esc(d.title||"Untitled")}</span>${right}</div>`; };
 const DASH_WIDGETS={
-  myMaps:{label:()=>"Maps naming me", render(ctx){
+  myMaps:{label:()=>"Maps naming me", blurb:"Every map in scope that names you, with a quick health signal.", render(ctx){
     if(!ctx.me) return `<div class="dw-empty">Set your name (top right of this dashboard) to find the maps that mention you.</div>`;
     if(!ctx.ids.length) return `<div class="dw-empty">No maps in this scope name “${esc(ctx.me)}” yet.</div>`;
     return ctx.ids.map(mid=>{ const d=ctx.digs[mid], x=d.metrics||{}, m=d.meta||{};
@@ -3691,7 +3721,7 @@ const DASH_WIDGETS={
       return dwMapRow(ctx,mid,`<span class="fc-chip status-${esc(m.status||"draft")}">${esc(m.status||"draft")}</span>
         <span class="dwr-v"><i class="hdot ${dot}"></i>${x.flowEff!=null?Math.round(x.flowEff*100)+"% "+esc(ML("eff").toLowerCase()):"no data yet"}</span>`); }).join("");
   }},
-  mySteps:{label:ctx=>"My steps — expected "+ML("touch").toLowerCase(), render(ctx){
+  mySteps:{label:ctx=>"My steps — expected "+ML("touch").toLowerCase(), blurb:"The steps assigned to you and the time each is expected to take.", render(ctx){
     if(!ctx.me) return `<div class="dw-empty">Set your name to see the steps you're on the hook for.</div>`;
     const rows=[];
     ctx.ids.forEach(mid=>{ const d=ctx.digs[mid];
@@ -3702,7 +3732,7 @@ const DASH_WIDGETS={
       <span class="dwr-sub">${esc(r.map)}</span>
       <span class="dwr-v">${r.touch!=null?fmt(r.touch)+" "+esc(r.u):"—"}</span></div>`).join("");
   }},
-  notesFeed:{label:()=>"Improvement backlog — wastes, frustrations, ideas", render(ctx){
+  notesFeed:{label:()=>"Improvement backlog — wastes, frustrations, ideas", blurb:"The latest waste, frustration and idea notes logged on these maps.", render(ctx){
     const t={frustration:0,waste:0,idea:0,note:0};
     ctx.ids.forEach(mid=>{ const nc=(ctx.digs[mid]||{}).noteCounts||{};
       t.frustration+=nc.frustration||0; t.waste+=nc.waste||0; t.idea+=nc.idea||0; t.note+=nc.note||0; });
@@ -3718,7 +3748,7 @@ const DASH_WIDGETS={
       <span class="nf-chip nt-${esc(f.type)}">${esc(NOTE_TYPES[f.type]?NOTE_TYPES[f.type].label:"Note")}</span>
       <span class="dwr-t nf-text">${esc(f.text)}</span><span class="dwr-sub">${esc(f.map)}</span></div>`).join("");
   }},
-  bottleneckBoard:{label:()=>ML("bottleneck")+" board", render(ctx){
+  bottleneckBoard:{label:()=>ML("bottleneck")+" board", blurb:"Every flagged bottleneck across the scope, worst first.", render(ctx){
     const rows=ctx.ids.map(mid=>({mid, d:ctx.digs[mid], x:(ctx.digs[mid]||{}).metrics||{}}))
       .filter(r=>r.x.bottleneck)
       .sort((a,b)=>{ const s=r=>r.x.demandPerDay!=null&&r.x.capacityPerDay!=null?r.x.demandPerDay-r.x.capacityPerDay:-1e9;
@@ -3730,7 +3760,7 @@ const DASH_WIDGETS={
         <span class="dwr-t">${esc(r.x.bottleneck.step)}</span><span class="dwr-sub">${esc(r.d.title||"")}</span>
         <span class="dwr-v">${short!=null&&short>0?`short ${fmt(short)}/day`:""}</span></div>`; }).join("");
   }},
-  capVsDemand:{label:()=>ML("demand")+" vs "+ML("flowCap").toLowerCase(), render(ctx){
+  capVsDemand:{label:()=>ML("demand")+" vs "+ML("flowCap").toLowerCase(), blurb:"Work coming in vs what each process can handle per day.", render(ctx){
     const rows=ctx.ids.map(mid=>({mid, d:ctx.digs[mid], x:(ctx.digs[mid]||{}).metrics||{}}))
       .filter(r=>r.x.demandPerDay!=null||r.x.capacityPerDay!=null);
     if(!rows.length) return `<div class="dw-empty">No demand / capacity numbers on these maps yet.</div>`;
@@ -3744,7 +3774,7 @@ const DASH_WIDGETS={
         </span>
         <span class="dwr-v">${hot?`⚠ short ${fmt(dm-cp)}/day`:dm!=null&&cp!=null?"✓ keeping up":""}</span></div>`; }).join("");
   }},
-  queueWaits:{label:()=>ML("wait")+" — longest first", render(ctx){
+  queueWaits:{label:()=>ML("wait")+" — longest first", blurb:"Where work sits waiting the longest.", render(ctx){
     const rows=ctx.ids.map(mid=>{ const d=ctx.digs[mid], x=(d||{}).metrics||{};
         return {mid, d, wh:aggWaitHrs(x.waitTime, x.timeUnit||"hrs")}; })
       .filter(r=>r.wh!=null).sort((a,b)=>b.wh-a.wh).slice(0,8);
@@ -3753,7 +3783,7 @@ const DASH_WIDGETS={
     return rows.map(r=>`<div class="dwr" data-mid="${esc(r.mid)}"><span class="dwr-t">${esc(r.d.title||"")}</span>
       ${pctBar(r.wh/max*100,"wt")}<span class="dwr-v">${fmtHrs(r.wh)}</span></div>`).join("");
   }},
-  teamRows:{label:()=>"Teams side by side", render(ctx){
+  teamRows:{label:()=>"Teams side by side", blurb:"One row per team — turnaround, efficiency, right-first-time.", render(ctx){
     const rows=ctx.agg.rollup.filter(r=>r.level==="team");
     if(!rows.length) return `<div class="dw-empty">No team metadata on these maps yet — set Team in each map's Details.</div>`;
     const header=`<div class="tr-row head"><span>Team</span><span>Maps</span><span>FTE</span>
@@ -3767,7 +3797,7 @@ const DASH_WIDGETS={
       <span class="tr-act" title="waste · frustration · idea notes logged">${r.notesWaste+r.notesFrustration+r.notesIdea?`${r.notesWaste}W · ${r.notesFrustration}F · ${r.notesIdea}I`:"—"}</span>
     </div>`).join("");
   }},
-  areaScorecards:{label:()=>"Area scorecards", render(ctx){
+  areaScorecards:{label:()=>"Area scorecards", blurb:"A headline scorecard for each area.", render(ctx){
     const rows=ctx.agg.rollup.filter(r=>r.level==="area");
     if(!rows.length) return `<div class="dw-empty">No area metadata on these maps yet — set Area in each map's Details.</div>`;
     return `<div class="sc-grid">`+rows.map(r=>{
@@ -3784,7 +3814,7 @@ const DASH_WIDGETS={
       ${r.topBottlenecks?`<div class="sc-bn">🚧 ${esc(r.topBottlenecks)}</div>`:""}
     </div>`;}).join("")+`</div>`;
   }},
-  coverageMeter:{label:()=>"Coverage — who has maps at all", render(ctx){
+  coverageMeter:{label:()=>"Coverage — who has maps at all", blurb:"How much of the org has maps, and which areas are missing.", render(ctx){
     const org=ctx.agg.rollup.find(r=>r.level==="org")||{maps:0};
     const areas=ctx.agg.rollup.filter(r=>r.level==="area");
     const af=schemaFields().find(f=>f.id==="area");
@@ -3796,7 +3826,7 @@ const DASH_WIDGETS={
       <div class="gov-meter ${org.maps&&org.mapsWithMeasured<org.maps?"warn":""}"><div class="gm-v">${org.mapsWithMeasured||0} <small>of ${org.maps}</small></div><div class="gm-k">maps with measured data</div></div>
     </div>${missing.length?`<div class="dw-note">No maps yet for: ${missing.map(esc).join(", ")}</div>`:""}`;
   }},
-  reviewMeter:{label:()=>"Review status", render(ctx){
+  reviewMeter:{label:()=>"Review status", blurb:"Overdue reviews, unreviewed imports and unowned maps.", render(ctx){
     const org=ctx.agg.rollup.find(r=>r.level==="org")||{maps:0};
     return `<div class="gov-meters">
       <div class="gov-meter ${org.reviewOverdue?"warn":""}"><div class="gm-v">${org.reviewOverdue||0}</div><div class="gm-k">reviews overdue</div></div>
@@ -3804,7 +3834,7 @@ const DASH_WIDGETS={
       <div class="gov-meter ${org.unowned?"warn":""}"><div class="gm-v">${org.unowned||0}</div><div class="gm-k">maps unowned</div></div>
     </div>`;
   }},
-  confidenceBar:{label:()=>"Data confidence — measured vs modelled", render(ctx){
+  confidenceBar:{label:()=>"Data confidence — measured vs modelled", blurb:"How much of the data is measured rather than estimated.", render(ctx){
     const org=ctx.agg.rollup.find(r=>r.level==="org")||{};
     const t=(org.confMeasured||0)+(org.confModelled||0);
     if(!t) return `<div class="dw-empty">No step data yet — confidence appears once maps carry numbers.</div>`;
@@ -3815,7 +3845,7 @@ const DASH_WIDGETS={
       ${areas.map(a=>{ const at=a.confMeasured+a.confModelled;
         return `<div class="dwr"><span class="dwr-t">${esc(a.area)}</span>${pctBar(a.confMeasured/at*100,"cb")}<span class="dwr-v">${a.measuredPct}%</span></div>`; }).join("")}`;
   }},
-  integrityQueue:{label:()=>"Governance queue", render(ctx){
+  integrityQueue:{label:()=>"Governance queue", blurb:"Everything that needs curation, from the governance checks.", render(ctx){
     const sub={}; ctx.ids.forEach(i=>sub[i]=ctx.digs[i]);
     const q=govQueue(sub).slice(0,12);
     if(!q.length) return `<div class="dw-empty">Nothing needs curation in this scope. 🎉</div>`;
@@ -3832,16 +3862,68 @@ function openDashboard(id){ state.dashOpen=id; if(state.mode!=="home") goHome();
 function renderDashboard(id){
   const doc=dashGet(id); if(!doc) return false;
   const tpl=dashTemplate(doc.template), digs=allDigests(), me=userName();
+  const custom=isCustomDash(doc), inst=dashInstances(doc);
+  const editing=custom && (state.dashEdit===id || !inst.length);   // an empty custom board opens straight into arranging
+  if(editing) state.dashEdit=id;   // make it sticky so adding the first widget doesn't drop out of arrange mode
   let ids=dashScopeIds(doc,digs);
   if(tpl.me && me) ids=ids.filter(mid=>(((digs[mid]||{}).text||{}).people||[]).some(p=>sameName(p,me)));
-  ids.sort((a,b)=>String((digs[a]||{}).title||"").localeCompare(String((digs[b]||{}).title||"")));
+  const byTitle=(a,b)=>String((digs[a]||{}).title||"").localeCompare(String((digs[b]||{}).title||""));
+  ids.sort(byTitle);
   const sub={}; ids.forEach(i=>sub[i]=digs[i]);
   const agg=buildAggregates(sub);   // in-memory fold over digests — the VP view never opens a flow file
   const ctx={id, doc, tpl, ids, digs, agg, me};
+  const wKey=w=>w.k||w.id;
+  /* a widget's "focus" narrows the dashboard scope one facet further (custom boards) — still digests-only */
+  const widgetCtx=w=>{
+    if(!custom) return ctx;
+    let wids=ids;
+    if(w.scope&&Object.keys(w.scope).length){
+      wids=dashScopeIds({scope:Object.assign({},doc.scope,w.scope)},digs); wids.sort(byTitle); }
+    if(w.id==="myMaps"&&me) wids=wids.filter(mid=>(((digs[mid]||{}).text||{}).people||[]).some(p=>sameName(p,me)));
+    if(wids===ids) return ctx;
+    const wsub={}; wids.forEach(i=>wsub[i]=digs[i]);
+    return Object.assign({},ctx,{ids:wids, agg:buildAggregates(wsub)});
+  };
   const scopeChips=Object.entries(doc.scope||{}).filter(([k,v])=>v!=null&&v!=="")
     .map(([k,v])=>`<span class="fc-chip">${esc(k)}: ${esc(Array.isArray(v)?v.join(", "):v)}</span>`).join("")
     +((doc.pins||[]).length?`<span class="fc-chip">📌 ${doc.pins.length} pinned</span>`:"");
-  const hiddenW=tpl.widgets.filter(w=>dashWidgetHidden(doc,id,w));
+  const hiddenW=inst.filter(w=>dashWidgetHidden(doc,id,wKey(w)));
+  const needMe=tpl.me || (custom && inst.some(w=>w.id==="myMaps"||w.id==="mySteps"));
+  const facetVals=k=>{ const s=new Set(); Object.values(digs).forEach(d=>{ const v=((d&&d.meta)||{})[k]; if(v&&String(v).trim()) s.add(String(v).trim()); }); return [...s].sort(); };
+  const focusOpts=w=>{ const cur=w.scope?Object.entries(w.scope)[0]:null;
+    return `<option value="">— same as the dashboard —</option>`+[["area","Area"],["team","Team"],["owner","Owner"]].map(([k,lab])=>{
+      const vs=facetVals(k); if(!vs.length) return "";
+      return `<optgroup label="${lab}">${vs.map(v=>`<option value="${esc(k+"::"+v)}"${cur&&cur[0]===k&&cur[1]===v?" selected":""}>${esc(v)}</option>`).join("")}</optgroup>`; }).join(""); };
+  const focusChip=w=>w.scope&&Object.keys(w.scope).length
+    ?` <span class="fc-chip dw-focus">${esc(Object.values(w.scope).join(" · "))}</span>`:"";
+  const widgetsHTML = custom
+    ? inst.map((w,i)=>{ if(!editing&&dashWidgetHidden(doc,id,wKey(w))) return "";
+        const wctx=widgetCtx(w);
+        return `
+        <div class="dw dw-${w.id}" data-w="${w.id}">
+          <div class="dw-h"><span>${esc(DASH_WIDGETS[w.id].label(wctx))}${focusChip(w)}</span>
+            ${editing?"":`<button class="dw-hide" title="Hide this widget (just for you)" data-w="${esc(wKey(w))}">✕</button>`}</div>
+          ${editing?`<div class="dw-edit">
+            <button class="dwe" data-act="up" data-i="${i}" title="Move up"${i?"":" disabled"}>↑</button>
+            <button class="dwe" data-act="down" data-i="${i}" title="Move down"${i<inst.length-1?"":" disabled"}>↓</button>
+            <label class="dwe-f">Focus on <select data-fi="${i}">${focusOpts(w)}</select></label>
+            <span class="spacer"></span>
+            <button class="dwe rm" data-act="rm" data-i="${i}">✕ Remove</button>
+          </div>`:""}
+          <div class="dw-b">${DASH_WIDGETS[w.id].render(wctx)}</div>
+        </div>`; }).join("")
+      +(editing?`
+        <div class="dw dw-add">
+          <div class="dw-h"><span>Add a widget</span></div>
+          <div class="dw-b aw-list">${Object.keys(DASH_WIDGETS).map(wid=>`
+            <button class="aw" data-add="${wid}"><b>${esc(DASH_WIDGETS[wid].label(ctx))}</b><small>${esc(DASH_WIDGETS[wid].blurb||"")}</small></button>`).join("")}</div>
+        </div>`:"")
+    : tpl.widgets.filter(w=>!dashWidgetHidden(doc,id,w)).map(w=>`
+        <div class="dw dw-${w}" data-w="${w}">
+          <div class="dw-h"><span>${esc(DASH_WIDGETS[w].label(ctx))}</span>
+            <button class="dw-hide" title="Hide this widget (just for you)" data-w="${w}">✕</button></div>
+          <div class="dw-b">${DASH_WIDGETS[w].render(ctx)}</div>
+        </div>`).join("");
   const grid=$("#homeGrid"); grid.classList.add("dashview");
   $("#wsFilter").style.display="none"; $("#wsBanner").style.display="none";
   grid.innerHTML=`
@@ -3850,21 +3932,47 @@ function renderDashboard(id){
       <div class="dash-titles"><h2>${esc(doc.title||tpl.name)}</h2>
         <div class="dash-sub">${esc(tpl.name)} · ${ids.length} map${ids.length===1?"":"s"} in scope ${scopeChips}</div></div>
       <div class="spacer"></div>
-      ${tpl.me?`<label class="dash-me">Your name <input id="dashMe" value="${esc(me)}" placeholder="as it appears on steps"/></label>`:""}
+      ${needMe?`<label class="dash-me">Your name <input id="dashMe" value="${esc(me)}" placeholder="as it appears on steps"/></label>`:""}
+      ${custom?`<button class="btn${editing?" primary":""}" id="dashLayout">${editing?"Done arranging":"Edit layout"}</button>`
+        :`<button class="btn" id="dashCopy" title="Make your own editable copy — the original stays as it is">Customize a copy</button>`}
       <button class="btn" id="dashEdit">Edit dashboard</button>
     </div>
+    ${custom&&!inst.length?`<div class="dash-hint">This dashboard is empty — pick the widgets you want from the catalog below.</div>`:""}
     <div class="dash-grid">
-      ${tpl.widgets.filter(w=>!dashWidgetHidden(doc,id,w)).map(w=>`
-        <div class="dw dw-${w}" data-w="${w}">
-          <div class="dw-h"><span>${esc(DASH_WIDGETS[w].label(ctx))}</span>
-            <button class="dw-hide" title="Hide this widget (just for you)" data-w="${w}">✕</button></div>
-          <div class="dw-b">${DASH_WIDGETS[w].render(ctx)}</div>
-        </div>`).join("")}
+      ${widgetsHTML}
     </div>
-    ${hiddenW.length?`<div class="dash-hiddenrow">${hiddenW.length} widget${hiddenW.length===1?"":"s"} hidden by you —
+    ${hiddenW.length&&!editing?`<div class="dash-hiddenrow">${hiddenW.length} widget${hiddenW.length===1?"":"s"} hidden by you —
       <button class="btn ghost" id="dashReset">reset to the shared standard</button></div>`:""}`;
-  grid.querySelector("#dashBack").onclick=()=>{ state.dashOpen=null; renderHome(); };
+  grid.querySelector("#dashBack").onclick=()=>{ state.dashOpen=null; state.dashEdit=null; renderHome(); };
   grid.querySelector("#dashEdit").onclick=()=>showDashModal(id);
+  const lay=grid.querySelector("#dashLayout");
+  if(lay) lay.onclick=()=>{ state.dashEdit=editing?null:id; renderHome(); };
+  const cp=grid.querySelector("#dashCopy");
+  if(cp) cp.onclick=async()=>{
+    const title=(doc.title||tpl.name)+" — my copy";
+    const nid=dashFreshId(title);
+    await dashSave(nid,{template:"custom@1", title, scope:clone(doc.scope||{}), pins:(doc.pins||[]).slice(),
+      overrides:{}, sharing:"file", widgets:tpl.widgets.map(wid=>({id:wid,k:dashK()}))});
+    state.dashOpen=nid; state.dashEdit=nid; renderHome();
+    toast("Your copy is ready to arrange — the original dashboard is untouched");
+  };
+  /* arranging: every change lands in the dashboard doc itself, then re-renders.
+     inst entries ARE doc.widgets entries, so indexOf keeps edits honest even if a
+     newer build added widget ids this one doesn't know (they're rendered-skipped). */
+  const mutate=async fn=>{ fn(); await dashSave(id,doc); renderHome(); };
+  grid.querySelectorAll(".aw").forEach(b=>b.onclick=()=>mutate(()=>{
+    (doc.widgets=doc.widgets||[]).push({id:b.dataset.add, k:dashK()}); }));
+  grid.querySelectorAll(".dwe").forEach(b=>b.onclick=()=>{
+    const i=+b.dataset.i, act=b.dataset.act, w=inst[i]; if(!w) return;
+    mutate(()=>{ const di=doc.widgets.indexOf(w);
+      if(act==="rm"){ doc.widgets.splice(di,1); return; }
+      const w2=inst[act==="up"?i-1:i+1]; if(!w2) return;
+      const dj=doc.widgets.indexOf(w2);
+      doc.widgets[di]=w2; doc.widgets[dj]=w; }); });
+  grid.querySelectorAll("[data-fi]").forEach(s=>s.onchange=()=>{
+    const w=inst[+s.dataset.fi]; if(!w) return;
+    mutate(()=>{ if(!s.value) delete w.scope;
+      else{ const p=s.value.split("::"); w.scope={[p[0]]:p.slice(1).join("::")}; } }); });
   const meIn=grid.querySelector("#dashMe");
   if(meIn){ meIn.onchange=()=>{ state.library.userName=meIn.value.trim(); saveLibrary(); renderHome(); }; }
   grid.querySelectorAll(".dw-hide").forEach(b=>b.onclick=ev=>{ ev.stopPropagation();
@@ -3906,7 +4014,10 @@ function showDashModal(editId){
       ${opts.map(v=>`<option${v===cur?" selected":""}>${esc(v)}</option>`).join("")}</select></div>`; };
   const tplCards=Object.entries(DASH_TEMPLATES).map(([tid,t])=>`
     <button class="tpl-card${tid===doc.template?" on":""}" data-tpl="${tid}">
-      <b>${esc(t.name)}</b><span>for ${esc(t.who)}</span><small>“${esc(t.asks)}”</small></button>`).join("");
+      <b>${esc(t.name)}</b><span>for ${esc(t.who)}</span><small>“${esc(t.asks)}”</small></button>`).join("")
+    +`
+    <button class="tpl-card${isCustomDash(doc)?" on":""}" data-tpl="custom@1">
+      <b>Custom</b><span>a dashboard you assemble</span><small>“Pick any widgets from the catalog and arrange them right on the board.”</small></button>`;
   const mapOpts=Object.keys(digs).sort((a,b)=>String(digs[a].title||"").localeCompare(String(digs[b].title||"")))
     .map(mid=>`<option value="${esc(mid)}"${(doc.pins||[]).includes(mid)?" selected":""}>${esc(digs[mid].title||"Untitled")}</option>`).join("");
   $("#dashModalTitle").textContent=editId?"Edit dashboard":"New dashboard";
@@ -3923,7 +4034,10 @@ function showDashModal(editId){
     <div class="modal-actions">${editId?`<button class="btn del" id="dashDel">Delete</button>`:""}
       <span class="spacer"></span><button class="btn primary" id="dashSaveBtn">${editId?"Save":"Create"}</button></div>`;
   const body=$("#dashBody");
-  body.querySelectorAll(".tpl-card").forEach(b=>b.onclick=()=>{ doc.template=b.dataset.tpl;
+  body.querySelectorAll(".tpl-card").forEach(b=>b.onclick=()=>{
+    const prev=doc.template; doc.template=b.dataset.tpl;
+    if(isCustomDash(doc)&&!(doc.widgets||[]).length&&!isCustomDash({template:prev}))
+      doc.widgets=dashTemplate(prev).widgets.map(wid=>({id:wid,k:dashK()}));   // start from the template that was showing
     body.querySelectorAll(".tpl-card").forEach(x=>x.classList.toggle("on",x===b)); });
   body.querySelector("#dashSaveBtn").onclick=async()=>{
     const scope={};
@@ -3934,10 +4048,12 @@ function showDashModal(editId){
     const tpl=dashTemplate(doc.template);
     const title=body.querySelector("#dashTitle").value.trim()||tpl.name;
     const out={template:doc.template, title, scope, pins, overrides:doc.overrides||{}, sharing:"file"};
+    if(isCustomDash(out)) out.widgets=(doc.widgets||[]).map(w=>Object.assign({k:dashK()},w));   // keep the assembled layout (and give strays a key)
     const id=editId||dashFreshId(title);
     await dashSave(id,out);
     $("#dashOverlay").classList.remove("show"); _dashCtx=null;
-    state.dashOpen=id; renderHome();
+    state.dashOpen=id; if(isCustomDash(out)&&!editId) state.dashEdit=id;
+    renderHome();
     toast(editId?"Dashboard saved":"Dashboard created — it stays current as maps are tagged");
   };
   const del=body.querySelector("#dashDel");
