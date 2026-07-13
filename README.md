@@ -268,7 +268,6 @@ Everything else is derived, and the derivations link the pillars:
 - **Bottleneck** = a genuinely hot step (load ≥ 80 %) if there is one, else the longest queue —
   one flag, consistent across the map, the stats and exports.
 
-## Roadmap (not yet built)
+## Build log & roadmap
 
-- Split % on branches, side-by-side segment comparison, turnaround trend / cumulative flow diagram.
-- SharePoint auto-refresh via Power Automate, optional Power BI companion.
+See [`docs/changelog.html`](docs/changelog.html) for a plain-language, feature-by-feature history of what's shipped, plus the current list of ideas not yet built.

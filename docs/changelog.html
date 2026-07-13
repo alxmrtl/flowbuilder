@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Flow Builder — Build Log</title>
+<style>
+  :root {
+    --bg: #f7f7f5;
+    --panel: #ffffff;
+    --ink: #1c1c1c;
+    --ink-soft: #5a5a55;
+    --border: #e4e2dc;
+    --accent: #2f6f4f;
+    --pill-fg: #1c1c1c;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #17181a;
+      --panel: #1f2023;
+      --ink: #eceae5;
+      --ink-soft: #a8a59d;
+      --border: #34363a;
+      --accent: #7cc4a0;
+      --pill-fg: #17181a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 40px 20px 80px;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, "SF Pro Text", "Segoe UI Variable", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.5;
+  }
+  .wrap { max-width: 760px; margin: 0 auto; }
+  header h1 { font-size: 26px; margin: 0 0 6px; letter-spacing: -0.01em; }
+  header p.sub { color: var(--ink-soft); margin: 0 0 4px; font-size: 15px; }
+  header p.updated { color: var(--ink-soft); margin: 0 0 32px; font-size: 13px; }
+
+  section { margin-bottom: 40px; }
+  h2 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--ink-soft);
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 8px;
+    margin: 0 0 16px;
+  }
+
+  .roadmap-note {
+    font-size: 13px;
+    color: var(--ink-soft);
+    margin: 0 0 14px;
+  }
+  .roadmap-list { list-style: none; margin: 0; padding: 0; }
+  .roadmap-list li {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin-bottom: 8px;
+    font-size: 14px;
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: baseline;
+  }
+  .roadmap-list .r-note {
+    color: var(--ink-soft);
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  details {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 10px;
+    padding: 0;
+    overflow: hidden;
+  }
+  summary {
+    cursor: pointer;
+    list-style: none;
+    padding: 13px 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 14.5px;
+    font-weight: 500;
+  }
+  summary::-webkit-details-marker { display: none; }
+  summary::before {
+    content: "▸";
+    color: var(--ink-soft);
+    font-size: 11px;
+    transition: transform 0.15s ease;
+    flex-shrink: 0;
+  }
+  details[open] summary::before { transform: rotate(90deg); }
+  summary .s-date {
+    color: var(--ink-soft);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+  }
+  summary .s-title { flex: 1; }
+  .body {
+    padding: 0 16px 16px 34px;
+    font-size: 14px;
+    color: var(--ink-soft);
+  }
+  .body a { color: var(--accent); }
+
+  .pill {
+    font-size: 10.5px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 20px;
+    color: var(--pill-fg);
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .commit {
+    font-size: 11px;
+    color: var(--ink-soft);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+
+  footer.hint {
+    font-size: 12px;
+    color: var(--ink-soft);
+    border-top: 1px solid var(--border);
+    padding-top: 16px;
+    margin-top: 30px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Flow Builder — Build Log</h1>
+    <p class="sub">What's been built, in plain language — newest first. Open a card for details.</p>
+    <p class="updated" id="updated"></p>
+  </header>
+
+  <section>
+    <h2>Ideas / up next</h2>
+    <p class="roadmap-note">Add a line to the <code>ROADMAP</code> array below to propose something. When it gets built, it moves out of this list and into the history below as a new dated entry.</p>
+    <ul class="roadmap-list" id="roadmap"></ul>
+  </section>
+
+  <section>
+    <h2>History</h2>
+    <div id="history"></div>
+  </section>
+
+  <footer class="hint">
+    This file is hand-edited (no build step) — open it in a text editor and edit the <code>ROADMAP</code> / <code>HISTORY</code> arrays below directly. See <code>CLAUDE.md</code> at the repo root for the update convention.
+  </footer>
+</div>
+
+<script>
+// ============================================================================
+// ROADMAP — ideas not yet built. Add an entry to propose one; either of us
+// (you or Claude) can add to this list. When something here gets built,
+// Claude removes it from ROADMAP and adds a new dated card to the top of
+// HISTORY describing it in plain language.
+// ============================================================================
+const ROADMAP = [
+  { text: "Drag-and-drop dashboard builder (custom widget layouts)", added: "2026-07-11", note: "Phase 5" },
+  { text: "Split stats by person/role, not just case-type segments", added: "2026-07-11", note: "Phase 5" },
+  { text: "Swimlane view — lanes by owner/role", added: "2026-07-11", note: "Phase 5" },
+  { text: "Live connector to Microsoft Graph/OneDrive + SharePoint auto-refresh", added: "2026-06-29", note: "Phase 5 / from README" },
+  { text: "Bulk onboarding — import many flows at once", added: "2026-07-11", note: "Phase 5" },
+  { text: "Convert Docs: direct AI hookup (skip the copy/paste-into-chat step)", added: "2026-07-11", note: "docs/convert-docs-api-plan.md" },
+  { text: "Branch split % / segment comparison trend charts", added: "2026-06-29", note: "may already be partly covered by Segments" },
+];
+
+// ============================================================================
+// HISTORY — shipped features, newest first. One card per meaningful commit,
+// written in plain language (no internal jargon like "digest"/"rollup"/
+// "engineModel" — describe what you can actually see or do). `tag` is one of
+// the categories in TAGS below; `commit` is the git short hash for reference.
+// ============================================================================
+const TAGS = {
+  "Foundations":            "#c9c2b2",
+  "Canvas & Editing":       "#a9c4dd",
+  "Views & Lenses":         "#c9a9dd",
+  "Metrics & Analysis":     "#9fd0b8",
+  "Notes & Collaboration":  "#e3b98a",
+  "Import & Export":        "#e0a9a9",
+  "Org Platform":           "#7cc4a0",
+};
+
+const HISTORY = [
+  { date: "2026-07-12", tag: "Org Platform", commit: "4077a00",
+    title: "Dashboards and a governance panel across your whole flow library",
+    body: "Four ready-made dashboards (My processes, Ops health, Compare teams, Portfolio) summarize your entire connected library — bottlenecks, capacity vs. demand, queue waits, notes — without needing to open every flow. A new governance panel on the home screen surfaces flows that are stale, unowned, or unreviewed. Saving now also warns you if someone else edited the same flow first, and shows a soft \"Sam opened this 5 min ago\" indicator." },
+
+  { date: "2026-07-12", tag: "Org Platform", commit: "a059284",
+    title: "Link flows together — a step in one flow can point to a whole other flow",
+    body: "A step can now link to a separate flow (e.g. a high-level map's \"Underwriting\" step links to the detailed Underwriting flow). It shows live rolled-up numbers from that linked flow right on the card. You can also promote a Group into its own separate linked flow, or pull a linked flow back in as a Group — both are exact reverses of each other. Flows also now show \"used by N other flows\" automatically." },
+
+  { date: "2026-07-12", tag: "Import & Export", commit: "35b676f",
+    title: "Import a Visio (.vsdx) diagram directly, no AI needed",
+    body: "Drag in a Visio file and it's automatically converted into a Flow Builder flow — shapes become steps, connectors become arrows, swimlanes become Groups, and any data fields on the shapes (like \"Cycle time\") are mapped onto the right metrics. Anything it doesn't recognize gets kept as a note instead of silently dropped, and you get an honest preview before accepting the import." },
+
+  { date: "2026-07-11", tag: "Org Platform", commit: "4158404",
+    title: "Split a flow's stats by case type (segments) and compare them",
+    body: "You can now define \"segments\" for a flow (e.g. Simple vs. Complex cases, with a % share of each) and see the numbers recalculated for just that segment, or blended across all of them. A chip switcher at the top lets you flip between \"All cases\" and each segment, dimming the steps a segment skips." },
+
+  { date: "2026-07-11", tag: "Org Platform", commit: "2bd3850",
+    title: "Connect a folder of flows and browse/search them all like a mini app",
+    body: "Point Flow Builder at a folder on your computer and it becomes a browsable \"Workspace\": a home screen shows every flow as a card (owner, team, status), with filters and a fast full-text search across all of them — without opening each file. A details panel lets you edit each flow's metadata, and there's a shared glossary/vocabulary you can customize per workspace." },
+
+  { date: "2026-07-11", tag: "Org Platform", commit: "1ac6597",
+    title: "Every flow now has a permanent ID and basic metadata (owner, team, status, tags)",
+    body: "This is the first step toward managing many flows as one connected library rather than separate files. Each flow gets a permanent identity that survives renames/duplication, plus an editable metadata block (owner, area, team, status, review date, tags). A small summary file is generated for each flow in the background (used by the workspace features above) without needing to open the full flow." },
+
+  { date: "2026-07-11", tag: "Import & Export", commit: "5a5cd32",
+    title: "Added 'Convert docs' — turn a transcript, spreadsheet, or Visio file into a flow using any AI; and a much smarter auto-arrange",
+    body: "Header → Data → Convert docs opens a helper: pick how literal you want the AI to be (Strict/Balanced/Enriched), copy a ready-made prompt into any AI chat along with your source material, paste the AI's answer back, and it becomes a real flow. Separately, the Tidy auto-arrange button was rewritten from scratch to handle large, complex flows cleanly — steps line up in proper left-to-right order even with loops and rework, columns space out just enough for arrow labels, and running it twice gives the same result." },
+
+  { date: "2026-07-10", tag: "Canvas & Editing", commit: "222d619",
+    title: "Clearer corner icons and instant hover labels on pickers",
+    body: "The group and note \"+\" buttons on cards now use proper icons instead of a plain plus sign, with tooltips. The note-type and waste-subtype picker menus now show a label instantly on hover instead of a delayed native tooltip." },
+
+  { date: "2026-07-10", tag: "Canvas & Editing", commit: "f7f2d75",
+    title: "One unified 'Cursor' tool replaces Move + Select, with smarter arrows and notes",
+    body: "Move and Select merged into a single Cursor tool: drag on empty canvas to box-select, hold Space or use the middle mouse button to pan, shift-click to build a multi-selection. Dragging a connection point always creates a new arrow (no more accidental re-routing). Dropping a step onto an existing arrow (hold briefly) now splices it into the flow automatically, with everything downstream sliding over to make room. New keyboard shortcuts: V/C/G/N for Cursor/Connect/Group/Note." },
+
+  { date: "2026-07-08", tag: "Notes & Collaboration", commit: "feafe8d",
+    title: "Notes now stack neatly below each step, and you can reorder them by dragging",
+    body: "Attached notes moved from fanning out to the side to stacking directly underneath their step, full width — and you can drag one up or down to reorder it, or drag it out entirely to detach it. The Group create/expand/collapse buttons also moved to the top-left corner of cards to avoid clashing with the new note badge (which took the bottom-left)." },
+
+  { date: "2026-07-08", tag: "Notes & Collaboration", commit: "b2c43be",
+    title: "Notes now show up in text exports and the Insights dashboard",
+    body: "The plain-text export lists each step's attached notes and tallies how many observations were logged overall; the Insights dashboard now also surfaces a card when a step has multiple frustration/waste notes piling up, pointing you to the most-flagged step." },
+
+  { date: "2026-07-08", tag: "Notes & Collaboration", commit: "f81c114",
+    title: "Added a Notes on/off toggle",
+    body: "A new Notes button in the toolbar hides all badges, pop-outs and floating notes for a clean, distraction-free export — and notes still work (view-only) for anyone you share the flow with." },
+
+  { date: "2026-07-08", tag: "Notes & Collaboration", commit: "ecc5331",
+    title: "Click a step's note badge to see all its notes pop out beside it",
+    body: "Clicking the badge fans out mini note cards next to the step, which you can edit, retype, delete, or drag off to detach — all in place, no separate panel needed." },
+
+  { date: "2026-07-08", tag: "Notes & Collaboration", commit: "afc07ac",
+    title: "Notes can attach to a specific step, with a badge showing how many",
+    body: "Drop a note directly onto a step to attach it there; the step then wears a small badge in the corner showing the note count and the most common type. Deleting a step keeps its notes (they just detach) instead of losing them." },
+
+  { date: "2026-07-08", tag: "Notes & Collaboration", commit: "d3144a8",
+    title: "Dropping a note now asks what kind it is",
+    body: "When you add a new note, you're prompted to pick a type — Note, Frustration, Waste, or Idea — and if you pick Waste, an optional sub-type (like waiting, rework, overproduction, etc.). The old \"Comment\" tool is now called \"Note.\"" },
+
+  { date: "2026-07-08", tag: "Notes & Collaboration", commit: "49b4675",
+    title: "Note cards now render cleanly in every export",
+    body: "Fixed notes so their text renders reliably in image/PDF exports (previously used a method that didn't always show up correctly when exported)." },
+
+  { date: "2026-07-08", tag: "Notes & Collaboration", commit: "079cb0b",
+    title: "Groundwork for a new Notes system",
+    body: "Behind-the-scenes setup for a new way to leave notes on the flow — with types (general note, frustration, waste, idea) and icons — laying the foundation for the features above." },
+
+  { date: "2026-07-08", tag: "Metrics & Analysis", commit: "cfd15f6",
+    title: "Start and End now show a key number too",
+    body: "The Start point shows an editable \"requests coming in per day\" number, and the End point shows how many actually get completed per day (limited by the flow's real capacity)." },
+
+  { date: "2026-07-08", tag: "Metrics & Analysis", commit: "b1b5855",
+    title: "Fixed the bottleneck flag so it doesn't flag everything",
+    body: "Previously, the single busiest step always got flagged as \"the bottleneck\" even if it was barely loaded. Now it only flags when a step crosses a load threshold (80% by default, adjustable) or when there's a genuine queue backing up — and the threshold is adjustable right from the \"Biggest bottleneck\" analysis card." },
+
+  { date: "2026-07-08", tag: "Views & Lenses", commit: "fd8ff46",
+    title: "Metrics view cards are now editable right on the canvas; renamed 'Pace' to 'Output'",
+    body: "Like the Value lens (below), the Metrics lens now lets you edit a card's title, owner, and raw inputs (people, hours/day, hands-on time, rework, queue size/wait) directly by clicking on the card. Calculated numbers are shown a bit quieter (lighter, with a hover tooltip) so it's obvious which fields you can edit versus which are computed. \"Pace\" was renamed \"Output\" for clarity." },
+
+  { date: "2026-07-07", tag: "Import & Export", commit: "a218e97",
+    title: "Added 'Export as text for AI analysis'",
+    body: "A new Share option copies (or downloads) the entire flow as a plain-text description with a ready-made prompt, so you can paste it into an AI chat and ask it to analyze the process." },
+
+  { date: "2026-07-07", tag: "Views & Lenses", commit: "915ffc2",
+    title: "Value view cards are now editable right on the canvas",
+    body: "In the Value lens, you can now click directly on a card to edit its title, details, or click its value chip to cycle through Value-Add / Necessary-but-no-value / No-value ratings — no need to open the side panel. Groups also show a combined value rating derived from the steps inside them." },
+
+  { date: "2026-07-06", tag: "Canvas & Editing", commit: "237d030",
+    title: "Reorganized the top toolbar; flow title is now editable in place",
+    body: "Removed the old Segment/Period dropdowns and replaced that spot with a click-to-rename flow title. Views (Value/Metrics/Gaps) and a new Layout section (appearance, case flow, Tidy, Simulate, zoom) moved into the lower palette bar. The header now has clearly labeled Data (import/export spreadsheet) and Share (JPG/PNG/PDF/HTML/design file) button groups." },
+
+  { date: "2026-07-06", tag: "Canvas & Editing", commit: "31aedb2",
+    title: "Reorganized the toolbar into Move / Select / Connect / Group / Comment",
+    body: "Move is now the default tool (renamed from Pan); Select and Connect are always available; Group and Comment are one-shot tools that place something then return you to your previous tool. Connect mode shows every connection point at once so you can wire steps together or re-attach an arrow by dragging its end." },
+
+  { date: "2026-07-06", tag: "Canvas & Editing", commit: "110dd7a",
+    title: "Polished Groups: better fit, clearer icons, easier to add steps to",
+    body: "A collapsed Group now looks like a normal step card (just with a striped border marking it as a group) instead of overlapping its own header. New dedicated icons for group/expand/collapse. Tidy now leaves enough room for arrow labels so they don't overlap boxes. Dragging a group's box over a step now adds that step to the group automatically." },
+
+  { date: "2026-07-06", tag: "Canvas & Editing", commit: "d9c0a9c",
+    title: "Merged 'Groups' and 'sub-steps' into one simpler concept",
+    body: "These had become two overlapping ways to bundle steps together, so they're now unified: a Group can collapse into a single summary card or expand into a box showing its real member steps — collapsing never changes your underlying data, so it's always safe and reversible. A new \"+\" button on any step wraps it into a Group. Existing sub-steps were automatically converted into this new Group format." },
+
+  { date: "2026-07-05", tag: "Canvas & Editing", commit: "bbe3bfe",
+    title: "Groups got a proper title-and-stats header card",
+    body: "A group's name and its combined stats now sit together in one clear header box anchored to the top-left of the group frame, and the Tidy auto-arrange tool now fits groups neatly around their contents with consistent spacing." },
+
+  { date: "2026-07-05", tag: "Metrics & Analysis", commit: "3b2b987",
+    title: "Added an 'Exclude from flow stats' checkbox",
+    body: "You can now tick a step or queue to keep it visible on the map (dimmed) but leave its numbers out of every total, chart, and the Insights dashboard — useful for marking a step as not-yet-relevant without deleting it." },
+
+  { date: "2026-07-05", tag: "Views & Lenses", commit: "ec07154",
+    title: "Redesigned arrow flow-volume as thick ribbons (like a Sankey diagram)",
+    body: "Instead of thin arrows with separate labels, each connection is now drawn as a ribbon whose thickness shows how busy it is — thick means busy, and an overloaded connection tints red. The name/split/volume label rides directly on the ribbon in one consistent style everywhere." },
+
+  { date: "2026-07-04", tag: "Metrics & Analysis", commit: "82f2abb",
+    title: "Cleaner arrow labels, automatic decision markers, and a 'Simulate a day' animation",
+    body: "Arrow labels (name, split %, and volume) were redesigned into one tidy pill that sits right on the curve instead of overlapping cards. Steps with more than one way out now get a small \"fork\" badge automatically. Also added a \"Simulate a day/week\" button that animates little dots flowing through the map at realistic speed, piling up at bottlenecks and glowing amber when work loops back for rework — a fun, honest way to watch the flow work." },
+
+  { date: "2026-07-04", tag: "Metrics & Analysis", commit: "4fa2cfa",
+    title: "Show real case volume on every arrow, and a new 'Gaps' view for capacity shortfalls",
+    body: "Every arrow now labels how much work flows along it per day; if a branch's split isn't set, it's shown in amber as an assumed 50/50 with a one-click fix. A new Gaps view compares what each step needs to handle its workload against what it can actually do, flagging shortfalls in plain terms (\"short by 2/day\", \"at the limit\")." },
+
+  { date: "2026-07-04", tag: "Metrics & Analysis", commit: "74329fe",
+    title: "Added a Flow Insights dashboard that surfaces the biggest problems automatically",
+    body: "A new \"✦ Insights\" button opens a full-page dashboard that ranks the flow's issues for you — the biggest opportunity first (e.g. \"you're falling behind by X cases/day\"), then the bottleneck, the biggest wait, how much rework is costing, overloaded people, and low-value work — each with a plain-language explanation and a \"Show me →\" link that jumps straight to the relevant step." },
+
+  { date: "2026-07-04", tag: "Metrics & Analysis", commit: "cefb5c5",
+    title: "Gave Speed/Capacity/Quality a consistent look everywhere, and added a 'Metrics explained' guide",
+    body: "Each of the three categories (Speed/Capacity/Quality) now has its own icon and color used consistently across cards, panels and exports, so you can tell at a glance which category a number belongs to. Added a new \"ⓘ Metrics explained\" popup that walks through exactly how each number is calculated, in plain terms, with an interactive diagram." },
+
+  { date: "2026-07-04", tag: "Metrics & Analysis", commit: "a41f933",
+    title: "New Speed / Capacity / Quality analysis, and a cleaner Value section",
+    body: "The flow's stats are now organized into three clear categories — Speed (how fast), Capacity (how much can be handled), Quality (how often it's right first time) — each with its own headline numbers, like load-by-person and rework lost. A step's editing panel now takes People, Hours/day and Rework % as inputs and calculates capacity from them automatically. Also added a single \"bottleneck\" flag that highlights the flow's current constraint everywhere it appears." },
+
+  { date: "2026-07-03", tag: "Foundations", commit: "7e9aa17",
+    title: "Added Undo/Redo, keyboard shortcuts, and an overall visual polish pass",
+    body: "Cmd/Ctrl+Z undoes your last change (and Shift+Cmd+Z redoes it), with up to 50 steps of history. Added shortcuts for duplicate, delete, and zoom. Also refreshed the fonts, added subtle hover animations, and gave a brand-new flow a helpful empty-canvas hint." },
+
+  { date: "2026-07-03", tag: "Views & Lenses", commit: "bf26675",
+    title: "Added four different card 'views' (lenses) you can switch between",
+    body: "A new View switcher changes what every card on the canvas shows, without moving anything: Metrics (the default numbers view), People & tools (who does the work and with what tool), Value (how much customer value each step adds, color-coded), and Compact (small icon+name tiles for a quick walkthrough or a clean export)." },
+
+  { date: "2026-07-03", tag: "Views & Lenses", commit: "a388aa7",
+    title: "The time-breakdown ribbon became interactive",
+    body: "The colored ribbon that shows how a flow's total time is split across steps now responds to your mouse: hover a band to see a tooltip and highlight the matching card (and vice versa); click a band to jump the view to that step. You can also switch the ribbon's coloring between step type and severity." },
+
+  { date: "2026-07-03", tag: "Canvas & Editing", commit: "af3e2e5",
+    title: "Steps can now expand to show smaller sub-steps inside them",
+    body: "A step like \"Underwrite deal\" can be broken down into child steps (e.g. Review docs, Rate risk, Refer) that live inside it. Collapsed, it shows a \"▸ N sub-steps\" chip; expanded, it widens into a dashed frame. The parent step's numbers automatically roll up from its children (total hands-on time adds up, pace/capacity reflects the slowest child). This was later merged into Groups — see the 2026-07-06 entry below." },
+
+  { date: "2026-07-03", tag: "Canvas & Editing", commit: "49cd354",
+    title: "Boxes snap to a grid and line up with each other automatically",
+    body: "Dragging a box now snaps it to a grid and flashes alignment guides when it lines up with a neighboring box's edge or center. The \"auto-arrange\" button was renamed Tidy and got smarter: it no longer destroys custom arrow routing, and it animates into place instead of jumping." },
+
+  { date: "2026-06-30", tag: "Canvas & Editing", commit: "68a1e6c",
+    title: "Added dedicated Select and Pan tools, with room to scroll around the canvas",
+    body: "New toolbar buttons: a Select tool for box-selecting and moving steps, and a Pan tool for dragging the whole canvas around. The canvas also got empty space padded on every side so you can scroll/pan freely, even for small flows." },
+
+  { date: "2026-06-30", tag: "Canvas & Editing", commit: "da72bf8",
+    title: "Groups can be renamed, recolored, and now show combined stats",
+    body: "Clicking a group opens an editing panel to rename it, change its color, choose which steps belong to it, and toggle its stats display. Each group also shows combined turnaround/hands-on/wait numbers for everything inside it." },
+
+  { date: "2026-06-30", tag: "Canvas & Editing", commit: "d4adf68",
+    title: "Added Group boxes and sticky-note comments",
+    body: "Two new drawing tools: draw a box around several steps to visually group them (the group can be moved as one unit), and drop a sticky note anywhere on the canvas to jot down a comment. Both are saved with the flow and show up in exports." },
+
+  { date: "2026-06-30", tag: "Canvas & Editing", commit: "9992d0f",
+    title: "Show which software tool runs a step, and delete steps by hovering",
+    body: "A step can now show a small logo (UiPath, Copilot, Excel, etc.) indicating what tool handles that step, picked from a dropdown in the editing panel. Hovering over any box also reveals a small red \"X\" to delete it instantly." },
+
+  { date: "2026-06-30", tag: "Foundations", commit: "45cf82b",
+    title: "Retired the old prototype file",
+    body: "The original single-file prototype was moved into an archive folder; the current app is now the one and only active version." },
+
+  { date: "2026-06-30", tag: "Metrics & Analysis", commit: "5ffad92",
+    title: "Clearer queue icon, simpler editing panels",
+    body: "Queues now show a two-bulb hourglass icon so they read as \"waiting\" at a glance. The editing panel for queues was trimmed down to just three fields (Owner, Queue size, Average wait time), and the panel for steps was reorganized and simplified too." },
+
+  { date: "2026-06-30", tag: "Canvas & Editing", commit: "0ea45d6",
+    title: "Added an auto-arrange (\"Tidy\") button, and select-multiple-boxes-at-once",
+    body: "One click now lays out the whole flow left-to-right, grouped into logical columns/rows. You can also drag a box around empty canvas to select several steps at once and move them together." },
+
+  { date: "2026-06-30", tag: "Metrics & Analysis", commit: "860c6bf",
+    title: "Redesigned the numbers on every card",
+    body: "Cards got a cleaner two-column layout: one side shows a metric specific to the card type (how many people/cases in a queue, or a step's throughput and how close it is to capacity), the other shows timing (wait time or hands-on time). Cards got wider to fit this — this is the metrics layout still used today, with later refinements." },
+
+  { date: "2026-06-29", tag: "Foundations", commit: "3188e0d",
+    title: "Made waiting queues look different from work steps",
+    body: "Queues (places where work waits) and steps (places where work happens) now look clearly different on the card: queues show a 10-dot meter for how full they are relative to the busiest queue, and both show the owner's name as a small label above the title." },
+
+  { date: "2026-06-29", tag: "Foundations", commit: "b844e41",
+    title: "Simplified how cards show who owns a step",
+    body: "Removed a \"work-in-progress limit\" feature that added complexity without much value, and changed how a step's owner is displayed — instead of a hard-to-read icon, it now just shows the person's name (or the bot's name) as plain text. Also removed a redundant hourglass icon." },
+
+  { date: "2026-06-29", tag: "Foundations", commit: "0b32ce4",
+    title: "Swapped the demo flow for a generic example",
+    body: "The flow that loads for a brand-new user changed from a specific sample to a generic, step-by-step guide flow, so newcomers see a clean example that explains the tool rather than a real business process." },
+
+  { date: "2026-06-29", tag: "Foundations", commit: "9b0f8ae",
+    title: "Clean-up: removed sample/test files from the public repo",
+    body: "Removed leftover mockups and test flows so the codebase only contains the real app. No visible feature change — housekeeping." },
+
+  { date: "2026-06-29", tag: "Foundations", commit: "5f723b1",
+    title: "First version of Flow Builder goes live",
+    body: "The tool launches: draw a process as boxes and arrows, add basic timing info, and see simple stats about the flow. This is the starting point everything else on this page builds on." },
+];
+
+// ---- render --------------------------------------------------------------
+function fmtDate(iso) {
+  const d = new Date(iso + "T00:00:00");
+  return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+}
+
+document.getElementById("updated").textContent =
+  "Last updated " + fmtDate(HISTORY[0].date) + " · " + HISTORY.length + " releases logged";
+
+const roadmapEl = document.getElementById("roadmap");
+if (ROADMAP.length === 0) {
+  roadmapEl.innerHTML = '<li style="color:var(--ink-soft)">Nothing on the list right now.</li>';
+} else {
+  ROADMAP.forEach(item => {
+    const li = document.createElement("li");
+    li.innerHTML = `<span>${item.text}</span><span class="r-note">${item.note || ""}</span>`;
+    roadmapEl.appendChild(li);
+  });
+}
+
+const historyEl = document.getElementById("history");
+HISTORY.forEach((entry, i) => {
+  const det = document.createElement("details");
+  if (i < 5) det.open = true;
+  const color = TAGS[entry.tag] || "#ccc";
+  det.innerHTML = `
+    <summary>
+      <span class="s-date">${fmtDate(entry.date)}</span>
+      <span class="pill" style="background:${color}">${entry.tag}</span>
+      <span class="s-title">${entry.title}</span>
+    </summary>
+    <div class="body">
+      <p>${entry.body}</p>
+      <p class="commit">commit ${entry.commit}</p>
+    </div>
+  `;
+  historyEl.appendChild(det);
+});
+</script>
+</body>
+</html>
