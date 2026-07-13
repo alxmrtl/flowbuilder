@@ -173,7 +173,6 @@
 const ROADMAP = [
   { text: "Drag-and-drop dashboard builder (custom widget layouts)", added: "2026-07-11", note: "Phase 5" },
   { text: "Split stats by person/role, not just case-type segments", added: "2026-07-11", note: "Phase 5" },
-  { text: "Swimlane view — lanes by owner/role", added: "2026-07-11", note: "Phase 5" },
   { text: "Live connector to Microsoft Graph/OneDrive + SharePoint auto-refresh", added: "2026-06-29", note: "Phase 5 / from README" },
   { text: "Bulk onboarding — import many flows at once", added: "2026-07-11", note: "Phase 5" },
   { text: "Convert Docs: direct AI hookup (skip the copy/paste-into-chat step)", added: "2026-07-11", note: "docs/convert-docs-api-plan.md" },
@@ -197,6 +196,10 @@ const TAGS = {
 };
 
 const HISTORY = [
+  { date: "2026-07-13", tag: "Canvas & Editing", commit: "5d2cc8f",
+    title: "Swimlanes — arrange the map into one lane per team, like a classic Visio diagram",
+    body: "A new Swimlanes button sits next to Tidy. One click rearranges the whole map into horizontal lanes — one per owner, with whoever acts first on top — so handoffs between teams jump out as the arrows cross lanes. Start, End and queues slot into the right team's lane automatically, and steps with no owner gather in an \"Unassigned\" lane at the bottom so missing data stays visible. While in swimlane view, dragging a step into another lane hands it to that team (with a toast, and undo works). Tidy switches you back to the plain left-to-right grid. Especially handy for imported Visio diagrams, which are usually drawn this way — their lane names already arrive as step owners." },
+
   { date: "2026-07-13", tag: "Views & Lenses", commit: "e3b07fa",
     title: "Value cards redesigned, metrics columns swapped, and a cleaner home screen",
     body: "In the Value lens, you can now type a step's details right away without picking a rating first — the rating (or an unrated warning) now sits at the bottom of the card instead. Queues get their own editable details box and a bottom \"waiting — no value added\" status. Cards in every view now show the owner or bot's name above the title. In the Metrics lens, touch/wait time moved to the left side of the card and output/queue size moved to the right. Opening a flow that's never had a view chosen now starts on Value instead of Metrics. On the home screen, Convert Docs and Add Visio moved out of the in-flow toolbar into a new \"New Flow\" section next to Blank Flow and Import, so starting a new flow is all in one place." },
