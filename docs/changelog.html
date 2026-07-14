@@ -195,6 +195,10 @@ const TAGS = {
 };
 
 const HISTORY = [
+  { date: "2026-07-14", tag: "Foundations", commit: "fc67a95",
+    title: "A refreshed look that follows your system light/dark setting, with springier motion",
+    body: "The app's chrome — the home screen, the top bar and the menus — now follows your operating system's light or dark preference automatically when you're not inside a themed flow, so it feels at home on a bright or a dark desktop. Buttons and cards move with a little more life: a gentle spring on hover and a soft press when you click. If you've turned on \"reduce motion\" in your system settings, all of that quietly steps aside and stays still. None of the meaning-carrying colours changed — value ratings, step types and the speed/capacity/quality pillars look exactly as before, and a flow you've given its own Appearance still shows in that theme while it's open." },
+
   { date: "2026-07-13", tag: "Org Platform", commit: "7d17e09",
     title: "Fixed the \"Someone else saved this map\" pop-up appearing when no one else was there",
     body: "When a workspace folder is synced by something like OneDrive, Dropbox or backup software, those tools quietly re-touch your files in the background even when nothing inside them has changed. Flow Builder was reading that as \"someone else edited this\" and interrupting nearly every save with the reload/keep-both/overwrite choice — with no one else actually editing. It now double-checks the file's real contents before asking: if what's on disk is the same as what you last saved, it just saves and stays out of your way. The pop-up still appears for a genuine outside change, so you're never at risk of silently clobbering a real edit from a teammate." },
