@@ -14,6 +14,11 @@
     --ink:#e8eef5; --muted:#9fb0c3; --faint:#6b7d92;
     --va:#34c38f; --nnva:#5a8dee; --nva:#f06548; --wait:#7b8aa0; --vmixed:#9b8cff;
     --warn:#f7b84b; --accent:#4cc9f0; --shadow:0 6px 24px rgba(0,0,0,.35);
+    /* chrome accent glow (derived from --accent so it follows the identity + any flow theme) */
+    --accent-soft:color-mix(in srgb, var(--accent) 15%, transparent);
+    --ring:0 0 0 3px var(--accent-soft);
+    /* motion tokens (chrome only — never the SVG canvas). Personality: springy. */
+    --ease:cubic-bezier(.34,1.56,.64,1); --dur:.2s; --dur-lg:.4s; --lift:-4px; --press:.96;
     --font:-apple-system,'SF Pro Text','Segoe UI Variable Text','Segoe UI',Roboto,system-ui,Arial,sans-serif;
     /* node type hues (queue / human / bot) — tuned for the dark canvas */
     --t-queue:#6e8bff; --t-human:#2dd4bf; --t-bot:#b08cff;
@@ -23,13 +28,31 @@
     /* start / end terminal pills */
     --term:#2a3543; --term-line:#cdd9e6;
   }
+  /* System-follow chrome: when NO flow theme is applied (Home / neutral default outside an
+     open flow), light-mode users get a cohesive light chrome. A flow's own Appearance preset
+     still wins while that flow is open — applyTheme() sets these same vars inline on :root,
+     which overrides this media rule; resetThemeRoot() clears them so Home falls back here.
+     Only neutral chrome tokens change — the frozen data hues (va/nnva/nva/wait/warn,
+     t-human/t-bot/t-queue, cat-*) are never recoloured. */
+  @media (prefers-color-scheme: light){
+    :root{
+      --bg:#f4f6fa; --panel:#ffffff; --panel2:#eef2f7; --line:#d3dbe6;
+      --ink:#1b2735; --muted:#566678; --faint:#8493a6;
+      --accent:#0f9dcc; --shadow:0 6px 24px rgba(23,38,58,.12);
+      --term:#dbe3ef; --term-line:#8a9bb3;
+    }
+  }
   *{box-sizing:border-box}
   html,body{height:100%}
   body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);font-size:14px;overflow:hidden;
     display:flex;flex-direction:column;height:100%}
   header{flex:0 0 auto}
-  button{font-family:inherit;cursor:pointer;transition:border-color .15s ease,background .15s ease,color .15s ease,transform .1s ease}
-  button:active{transform:translateY(1px)}
+  button{font-family:inherit;cursor:pointer;transition:border-color .15s ease,background .15s ease,color .15s ease,transform var(--dur) var(--ease)}
+  button:active{transform:scale(var(--press))}
+  /* chrome motion respects the OS reduced-motion setting (collapse to static) */
+  @media (prefers-reduced-motion:reduce){
+    *,*::before,*::after{transition-duration:.01ms!important;animation-duration:.01ms!important;animation-iteration-count:1!important}
+  }
   .row{display:flex;align-items:center;gap:8px}
 
   /* ---- Top bar ---- */
