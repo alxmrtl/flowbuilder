@@ -379,6 +379,22 @@
   .fc-actions button.open:hover{color:#06202a;filter:brightness(1.06)}
   .fc-actions button.del:hover{border-color:var(--nva);color:var(--nva);background:color-mix(in srgb,var(--nva) 12%,transparent)}
   .home-empty{color:var(--faint);padding:40px 28px}
+  /* ---- New-map single button + grouped menu ---- */
+  .menuwrap{position:relative;display:inline-flex}
+  #newMapBtn{display:inline-flex;align-items:center;gap:6px}
+  #newMapBtn .nm-caret{width:12px;height:12px;opacity:.75;margin-left:1px;transition:transform var(--dur) var(--ease)}
+  #newMapBtn[aria-expanded="true"] .nm-caret{transform:rotate(180deg)}
+  .newmenu{position:absolute;left:0;top:calc(100% + 6px);width:266px;background:var(--panel);border:1px solid var(--line);
+    border-radius:12px;box-shadow:var(--shadow);padding:6px;z-index:50;display:none}
+  .newmenu.show{display:block}
+  .newmenu .mh{font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);font-weight:700;padding:8px 10px 4px}
+  .newmenu .mi{display:flex;align-items:center;gap:11px;width:100%;padding:9px 10px;border-radius:8px;cursor:pointer;
+    background:transparent;border:0;color:var(--ink);text-align:left;font:inherit;transition:background var(--dur) var(--ease)}
+  .newmenu .mi:hover{background:var(--panel2)}
+  .newmenu .mi>svg{width:17px;height:17px;stroke:currentColor;fill:none;color:var(--muted);flex:0 0 auto}
+  .newmenu .mi .t{font-size:13px;font-weight:600;display:block}
+  .newmenu .mi .d{font-size:11px;color:var(--faint);margin-top:1px;display:block}
+  .newmenu .sep{height:1px;background:var(--line);margin:5px 4px}
   /* ---- Home grid/table view toggle ---- */
   .home-view{display:inline-flex;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:2px;gap:2px}
   .home-view button{background:transparent;border:0;color:var(--muted);font:inherit;font-size:12px;font-weight:600;
@@ -1103,6 +1119,15 @@
   <symbol id="ic-rows" viewBox="0 0 24 24" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
     <rect x="4" y="5" width="16" height="4.2" rx="1.3"/><rect x="4" y="14.8" width="16" height="4.2" rx="1.3"/>
   </symbol>
+  <symbol id="ic-plus" viewBox="0 0 24 24" fill="none" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 5v14M5 12h14"/>
+  </symbol>
+  <symbol id="ic-chev" viewBox="0 0 24 24" fill="none" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M6 9l6 6 6-6"/>
+  </symbol>
+  <symbol id="ic-visio" viewBox="0 0 24 24" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/><path d="M11 7h4a2 2 0 0 1 2 2v4"/>
+  </symbol>
   <!-- note / waste / frustration types -->
   <symbol id="ic-nt-note" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
     <path d="M5 4h14v10l-6 6H5V4Z"/><path d="M13 20v-6h6"/>
@@ -1287,12 +1312,25 @@
       <button data-homeview="table" title="Table — one row per map, sort and edit inline"><svg class="t-ic"><use href="#ic-rows"/></svg>Table</button>
     </div>
     <div class="spacer"></div>
-    <div class="hdr-group" id="newFlowGroup">
-      <span class="hdr-label">New flow</span>
-      <button class="btn primary" id="newFlow">+ Blank flow</button>
-      <button class="btn" id="importFlow">Import…</button>
-      <button class="btn" id="convertDoc" title="Build a new flow from source material — a transcript, a Visio map, an Excel sheet, a job-aid. Copy the prompt into any AI, paste the result back."><svg class="t-ic"><use href="#ic-doc"/></svg>Convert docs</button>
-      <button class="btn" id="importVisio" title="Convert a Visio drawing (.vsdx) into a flow — read directly in your browser, no AI involved. You'll see a preview of what maps over before anything is created."><svg class="t-ic"><use href="#ic-upload"/></svg>Add Visio</button>
+    <div class="menuwrap" id="newFlowGroup">
+      <button class="btn primary" id="newMapBtn" aria-haspopup="true" aria-expanded="false" title="Start a new map — blank, imported, converted from documents, or from Visio">
+        <svg class="t-ic"><use href="#ic-plus"/></svg>New map<svg class="t-ic nm-caret"><use href="#ic-chev"/></svg></button>
+      <div class="newmenu" id="newMenu" role="menu">
+        <div class="mh">Start fresh</div>
+        <button class="mi" data-fwd="newFlow" role="menuitem"><svg><use href="#ic-plus"/></svg><span><span class="t">Blank map</span><span class="d">An empty canvas</span></span></button>
+        <div class="sep"></div>
+        <div class="mh">Bring something in</div>
+        <button class="mi" data-fwd="importFlow" role="menuitem"><svg><use href="#ic-upload"/></svg><span><span class="t">Import…</span><span class="d">A design file (.json) or Visio (.vsdx)</span></span></button>
+        <button class="mi" data-fwd="convertDoc" role="menuitem"><svg><use href="#ic-doc"/></svg><span><span class="t">Convert documents</span><span class="d">Transcript, sheet or job-aid, via AI</span></span></button>
+        <button class="mi" data-fwd="importVisio" role="menuitem"><svg><use href="#ic-visio"/></svg><span><span class="t">Add Visio drawing</span><span class="d">.vsdx, read in your browser</span></span></button>
+      </div>
+      <!-- original controls kept (hidden) so every existing handler stays wired; the menu forwards to them -->
+      <div id="newFlowLegacy" hidden>
+        <button id="newFlow"></button>
+        <button id="importFlow"></button>
+        <button id="convertDoc"></button>
+        <button id="importVisio"></button>
+      </div>
     </div>
     <button class="btn" id="exportLib">Export library</button>
     <button class="btn" id="wsConnect" style="display:none" title="Connect a shared folder (e.g. a synced SharePoint/OneDrive library) — every flow becomes a file the whole team can browse and search">⛁ Connect folder</button>
@@ -8899,6 +8937,16 @@ $("#exportHtml").onclick=()=>{
 
 /* home controls — every action forks on whether a workspace folder is connected */
 $("#newFlow").onclick=()=>{ state.ws ? wsNewFlow() : newFlow(); };
+/* New-map menu: single button opens a grouped menu that forwards to the existing controls */
+(function(){ const btn=$("#newMapBtn"), menu=$("#newMenu");
+  const close=()=>{ menu.classList.remove("show"); btn.setAttribute("aria-expanded","false"); };
+  const open =()=>{ menu.classList.add("show"); btn.setAttribute("aria-expanded","true"); };
+  btn.onclick=e=>{ e.stopPropagation(); menu.classList.contains("show")?close():open(); };
+  menu.addEventListener("click",e=>{ const mi=e.target.closest("[data-fwd]"); if(!mi) return;
+    const t=document.getElementById(mi.dataset.fwd); close(); if(t) t.click(); });
+  document.addEventListener("click",e=>{ if(!menu.contains(e.target) && !btn.contains(e.target)) close(); });
+  document.addEventListener("keydown",e=>{ if(e.key==="Escape") close(); });
+})();
 $("#exportLib").onclick=()=>download("flow-builder-library.json", JSON.stringify(state.library,null,2),"application/json");
 $("#importFlow").onclick=()=>$("#fileImport").click();
 $("#fileImport").onchange=e=>{ const f=e.target.files[0]; if(!f) return;
