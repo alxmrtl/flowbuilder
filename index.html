@@ -23,15 +23,14 @@
     /* node type hues (queue / human / bot) — tuned for the dark canvas */
     --t-queue:#6e8bff; --t-human:#2dd4bf; --t-bot:#b08cff;
     /* metric-category accents (Speed / Capacity / Quality) — fixed identity, not themed:
-       deliberately absent from THEMES so applyTheme/resetThemeRoot never touch them */
+       deliberately absent from THEMES so the global light/dark palette never touches them */
     --cat-speed:#b08cff; --cat-capacity:#34c38f; --cat-quality:#5a8dee;
     /* start / end terminal pills */
     --term:#2a3543; --term-line:#cdd9e6;
   }
-  /* System-follow chrome: when NO flow theme is applied (Home / neutral default outside an
-     open flow), light-mode users get a cohesive light chrome. A flow's own Appearance preset
-     still wins while that flow is open — applyTheme() sets these same vars inline on :root,
-     which overrides this media rule; resetThemeRoot() clears them so Home falls back here.
+  /* Pre-JS light fallback: mirrors the light palette so first paint isn't dark-on-light before
+     applyChromeTheme() runs. At runtime the header toggle wins by setting these vars inline on
+     :root (which overrides this media rule) for the whole app — Home, Workspace and the builder.
      Only neutral chrome tokens change — the frozen data hues (va/nnva/nva/wait/warn,
      t-human/t-bot/t-queue, cat-*) are never recoloured. */
   @media (prefers-color-scheme: light){
@@ -426,6 +425,11 @@
     font-size:12.5px;padding:3px 5px;text-transform:capitalize}
   .mtable tbody tr:hover .mt-status-sel{border-color:var(--line)}
   .mt-status-sel:focus{border-color:var(--accent);outline:none}
+  .mtable th.mt-open,.mtable td.mt-open{width:1%;white-space:nowrap;padding-right:6px}
+  .mt-openbtn{display:inline-flex;align-items:center;gap:5px;background:var(--accent);color:#06202a;border:1px solid var(--accent);
+    border-radius:7px;padding:5px 12px;font:inherit;font-size:12px;font-weight:600;transition:filter var(--dur) var(--ease)}
+  .mt-openbtn svg{width:13px;height:13px;stroke:currentColor;fill:none;pointer-events:none}
+  .mt-openbtn:hover{filter:brightness(1.06)}
   .mt-actions{text-align:right;white-space:nowrap}
   .mt-actions button{background:transparent;border:1px solid transparent;color:var(--muted);border-radius:7px;width:28px;height:26px;
     display:inline-grid;place-items:center;padding:0;vertical-align:middle;margin-left:2px;
@@ -1129,6 +1133,12 @@
   <symbol id="ic-visio" viewBox="0 0 24 24" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
     <rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/><path d="M11 7h4a2 2 0 0 1 2 2v4"/>
   </symbol>
+  <symbol id="ic-sun" viewBox="0 0 24 24" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6L17 7M7 17l-1.4 1.4"/>
+  </symbol>
+  <symbol id="ic-moon" viewBox="0 0 24 24" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5Z"/>
+  </symbol>
   <!-- note / waste / frustration types -->
   <symbol id="ic-nt-note" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
     <path d="M5 4h14v10l-6 6H5V4Z"/><path d="M13 20v-6h6"/>
@@ -1189,6 +1199,7 @@
     </div>
   </div>
   <button class="btn iconbtn" id="howData" title="How saving &amp; data work">ℹ</button>
+  <button class="btn iconbtn" id="themeModeBtn" title="Toggle light / dark — applies everywhere"><svg class="t-ic"><use href="#ic-moon"/></svg></button>
   <input type="file" id="fileData" accept=".xlsx,.xls,.csv" style="display:none" />
   <input type="file" id="fileVsdx" accept=".vsdx" style="display:none" />
 </header>
@@ -2566,7 +2577,7 @@ function renderMapTable(rows, reveal){
   const grid=$("#homeGrid"); grid.classList.add("tableview"); grid.classList.remove("dashview");
   const sorted=rows.slice().sort((a,b)=>{ const va=mtSortVal(a,homeSort.col), vb=mtSortVal(b,homeSort.col);
     return (va<vb?-1:va>vb?1:0)*homeSort.dir; });
-  const head=MT_COLS.map(c=>`<th data-sort="${c.id}" class="${homeSort.col===c.id?"sorted":""}${c.num?" mt-num":""}">${esc(c.label)}<span class="sort">${homeSort.col===c.id?(homeSort.dir>0?"▲":"▼"):"↕"}</span></th>`).join("")+`<th class="mt-actions"></th>`;
+  const head=`<th class="mt-open"></th>`+MT_COLS.map(c=>`<th data-sort="${c.id}" class="${homeSort.col===c.id?"sorted":""}${c.num?" mt-num":""}">${esc(c.label)}<span class="sort">${homeSort.col===c.id?(homeSort.dir>0?"▲":"▼"):"↕"}</span></th>`).join("")+`<th class="mt-actions"></th>`;
   const body=sorted.map(r=>{
     const m=r.meta, ctx=r.ctx;
     const idAttr=ctx.kind==="ws"?`data-mid="${esc(ctx.id)}"`:`data-id="${esc(ctx.id)}"`;
@@ -2576,10 +2587,11 @@ function renderMapTable(rows, reveal){
     const rv=reviewInfo(m);
     const effHue=r.eff==null?"var(--muted)":r.eff>=0.6?"var(--va)":r.eff>=0.35?"var(--warn)":"var(--nva)";
     const tags=(m.tags||[]).filter(Boolean).join(", ");
-    const acts=ctx.kind==="ws"?["open","dup","del"]:["open","dup","export","del"];
+    const acts=ctx.kind==="ws"?["dup","del"]:["dup","export","del"];   // open lives in its own left-hand column
     const actBtns=acts.map(k=>{ const a=CARD_ACT[k];
       return `<button class="${a.cls||""}" data-act="${k}" title="${a.label}" aria-label="${a.label}"><svg><use href="#${a.ic}"/></svg></button>`; }).join("");
     return `<tr ${idAttr}>
+      <td class="mt-open"><button class="mt-openbtn" data-act="open" title="Open this map" aria-label="Open"><svg><use href="#ic-play"/></svg>Open</button></td>
       <td><span class="mt-edit mt-name" contenteditable="true" data-field="name" data-orig="${esc(r.name)}">${esc(r.name)}</span></td>
       ${tcell("owner",m.owner)}${tcell("area",m.area)}${tcell("team",m.team)}
       ${statusCell}
@@ -4659,9 +4671,10 @@ function renderSegChips(){
 
 function render(){
   updateChrome();
+  applyChromeTheme();                 // universal light/dark — home + builder
   if(state.mode==="home"){ renderHome(); return; }
   if(!state.model) return;
-  applyTheme(); applyTypeColors();
+  applyTypeColors();                  // per-flow node-type colour overrides on top
   document.body.classList.toggle("has-selection",(state.selectedIds||[]).length>0);
   document.querySelectorAll("[data-cardview]").forEach(b=>b.classList.toggle("tool-on",b.dataset.cardview===view()));
   { const ft=$("#flowToggle"); if(ft) ft.classList.toggle("tool-on",(state.model.settings&&state.model.settings.showFlow)!==false); }
@@ -5227,21 +5240,33 @@ const THEMES = {
 };
 const theme      = () => (state.model&&state.model.settings&&state.model.settings.theme) || null;
 const themeVars  = () => (theme()&&theme().vars) || {};
-const currentPreset = () => (theme()&&theme().preset) || "Dark";
-/* effective value for a themed var = custom override → preset default */
+/* ---- one app-wide light/dark, chosen from the header toggle and applied everywhere ---- */
+const THEME_MODE_KEY="flowbuilder.themeMode";
+function systemMode(){ return (window.matchMedia && matchMedia("(prefers-color-scheme:light)").matches) ? "light" : "dark"; }
+function getThemeMode(){
+  try{ const v=localStorage.getItem(THEME_MODE_KEY); if(v==="light"||v==="dark") return v; }catch(e){}
+  const a=document.documentElement.getAttribute("data-theme"); if(a==="light"||a==="dark") return a;   // exported viewer bakes this in
+  return systemMode();
+}
+function setThemeMode(m){ try{ localStorage.setItem(THEME_MODE_KEY, m==="light"?"light":"dark"); }catch(e){} }
+/* the surface palette follows the global mode; presets are gone. Accent stays cyan in both. */
+const currentPreset = () => (getThemeMode()==="light" ? "Light" : "Dark");
+/* effective value for a node-type var = per-flow override → global-mode default */
 function themeVal(k){ const v=themeVars(); if(v[k]!=null) return v[k]; const base=THEMES[currentPreset()]||THEMES.Dark; return base[k]||"#000000"; }
-/* mutate the flow's theme (creating it on first edit) */
+/* mutate the flow's theme (creating it on first edit) — now only holds node-type colour overrides */
 function ensureTheme(){ state.model.settings=state.model.settings||{}; return state.model.settings.theme=state.model.settings.theme||{preset:"Dark",vars:{}}; }
-function setPreset(name){ const t=ensureTheme(); t.preset=name; t.vars={}; }   // a preset is a clean starting point
 function setThemeVar(k,val){ const t=ensureTheme(); (t.vars=t.vars||{})[k]=val; }
 function resetThemeVar(k){ const t=theme(); if(t&&t.vars) delete t.vars[k]; }
-/* push every themed var onto :root — cascades through the whole UI incl. menus & exports */
-function applyTheme(){
-  const base=THEMES[currentPreset()]||THEMES.Dark, v=themeVars(), st=document.documentElement.style;
-  for(const k in base) st.setProperty(k, v[k]!=null?v[k]:base[k]);
+/* push the global light/dark surface palette onto :root — cascades through the whole UI, home + builder,
+   menus and exports. Node-type vars land here as defaults, then applyTypeColors() layers per-flow ones. */
+function applyChromeTheme(){
+  const mode=getThemeMode(), base=THEMES[mode==="light"?"Light":"Dark"], st=document.documentElement.style;
+  for(const k in base) st.setProperty(k, base[k]);
+  st.setProperty("--accent", mode==="light" ? "#0f9dcc" : "#4cc9f0");   // keep the cyan identity in both modes
+  document.documentElement.setAttribute("data-theme", mode);
+  const b=$("#themeModeBtn"); if(b){ const u=b.querySelector("use"); if(u) u.setAttribute("href", mode==="light"?"#ic-sun":"#ic-moon");
+    b.title = mode==="light" ? "Switch to dark" : "Switch to light"; }
 }
-/* drop the per-flow theme from :root (so Home / the gallery shows in the neutral default) */
-function resetThemeRoot(){ const st=document.documentElement.style; Object.keys(THEMES.Dark).forEach(k=>st.removeProperty(k)); }
 /* resolve the effective hex for a node type (honours theme vars, then legacy typeColors) */
 const typeHexFor = kind => themeVal(THEME_TYPE_VAR[kind])
   || ((state.model&&state.model.settings&&state.model.settings.typeColors)||{})[kind] || DEFAULT_TYPE_HEX[kind];
@@ -6581,31 +6606,24 @@ function themeSwatch(label,key,icon){
 }
 function presetPreview(name){ const t=THEMES[name];
   return ["--bg","--panel","--accent","--t-human"].map(k=>`<i style="background:${t[k]}"></i>`).join(""); }
-/* Appearance popover — whole-flow theme (preset + per-colour overrides) */
+/* Appearance popover — per-flow node-type colours only (light/dark for the whole app
+   lives on the header toggle; surface presets were retired). */
 function wireThemeSwatches(root){
-  root.querySelectorAll("[data-preset]").forEach(b=>b.addEventListener("click",()=>{
-    setPreset(b.dataset.preset); applyTheme(); applyTypeColors(); render(); renderThemePop(); }));
   root.querySelectorAll("[data-themevar]").forEach(inp=>{
-    inp.addEventListener("input",()=>{ setThemeVar(inp.dataset.themevar, inp.value); applyTheme(); applyTypeColors(); });
+    inp.addEventListener("input",()=>{ setThemeVar(inp.dataset.themevar, inp.value); applyTypeColors(); });
     inp.addEventListener("change",()=>{ render(); renderThemePop(); }); });
   root.querySelectorAll("[data-themereset]").forEach(b=>b.addEventListener("click",()=>{
-    resetThemeVar(b.dataset.themereset); applyTheme(); applyTypeColors(); render(); renderThemePop(); }));
+    resetThemeVar(b.dataset.themereset); applyTypeColors(); render(); renderThemePop(); }));
 }
 function renderThemePop(){
-  const pop=$("#themePop"); if(!pop) return; const cur=currentPreset();
-  pop.innerHTML=`<div class="themepop-h">Preset</div>
-    <div class="presetrow">
-      ${Object.keys(THEMES).map(name=>`<button class="preset ${cur===name?"on":""}" data-preset="${name}">
-        <span class="pv">${presetPreview(name)}</span>${name}</button>`).join("")}
-    </div>
-    <div class="themepop-h">Surfaces &amp; detail · whole flow</div>
-    <div class="typecolors">${THEME_FIELDS.map(([k,lbl])=>themeSwatch(lbl,k)).join("")}</div>
-    <div class="themepop-h">Node types</div>
+  const pop=$("#themePop"); if(!pop) return;
+  pop.innerHTML=`<div class="themepop-h">Node type colours</div>
     <div class="typecolors">
       ${themeSwatch("Human","--t-human","ic-human")}
       ${themeSwatch("Bot","--t-bot","ic-bot")}
       ${themeSwatch("Queue","--t-queue","ic-queue")}
-    </div>`;
+    </div>
+    <div class="meta-note" style="margin-top:8px">Light or dark for the whole app is set from the sun / moon button in the top-right corner.</div>`;
   wireThemeSwatches(pop);
 }
 function toggleThemePop(show){
@@ -8746,7 +8764,7 @@ function buildSimHud(){
 function setMode(m){ state.mode=m; state.selected=null; cancelLink(true); if(state.tool) setTool(null); render(); }   // m: "home" | "build"
 function goHome(){ if(state.currentId||(state.ws&&state.ws.open)) scheduleSave();
   state.crumbs=[]; state._linkNav=null; renderCrumbs();
-  state.mode="home"; resetThemeRoot(); updateChrome(); renderHome();
+  state.mode="home"; applyChromeTheme(); updateChrome(); renderHome();
   if(state.ws) wsReconcile(); }   // returning to the gallery re-checks the folder in the background
 
 $("#flowsBtn").onclick=goHome;
@@ -8888,6 +8906,8 @@ $("#dashBody").addEventListener("click",e=>{ const b=e.target.closest("[data-foc
 /* Appearance popover */
 function closeMenus(){ toggleThemePop(false); }
 $("#themeBtn").onclick=e=>{ e.stopPropagation(); const open=$("#themePop").classList.contains("show"); closeMenus(); if(!open) toggleThemePop(true); };
+/* universal light/dark toggle (top-right) — applies to Home, Workspace and the builder */
+$("#themeModeBtn").onclick=()=>{ setThemeMode(getThemeMode()==="light"?"dark":"light"); render(); };
 $("#exportJpg").onclick=()=>exportPicture("jpg");
 $("#exportPng").onclick=()=>exportPicture("png");
 $("#exportPdf").onclick=()=>exportPicture("pdf");
