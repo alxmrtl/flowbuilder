@@ -379,6 +379,47 @@
   .fc-actions button.open:hover{color:#06202a;filter:brightness(1.06)}
   .fc-actions button.del:hover{border-color:var(--nva);color:var(--nva);background:color-mix(in srgb,var(--nva) 12%,transparent)}
   .home-empty{color:var(--faint);padding:40px 28px}
+  /* ---- Home grid/table view toggle ---- */
+  .home-view{display:inline-flex;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:2px;gap:2px}
+  .home-view button{background:transparent;border:0;color:var(--muted);font:inherit;font-size:12px;font-weight:600;
+    padding:5px 10px;border-radius:6px;display:inline-flex;align-items:center;gap:5px}
+  .home-view button svg{width:14px;height:14px;stroke:currentColor;fill:none}
+  .home-view button.on{background:var(--panel);color:var(--ink);box-shadow:var(--shadow)}
+  /* ---- Map table (detailed / editable list view) ---- */
+  .home-grid.tableview{display:block;padding:8px 28px 40px;overflow-x:auto}
+  .mtable{width:100%;border-collapse:separate;border-spacing:0;background:var(--panel);border:1px solid var(--line);
+    border-radius:12px;overflow:hidden;box-shadow:var(--shadow);font-size:13px}
+  .mtable th,.mtable td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:middle;white-space:nowrap}
+  .mtable thead th{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);font-weight:700;
+    background:var(--panel2);cursor:pointer;user-select:none}
+  .mtable thead th .sort{opacity:.35;margin-left:5px;font-size:9px}
+  .mtable thead th.sorted{color:var(--ink)} .mtable thead th.sorted .sort{opacity:1;color:var(--accent)}
+  .mtable thead th.mt-num,.mtable td.mt-num{text-align:right}
+  .mtable tbody tr{transition:background var(--dur) var(--ease)}
+  .mtable tbody tr:hover{background:var(--panel2)} .mtable tbody tr:last-child td{border-bottom:0}
+  .mt-edit{border:1px solid transparent;border-radius:6px;padding:3px 7px;margin:-3px -3px;display:inline-block;min-width:46px;
+    cursor:text;transition:border-color var(--dur) var(--ease),background var(--dur) var(--ease)}
+  .mtable tbody tr:hover .mt-edit{border-color:var(--line)}
+  .mt-edit:hover,.mt-edit:focus{border-color:var(--accent);background:var(--bg);outline:none;white-space:normal}
+  .mt-edit.mut{color:var(--faint)}
+  .mt-name{font-weight:600;letter-spacing:-.01em;color:var(--ink)}
+  .mt-mut{color:var(--faint)} .mt-overdue{color:var(--warn)}
+  .mt-eff{font-variant-numeric:tabular-nums;font-weight:700}
+  .mt-status-sel{background:transparent;border:1px solid transparent;border-radius:6px;color:var(--ink);font-family:inherit;
+    font-size:12.5px;padding:3px 5px;text-transform:capitalize}
+  .mtable tbody tr:hover .mt-status-sel{border-color:var(--line)}
+  .mt-status-sel:focus{border-color:var(--accent);outline:none}
+  .mt-actions{text-align:right;white-space:nowrap}
+  .mt-actions button{background:transparent;border:1px solid transparent;color:var(--muted);border-radius:7px;width:28px;height:26px;
+    display:inline-grid;place-items:center;padding:0;vertical-align:middle;margin-left:2px;
+    transition:border-color var(--dur) var(--ease),color var(--dur) var(--ease),background var(--dur) var(--ease)}
+  .mt-actions button svg{width:14px;height:14px;stroke:currentColor;fill:none;pointer-events:none}
+  .mtable tbody tr:hover .mt-actions button{border-color:var(--line)}
+  .mt-actions button:hover{color:var(--ink);background:var(--panel)}
+  .mt-actions button.open:hover{color:var(--accent);border-color:var(--accent)}
+  .mt-actions button.del:hover{color:var(--nva);border-color:var(--nva)}
+  /* staggered fade-up on render (chrome only; honoured via prefers-reduced-motion guard) */
+  @keyframes fbFadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 
   /* ---- Workspace (org platform — phase 1): folder-backed library chrome ---- */
   .ws-chip{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);
@@ -1056,6 +1097,12 @@
   <symbol id="ic-sliders" viewBox="0 0 24 24" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
     <path d="M5 8h9M5 16h4"/><path d="M17 8h2M13 16h6"/><circle cx="16" cy="8" r="2"/><circle cx="11" cy="16" r="2"/>
   </symbol>
+  <symbol id="ic-grid" viewBox="0 0 24 24" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/>
+  </symbol>
+  <symbol id="ic-rows" viewBox="0 0 24 24" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="4" y="5" width="16" height="4.2" rx="1.3"/><rect x="4" y="14.8" width="16" height="4.2" rx="1.3"/>
+  </symbol>
   <!-- note / waste / frustration types -->
   <symbol id="ic-nt-note" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
     <path d="M5 4h14v10l-6 6H5V4Z"/><path d="M13 20v-6h6"/>
@@ -1235,6 +1282,10 @@
     <h2 id="homeTitle">My Flows</h2>
     <span class="ws-chip" id="wsChip" style="display:none" title="Connected workspace folder"></span>
     <span class="ws-status" id="wsStatus"></span>
+    <div class="home-view" id="homeViewToggle" role="group" aria-label="View mode">
+      <button data-homeview="grid" class="on" title="Card grid — one gauge card per map"><svg class="t-ic"><use href="#ic-grid"/></svg>Grid</button>
+      <button data-homeview="table" title="Table — one row per map, sort and edit inline"><svg class="t-ic"><use href="#ic-rows"/></svg>Table</button>
+    </div>
     <div class="spacer"></div>
     <div class="hdr-group" id="newFlowGroup">
       <span class="hdr-label">New flow</span>
@@ -2375,12 +2426,14 @@ function wsRenderFilter(){
     <button class="clear" id="wsClear" title="Clear search and filters">✕ clear</button>
     <span class="count" id="wsCount"></span>`;
   const inp=bar.querySelector("#wsSearch");
-  inp.oninput=()=>{ ws.query=inp.value; wsRenderGrid(); };   // grid-only refresh keeps focus in the box
+  inp.oninput=()=>{ ws.query=inp.value; wsRenderList(); };   // list-only refresh keeps focus in the box
   bar.querySelectorAll("select[data-facet]").forEach(s=>s.onchange=()=>{
     if(s.value) ws.facets[s.dataset.facet]=s.value; else delete ws.facets[s.dataset.facet];
-    wsRenderFilter(); wsRenderGrid(); });   // rebuild refreshes counts + the selects' active state
-  bar.querySelector("#wsClear").onclick=()=>{ ws.query=""; ws.facets={}; wsRenderFilter(); wsRenderGrid(); };
+    wsRenderFilter(); wsRenderList(); });   // rebuild refreshes counts + the selects' active state
+  bar.querySelector("#wsClear").onclick=()=>{ ws.query=""; ws.facets={}; wsRenderFilter(); wsRenderList(); };
 }
+/* dispatch the workspace list to the active view (cards or table) */
+function wsRenderList(reveal){ if(homeView()==="table") wsRenderTable(reveal); else wsRenderGrid(reveal); }
 /* ---- shared map-card bits (gauge card): efficiency ring, status pill, meta line, actions ---- */
 function cardRing(eff){   // eff: 0..1 or null — ring hue follows health (frozen va/warn/nva)
   const p=(eff==null||isNaN(eff))?null:Math.max(0,Math.min(1,eff));
@@ -2399,6 +2452,115 @@ const CARD_ACT={ open:{ic:"ic-play",label:"Open",cls:"open",text:1}, meta:{ic:"i
 function cardActions(keys){ return `<div class="fc-actions">${keys.map(k=>{ const a=CARD_ACT[k];
   return `<button class="${a.cls||""}" data-act="${k}" title="${a.label}" aria-label="${a.label}"><svg><use href="#${a.ic}"/></svg>${a.text?`<span>${a.label}</span>`:""}</button>`; }).join("")}</div>`; }
 
+/* ---- Home view mode (grid cards vs sortable table), persisted per-browser ---- */
+const HOMEVIEW_KEY="flowbuilder.homeView";
+function homeView(){ try{ return localStorage.getItem(HOMEVIEW_KEY)==="table"?"table":"grid"; }catch(e){ return "grid"; } }
+function setHomeView(v){ try{ localStorage.setItem(HOMEVIEW_KEY, v==="table"?"table":"grid"); }catch(e){} }
+let homeSort={col:"name",dir:1};
+/* short one-shot fade-up on a freshly rendered list — chrome only, skipped under reduced-motion */
+function staggerIn(container, sel){
+  if(!container) return;
+  if(window.matchMedia && matchMedia("(prefers-reduced-motion:reduce)").matches) return;
+  const items=[...container.querySelectorAll(sel)];
+  items.forEach((el,i)=>{ if(i>16 || !el.animate) return;
+    el.animate([{opacity:0,transform:"translateY(8px)"},{opacity:1,transform:"none"}],
+      {duration:340, delay:Math.min(i,16)*32, easing:"cubic-bezier(.22,.61,.36,1)", fill:"backwards"}); });
+}
+/* run a card/row action against its owning element (data-mid = workspace map, data-id = local flow) */
+function doMapAction(el, act){
+  if(!el||!act) return;
+  if(state.ws && el.dataset.mid){ const mid=el.dataset.mid;
+    if(act==="open") openWsMap(mid);
+    else if(act==="meta") showMetaPanel({kind:"ws",id:mid});
+    else if(act==="dup") wsDuplicate(mid);
+    else if(act==="del") wsDelete(mid);
+    return; }
+  const id=el.dataset.id; if(!id) return;
+  if(act==="open") openFlow(id,"build");
+  else if(act==="meta") showMetaPanel({kind:"local",id});
+  else if(act==="dup") duplicateFlow(id);
+  else if(act==="rename") renameFlow(id);
+  else if(act==="export") exportFlow(id);
+  else if(act==="del") deleteFlow(id);
+}
+
+/* ---- Sortable / inline-editable map table ---- */
+const MT_COLS=[
+  {id:"name",  label:"Name",        edit:"text"},
+  {id:"owner", label:"Owner",       edit:"text"},
+  {id:"area",  label:"Area",        edit:"text"},
+  {id:"team",  label:"Team",        edit:"text"},
+  {id:"status",label:"Status",      edit:"status"},
+  {id:"review",label:"Review date", edit:null},
+  {id:"eff",   label:"Efficiency",  edit:null, num:1},
+  {id:"tags",  label:"Tags",        edit:"text"},
+];
+function mtRow(ctx,name,meta,eff){ return {ctx, name:name||"Untitled", meta:meta||{}, eff:(eff==null||isNaN(eff))?null:eff}; }
+function mtDate(ts){ try{ return new Date(ts).toLocaleDateString(undefined,{month:"short",day:"numeric",year:"numeric"}); }catch(e){ return "—"; } }
+function reviewInfo(m){   // next-review date derived from last-reviewed + cadence; unreviewed imports flag
+  if(m.reviewedAt){ const base=Date.parse(m.reviewedAt);
+    if(!isNaN(base)){ const ts=m.reviewCadenceDays?base+m.reviewCadenceDays*864e5:base;
+      return {ts, txt:mtDate(ts), overdue:m.reviewCadenceDays?ts<Date.now():false}; } }
+  if(m.importedFrom) return {ts:0, txt:"needs review", overdue:true};
+  return {ts:null, txt:"—", overdue:false};
+}
+function mtSortVal(r,col){ const m=r.meta;
+  switch(col){
+    case"owner":return (m.owner||"").toLowerCase();
+    case"area": return (m.area||"").toLowerCase();
+    case"team": return (m.team||"").toLowerCase();
+    case"status":return (m.status||"draft");
+    case"tags": return (m.tags||[]).join(",").toLowerCase();
+    case"review":{ const t=reviewInfo(m).ts; return t==null?Number.POSITIVE_INFINITY:t; }
+    case"eff":  return r.eff==null?-1:r.eff;
+    default:    return (r.name||"").toLowerCase();
+  }
+}
+function renderMapTable(rows, reveal){
+  const grid=$("#homeGrid"); grid.classList.add("tableview"); grid.classList.remove("dashview");
+  const sorted=rows.slice().sort((a,b)=>{ const va=mtSortVal(a,homeSort.col), vb=mtSortVal(b,homeSort.col);
+    return (va<vb?-1:va>vb?1:0)*homeSort.dir; });
+  const head=MT_COLS.map(c=>`<th data-sort="${c.id}" class="${homeSort.col===c.id?"sorted":""}${c.num?" mt-num":""}">${esc(c.label)}<span class="sort">${homeSort.col===c.id?(homeSort.dir>0?"▲":"▼"):"↕"}</span></th>`).join("")+`<th class="mt-actions"></th>`;
+  const body=sorted.map(r=>{
+    const m=r.meta, ctx=r.ctx;
+    const idAttr=ctx.kind==="ws"?`data-mid="${esc(ctx.id)}"`:`data-id="${esc(ctx.id)}"`;
+    const tcell=(field,val)=>`<td><span class="mt-edit${val?"":" mut"}" contenteditable="true" data-field="${field}" data-orig="${esc(val||"")}">${esc(val||"")}</span></td>`;
+    const status=m.status||"draft";
+    const statusCell=`<td><select class="mt-status-sel" data-field="status">${META_STATUS.map(s=>`<option${s===status?" selected":""}>${esc(s)}</option>`).join("")}</select></td>`;
+    const rv=reviewInfo(m);
+    const effHue=r.eff==null?"var(--muted)":r.eff>=0.6?"var(--va)":r.eff>=0.35?"var(--warn)":"var(--nva)";
+    const tags=(m.tags||[]).filter(Boolean).join(", ");
+    const acts=ctx.kind==="ws"?["open","dup","del"]:["open","dup","export","del"];
+    const actBtns=acts.map(k=>{ const a=CARD_ACT[k];
+      return `<button class="${a.cls||""}" data-act="${k}" title="${a.label}" aria-label="${a.label}"><svg><use href="#${a.ic}"/></svg></button>`; }).join("");
+    return `<tr ${idAttr}>
+      <td><span class="mt-edit mt-name" contenteditable="true" data-field="name" data-orig="${esc(r.name)}">${esc(r.name)}</span></td>
+      ${tcell("owner",m.owner)}${tcell("area",m.area)}${tcell("team",m.team)}
+      ${statusCell}
+      <td class="${rv.overdue?"mt-overdue":"mt-mut"}">${esc(rv.txt)}</td>
+      <td class="mt-num"><span class="mt-eff" style="color:${effHue}">${r.eff==null?"—":Math.round(r.eff*100)+"%"}</span></td>
+      ${tcell("tags",tags)}
+      <td class="mt-actions">${actBtns}</td>
+    </tr>`;
+  }).join("");
+  grid.innerHTML=`<table class="mtable"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+  if(reveal) staggerIn(grid.querySelector("tbody"),"tr");
+}
+async function commitTableEdit(tr, field, rawval, el){
+  if(!tr||!field) return;
+  const val=(rawval==null?"":String(rawval)).replace(/\s+/g," ").trim();
+  if(el && el.dataset.orig!=null && val===el.dataset.orig) return;   // unchanged — skip the write
+  const ctx = tr.dataset.mid ? {kind:"ws",id:tr.dataset.mid} : {kind:"local",id:tr.dataset.id};
+  const apply=model=>{ migratePlatform(model); const meta=model.meta;
+    if(field==="name") model.name=val||model.name;
+    else if(field==="tags") meta.tags=val.split(",").map(s=>s.trim()).filter(Boolean);
+    else if(field==="status") meta.status=val||"draft";
+    else meta[field]=val;
+    return model; };
+  const ok=await persistMapEdit(ctx, apply);
+  if(ok){ toast("Saved"); renderHome({reveal:false}); }
+}
+
 function wsCardHtml(id){
   const ws=state.ws, d=ws.digests[id]||{}, e=ws.catalog.maps[id], m=d.meta||{}, x=d.metrics||{};
   const bn=x.bottleneck?esc(x.bottleneck.step):"—";
@@ -2414,13 +2576,24 @@ function wsCardHtml(id){
     <div class="fc-sub">${sub}</div>
     ${cardActions(["open","meta","dup","del"])}</div>`;
 }
-function wsRenderGrid(){
+function wsRenderGrid(reveal){
+  const ws=state.ws, grid=$("#homeGrid"); grid.classList.remove("tableview");
+  const ids=wsFiltered(), total=Object.keys(ws.catalog.maps).length;
+  const cnt=$("#wsCount"); if(cnt) cnt.textContent=`${ids.length} of ${total} map${total===1?"":"s"}`;
+  if(!total){ grid.innerHTML='<div class="home-empty">No flows in this folder yet — click <b>New map</b>, use <b>Import…</b>, or drop <code>*.flow.json</code> files in and they\'ll appear.</div>'; return; }
+  if(!ids.length){ grid.innerHTML='<div class="home-empty">Nothing matches that search / filter.</div>'; return; }
+  grid.innerHTML=ids.map(wsCardHtml).join("");
+  if(reveal) staggerIn(grid,".flowcard");
+}
+function wsRenderTable(reveal){
   const ws=state.ws, grid=$("#homeGrid");
   const ids=wsFiltered(), total=Object.keys(ws.catalog.maps).length;
   const cnt=$("#wsCount"); if(cnt) cnt.textContent=`${ids.length} of ${total} map${total===1?"":"s"}`;
-  if(!total){ grid.innerHTML='<div class="home-empty">No flows in this folder yet — click <b>+ New flow</b>, use <b>Import…</b>, or drop <code>*.flow.json</code> files in and they\'ll appear.</div>'; return; }
-  if(!ids.length){ grid.innerHTML='<div class="home-empty">Nothing matches that search / filter.</div>'; return; }
-  grid.innerHTML=ids.map(wsCardHtml).join("");
+  if(!total){ grid.classList.remove("tableview"); grid.innerHTML='<div class="home-empty">No flows in this folder yet — click <b>New map</b>, use <b>Import…</b>, or drop <code>*.flow.json</code> files in and they\'ll appear.</div>'; return; }
+  if(!ids.length){ grid.classList.remove("tableview"); grid.innerHTML='<div class="home-empty">Nothing matches that search / filter.</div>'; return; }
+  const rows=ids.map(id=>{ const d=ws.digests[id]||{}, e=ws.catalog.maps[id];
+    return mtRow({kind:"ws",id}, d.title||e.title, d.meta||{}, (d.metrics||{}).flowEff); });
+  renderMapTable(rows, reveal);
 }
 function wsRenderBanner(){
   const b=$("#wsBanner"), n=state.ws?Object.keys(state.library.flows).length:0;
@@ -2533,8 +2706,18 @@ async function commitMetaPanel(){
     } else delete model.segments;
     return model;
   };
+  const ok=await persistMapEdit(ctx, apply);
+  if(!ok) return;
+  $("#metaOverlay").classList.remove("show"); _metaCtx=null;
+  if(state.mode==="home") renderHome(); else render();
+  toast("Details saved");
+}
+/* Persist a meta/details edit for a map (workspace file or browser-local flow) given an
+   apply(model)=>model mutator. Shared by the details modal and the table's inline editing. */
+async function persistMapEdit(ctx, apply){
+  if(!ctx) return false;
   if(ctx.kind==="ws"){
-    const ws=state.ws, e=ws.catalog.maps[ctx.id]; if(!e) return;
+    const ws=state.ws, e=ws.catalog.maps[ctx.id]; if(!e) return false;
     try{
       if(ws.open && ws.open.mapId===ctx.id && state.model){   // map is open in the editor — edit live, saves flow through
         apply(state.model); scheduleSave();
@@ -2548,16 +2731,14 @@ async function commitMetaPanel(){
         ws.digests[model.mapId]=digest;
         await wsWriteDigest(digest,nrev); await wsWriteCatalog(); wsBuildIndex();
       }
-    }catch(err){ console.warn(err); toast("Couldn't save details"); return; }
+    }catch(err){ console.warn(err); toast("Couldn't save details"); return false; }
   } else {
-    const f=state.library.flows[ctx.id]; if(!f) return;
+    const f=state.library.flows[ctx.id]; if(!f) return false;
     apply(f.model); f.name=f.model.name; f.updatedAt=Date.now();
     if(state.currentId===ctx.id && state.model){ apply(state.model); state.model.name=f.name; }
     saveLibrary();
   }
-  $("#metaOverlay").classList.remove("show"); _metaCtx=null;
-  if(state.mode==="home") renderHome(); else render();
-  toast("Details saved");
+  return true;
 }
 
 /* ---- workspace settings: folder controls + org vocabulary editor ---- */
@@ -4460,7 +4641,8 @@ function updateChrome(){
 }
 
 /* ---------- Home gallery — folder-backed Workspace when connected, localStorage view otherwise ---------- */
-function renderHome(){
+function renderHome(opts){
+  opts=opts||{}; const reveal=opts.reveal!==false, view=homeView();
   const ws=state.ws, chip=$("#wsChip");
   $("#homeTitle").textContent = ws ? "Workspace" : "My Flows";
   chip.style.display = ws ? "inline-flex" : "none";
@@ -4471,15 +4653,21 @@ function renderHome(){
   const supported = typeof window.showDirectoryPicker==="function";
   cbtn.style.display = (!ws && (supported || state.wsPending)) ? "" : "none";
   cbtn.textContent = state.wsPending ? `⟳ Reconnect “${state.wsPending.name||"workspace"}”` : "⛁ Connect folder";
+  const vt=$("#homeViewToggle");
+  if(vt) vt.querySelectorAll("[data-homeview]").forEach(b=>b.classList.toggle("on", b.dataset.homeview===view));
   wsRenderBanner();
   renderDashRow();   // dashboards strip (phase 4) — ws-shared files or browser-local docs
   if(state.dashOpen){ if(renderDashboard(state.dashOpen)) return; state.dashOpen=null; renderDashRow(); }
-  $("#homeGrid").classList.remove("dashview");
-  if(ws){ wsRenderFilter(); wsRenderGrid(); return; }
+  const grid=$("#homeGrid"); grid.classList.remove("dashview");
+  if(ws){ wsRenderFilter(); wsRenderList(reveal); return; }
   $("#wsFilter").style.display="none";
-  const grid=$("#homeGrid");
   const flows=Object.values(state.library.flows).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
-  if(!flows.length){ grid.innerHTML='<div class="home-empty">No flows yet — click <b>+ New flow</b> to begin.</div>'; return; }
+  if(!flows.length){ grid.classList.remove("tableview"); grid.innerHTML='<div class="home-empty">No flows yet — click <b>New map</b> to begin.</div>'; return; }
+  if(view==="table"){
+    renderMapTable(flows.map(f=>mtRow({kind:"local",id:f.id}, f.name, (f.model&&f.model.meta)||{}, rollupFor(f.model).eff)), reveal);
+    return;
+  }
+  grid.classList.remove("tableview");
   grid.innerHTML=flows.map(f=>{
     const r=rollupFor(f.model);
     const bn=(r.flag&&r.flag.node)?esc(r.flag.node.label):"—";
@@ -4496,6 +4684,7 @@ function renderHome(){
       <div class="fc-sub">${sub}</div>
       ${cardActions(["open","meta","dup","rename","export","del"])}</div>`;
   }).join("");
+  if(reveal) staggerIn(grid,".flowcard");
 }
 
 function renderStats(r){
@@ -8718,23 +8907,28 @@ $("#fileImport").onchange=e=>{ const f=e.target.files[0]; if(!f) return;
   rd.onload=()=>{ try{ const obj=JSON.parse(rd.result); state.ws ? wsImportObj(obj) : importFlowFromObj(obj); }
     catch(err){ toast("Invalid JSON"); } }; rd.readAsText(f); e.target.value=""; };
 $("#homeGrid").addEventListener("click",ev=>{
-  const card=ev.target.closest(".flowcard"); if(!card) return;
+  // table view: sortable headers + per-row action buttons
+  const th=ev.target.closest("th[data-sort]");
+  if(th){ const c=th.dataset.sort; homeSort = (homeSort.col===c) ? {col:c,dir:-homeSort.dir} : {col:c,dir:1}; renderHome(); return; }
+  const rowEl=ev.target.closest("tr[data-id],tr[data-mid]");
   const actEl=ev.target.closest("[data-act]");   // icon buttons: click may land on the inner svg
-  const act=actEl?actEl.dataset.act:null;
-  if(state.ws && card.dataset.mid){ const mid=card.dataset.mid;
-    if(act==="open") openWsMap(mid);
-    else if(act==="meta") showMetaPanel({kind:"ws",id:mid});
-    else if(act==="dup") wsDuplicate(mid);
-    else if(act==="del") wsDelete(mid);
-    return; }
-  const id=card.dataset.id;
-  if(act==="open") openFlow(id,"build");
-  else if(act==="meta") showMetaPanel({kind:"local",id});
-  else if(act==="dup") duplicateFlow(id);
-  else if(act==="rename") renameFlow(id);
-  else if(act==="export") exportFlow(id);
-  else if(act==="del") deleteFlow(id);
+  if(rowEl){ if(actEl) doMapAction(rowEl, actEl.dataset.act); return; }
+  // grid view: card actions
+  const card=ev.target.closest(".flowcard"); if(!card) return;
+  doMapAction(card, actEl?actEl.dataset.act:null);
 });
+/* table inline edit — commit on blur (contenteditable cells) or change (status select) */
+$("#homeGrid").addEventListener("keydown",ev=>{
+  if(ev.target.classList && ev.target.classList.contains("mt-edit") && ev.key==="Enter"){ ev.preventDefault(); ev.target.blur(); } });
+$("#homeGrid").addEventListener("focusout",ev=>{
+  const el=ev.target; if(el.classList && el.classList.contains("mt-edit")){
+    commitTableEdit(el.closest("tr"), el.dataset.field, el.textContent, el); } });
+$("#homeGrid").addEventListener("change",ev=>{
+  const el=ev.target; if(el.classList && el.classList.contains("mt-status-sel")){
+    commitTableEdit(el.closest("tr"), "status", el.value, el); } });
+/* grid/table view switch (persisted per-browser) */
+$("#homeViewToggle").addEventListener("click",ev=>{ const b=ev.target.closest("[data-homeview]"); if(!b) return;
+  setHomeView(b.dataset.homeview); renderHome(); });
 
 /* workspace chrome: connect / reconnect, settings, details modal */
 $("#wsConnect").onclick=async()=>{
