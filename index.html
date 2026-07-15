@@ -291,6 +291,11 @@
   #paletteBar button.pb-mini .t-ic{width:13px;height:13px}
   #paletteBar button.pb-mini:hover,#paletteBar button.pb-mini.tool-on{opacity:1}
   /* icon-only palette buttons — the label lives in the on-brand hover tip */
+  /* three-state Layout mode switch — one is always active (Freeform · Flow · Swimlane) */
+  #paletteBar .pb-seg{display:inline-flex;gap:3px;padding:2px;border:1px solid var(--line);border-radius:11px;background:var(--panel)}
+  #paletteBar .pb-seg button{border:1px solid transparent;background:transparent;box-shadow:none;border-radius:8px}
+  #paletteBar .pb-seg button:hover{border-color:var(--line);background:var(--panel2)}
+  #paletteBar .pb-seg button.tool-on{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 18%,var(--panel2));box-shadow:0 0 0 1px var(--accent) inset}
   #paletteBar button.pb-ico{padding:8px 9px;gap:0}
   #paletteBar button.pb-ico .t-ic{width:16px;height:16px}
   #paletteBar button.pb-mini.pb-ico{padding:6px 7px}
@@ -892,6 +897,11 @@
   .group .gbox{fill:var(--accent);fill-opacity:.05;stroke:var(--accent);stroke-opacity:.55;stroke-width:1.5;stroke-dasharray:6 4;rx:14}
   .build .group .gbox{pointer-events:all;cursor:grab}
   .group.selected .gbox{stroke-opacity:1;stroke-width:2;stroke-dasharray:none;fill-opacity:.09}
+  /* FLOW / SWIMLANE group bracket — a labelled top span, never a member-hugging box */
+  .group .gbracket{fill:none;stroke:var(--accent);stroke-opacity:.6;stroke-width:1.6;stroke-dasharray:3 4}
+  .group.selected .gbracket{stroke-opacity:1;stroke-width:2;stroke-dasharray:none}
+  .group .gbracket-lbl{fill:var(--accent);font-family:var(--font);font-size:12px;font-weight:800;letter-spacing:.3px}
+  .build .group .gbracket-grab{pointer-events:all;cursor:grab}
   /* on-canvas group header card — title + roll-up stats, top-left of the frame */
   .ghead{display:inline-flex;flex-direction:column;gap:7px;background:var(--panel);border:1px solid var(--line);
     border-left:3px solid var(--accent);border-radius:9px;padding:8px 13px 9px;box-shadow:0 2px 9px rgba(0,0,0,.24);width:max-content}
@@ -945,6 +955,7 @@
   .edge.primary{stroke:var(--va);stroke-width:2.5}   /* happy path — the desired route; bottleneck red still wins */
   .edge.sel{stroke:var(--accent);stroke-width:2.5}
   .edge.insert-target{stroke:var(--accent);stroke-width:4}
+  .edge.faded{opacity:.12;transition:opacity .12s var(--ease)}   /* swimlane hover-focus: dim off-path edges */
   .edge-hit{fill:none;stroke:transparent;stroke-width:14;cursor:pointer}
   /* port dots: hollow when free, filled when the port already carries an arrow (drag adds another → branch) */
   .anchor{fill:var(--panel2);stroke:var(--accent);stroke-width:1.5;opacity:0;cursor:crosshair;transition:opacity .1s}
@@ -1473,9 +1484,12 @@
   <button id="flowToggle" class="pb-ico" data-tip="Case flow" data-tipd="Show case volume and branch splits on the arrows — line thickness follows the flow."><svg class="t-ic"><use href="#ic-flow"/></svg></button>
   <button id="notesToggle" class="pb-ico" data-tip="Notes" data-tipd="Show notes, frustrations and waste flags on the map."><svg class="t-ic"><use href="#ic-nt-note"/></svg></button>
   <span class="pb-sep"></span>
-  <span class="pb-label">Arrange</span>
-  <button id="autoArrange" class="pb-ico" data-tip="Tidy" data-tipd="Snap boxes into neat flow columns. Switches Swimlanes off; never touches your arrows."><svg class="t-ic"><use href="#ic-tidy"/></svg></button>
-  <button id="laneArrange" class="pb-ico" data-tip="Swimlanes" data-tipd="Arrange into one lane per owner — the classic cross-functional layout. Tidy switches back."><svg class="t-ic"><use href="#ic-lanes"/></svg></button>
+  <span class="pb-label">Layout</span>
+  <div class="pb-seg" id="layoutSeg">
+    <button id="freeArrange" class="pb-ico" data-tip="Freeform" data-tipd="Place steps anywhere — no auto-layout. Drag a group and its contents move together, locked. Your scratch space."><svg class="t-ic"><use href="#ic-hand"/></svg></button>
+    <button id="autoArrange" class="pb-ico" data-tip="Flow" data-tipd="One straight happy-path spine; every branch drops perpendicular into its own row directly under where it leaves the spine. Idempotent; never touches your arrows."><svg class="t-ic"><use href="#ic-tidy"/></svg></button>
+    <button id="laneArrange" class="pb-ico" data-tip="Swimlane" data-tipd="One lane per owner (case-folded, so Sales/sales never split). Same tidy row-bands inside each lane; groups become top brackets."><svg class="t-ic"><use href="#ic-lanes"/></svg></button>
+  </div>
   <span class="pb-sep"></span>
   <button id="simBtn" class="pb-ico" data-tip="Simulate" data-tipd="Watch a simulated day — cases flow through the map, pile up in queues, and overloads glow."><svg class="t-ic"><use href="#ic-play"/></svg></button>
   <span class="pb-sep"></span>
@@ -3235,7 +3249,7 @@ function vsdxPageToModel(page,baseName,multiPage){
     const noted=[];
     s.props.forEach(p=>{
       const key=vzNorm(p.label);
-      if(VZ_OWNER_PROPS.has(key)&&p.value){ n.owner=p.value; return; }
+      if(VZ_OWNER_PROPS.has(key)&&p.value){ n.owner=normOwner(p.value)||undefined; return; }
       const mid=aliases[key], num=parseFloat(p.value);
       /* numbers are taken as authored (no unit conversion — converting would be inventing) */
       if(mid&&Number.isFinite(num)&&n.type!=="start"&&n.type!=="end"){ n[VZ_METRIC_FIELDS[mid]]=num; report.propsMatched++; }
@@ -3275,7 +3289,7 @@ function vsdxPageToModel(page,baseName,multiPage){
     if(!hit) return;
     const label=(hit.l.text||hit.l.master||"Lane").trim();
     const n=nodes.find(x=>x.id===vidToNid[s.id]);
-    if(n&&!n.owner) n.owner=label;   // Shape-Data Owner (more specific) wins over the lane
+    if(n&&!n.owner) n.owner=normOwner(label)||undefined;   // Shape-Data Owner (more specific) wins over the lane
     if(!laneMembers.has(hit.l)) laneMembers.set(hit.l,[]);
     laneMembers.get(hit.l).push(vidToNid[s.id]);
   });
@@ -4724,7 +4738,9 @@ function render(){
   document.querySelectorAll("[data-cardview]").forEach(b=>b.classList.toggle("tool-on",b.dataset.cardview===view()));
   { const ft=$("#flowToggle"); if(ft) ft.classList.toggle("tool-on",(state.model.settings&&state.model.settings.showFlow)!==false); }
   { const nt=$("#notesToggle"); if(nt) nt.classList.toggle("tool-on",showNotes()); }
-  { const lb=$("#laneArrange"); if(lb) lb.classList.toggle("tool-on",!!(state.model.settings&&state.model.settings.layout==="lanes")); }
+  { const lm=layoutMode();
+    [["freeArrange","free"],["autoArrange","flow"],["laneArrange","lanes"]].forEach(([id,mode])=>{
+      const b=$("#"+id); if(b) b.classList.toggle("tool-on", lm===mode); }); }
   { const t=$("#flowTitle"); if(t){ t.readOnly=state.viewer; if(document.activeElement!==t) t.value=state.model.name||""; fitTitle(t); } }
   renderCrumbs();
   renderSegChips();
@@ -5551,6 +5567,23 @@ function drawLinkCard(g,n,L,r){
   g.addEventListener("dblclick",ev=>{ ev.stopPropagation(); if(canOpen) openLinked(n); });
 }
 
+/* SWIMLANE hover-focus (the chosen spaghetti strategy: keep the beziers, dim the rest). Lights the
+   hovered unit's edges and its immediate neighbours' edges, fades everything else — pure DOM class
+   toggles, no re-render. anchors = the unit ids the pointer is on (a node id, or an edge's two ends). */
+function laneHoverDim(anchors){
+  const svg=$("#canvas"); if(!svg) return;
+  if(!anchors||!anchors.length){ svg.querySelectorAll(".edge.faded").forEach(p=>p.classList.remove("faded")); return; }
+  const m=state.model;
+  const memberOf={}; (m.groups||[]).forEach(g=>{ if(g.collapsed) (g.members||[]).forEach(id=>memberOf[id]=g.id); });
+  const res=id=>memberOf[id]||id;
+  const near=new Set(anchors.map(res));
+  m.edges.forEach(e=>{ const a=res(e.from),b=res(e.to);
+    if(near.has(a)) near.add(b); if(near.has(b)) near.add(a); });
+  svg.querySelectorAll("path.edge[data-eid]").forEach(p=>{
+    const e=m.edges.find(x=>x.id===p.dataset.eid);
+    if(!e){ p.classList.remove("faded"); return; }
+    p.classList.toggle("faded", !near.has(res(e.from)) && !near.has(res(e.to))); });
+}
 function renderCanvas(r){
   const m=state.model, svg=$("#canvas"); svg.innerHTML="";
   svg.setAttribute("class", editable()?"build":"");
@@ -5609,11 +5642,15 @@ function renderCanvas(r){
     mk.appendChild(el("path",{d:"M0,0 L10,5 L0,10 z",fill:col})); defs.appendChild(mk); });
   svg.appendChild(defs);
 
-  // groups render first so they sit behind edges and nodes
+  // groups render first so they sit behind edges and nodes. In FLOW / SWIMLANE a group is a top
+  // BRACKET spanning its columns (so it never fights the lane bands); in FREEFORM it stays a
+  // member-hugging box you can drag around as scratch space.
+  const grpBracketMode = layoutMode()!=="free";
   (m.groups||[]).forEach(grp=>{
     // one-time membership backfill for flows saved before explicit members existed
     if(grp._backfill){ grp.members=groupHits(grp.x,grp.y,grp.x+grp.w,grp.y+grp.h).map(n=>n.id); delete grp._backfill; }
     if(grp.collapsed) return;   // collapsed groups draw as a node-layer card later, not as a box
+    if(grpBracketMode){ const br=groupBracketEl(grp, lay); if(br) svg.appendChild(br); return; }
     const sel=state.selected&&state.selected.type==="group"&&state.selected.id===grp.id;
     const g=el("g",{class:"group"+(sel?" selected":"")}); g.dataset.gid=grp.id;
     const box=el("rect",{class:"gbox",x:grp.x,y:grp.y,width:grp.w,height:grp.h,rx:14});
@@ -5624,7 +5661,7 @@ function renderCanvas(r){
       g.appendChild(groupHeadEl(grp));
     }
     if(editable()){
-      box.addEventListener("mousedown",ev=>startAnnoMove(ev,grp));
+      box.addEventListener("mousedown",ev=>startGroupMove(ev,grp));   // FREEFORM: rigid translate of members
       box.addEventListener("click",ev=>{ ev.stopPropagation(); if(!_annoMoved) selectGroup(grp.id); });
       const rh=el("rect",{class:"anno-resize",x:grp.x+grp.w-7,y:grp.y+grp.h-7,width:12,height:12,rx:3});
       rh.addEventListener("mousedown",ev=>startAnnoResize(ev,grp)); g.appendChild(rh);
@@ -5662,8 +5699,8 @@ function renderCanvas(r){
       bounds.push(ext[ks[ks.length-1]].y2+28);
       _laneGeo=ks.map((k,i)=>({key:k, y1:bounds[i], y2:bounds[i+1]}));
       _laneGeo.forEach((b,i)=>{
-        laneLayer.appendChild(el("rect",{class:"laneband", x:-P, y:b.y1, width:maxX+2*P, height:b.y2-b.y1,
-          "fill-opacity": i%2 ? 0 : .04}));
+        laneLayer.appendChild(el("rect",{class:"laneband", x:-P, y:b.y1, width:maxX+2*P, height:Math.max(0,b.y2-b.y1),
+          "fill-opacity": i%2 ? 0 : .04}));   // clamp: mid-animation lane extents can momentarily invert
         if(i) laneLayer.appendChild(el("line",{class:"lanesep", x1:-P, y1:b.y1, x2:maxX+P, y2:b.y1}));
         const t=el("text",{class:"lanelbl", x:10, y:b.y1+20}); t.textContent=b.key; laneLayer.appendChild(t); });
       svg.insertBefore(laneLayer, defs.nextSibling);   // behind groups, edges and cards
@@ -5937,7 +5974,7 @@ function renderCanvas(r){
       else if(editable()){ g.appendChild(txt(TITLE_X,bt+20,"+ OWNER","nowner",{"fill-opacity":"0.5"})); }
       zone(TITLE_X-4, bt+10, Math.min(w-TITLE_X,150), 13, "", ()=>editCardField({
         x:n.x+TITLE_X-4, y:n.y+bt+10, w:Math.min(w-TITLE_X,150), h:13,
-        value:n.owner||"", placeholder:n.performer==="bot"?"Bot name":"Owner / team", onCommit:v=>{ n.owner=v||undefined; } }));
+        value:n.owner||"", placeholder:n.performer==="bot"?"Bot name":"Owner / team", onCommit:v=>{ n.owner=normOwner(v)||undefined; } }));
       // title (all value cards): click to rename in place — nudged down when the eyebrow/edit-hint is present
       let ty = (ownerStr||editable()) ? bt+34 : bt+25;
       L.titleLines.forEach(ln=>{ g.appendChild(txt(TITLE_X,ty,ln,"nlabel")); ty+=LBL_LH; });
@@ -6103,7 +6140,7 @@ function renderCanvas(r){
       if(ownerStr){ const ot=truncToWidth(ownerStr.toUpperCase(), w-TITLE_X-30, F_META);
         g.appendChild(txt(TITLE_X,bt+20,ot,"nowner")); }
       else if(editable()){ g.appendChild(txt(TITLE_X,bt+20,"+ OWNER","nowner",{"fill-opacity":"0.5"})); }
-      editField(TITLE_X-4, bt+10, Math.min(w-TITLE_X, 150), 13, n.owner||"", v=>{ n.owner=v||undefined; }, "Owner / team");
+      editField(TITLE_X-4, bt+10, Math.min(w-TITLE_X, 150), 13, n.owner||"", v=>{ n.owner=normOwner(v)||undefined; }, "Owner / team");
       // title (max 2 lines) — nudged down when an owner eyebrow is present (always in edit mode, for the hint)
       let ty = (ownerStr||editable()) ? bt+34 : bt+25;
       L.titleLines.forEach(ln=>{ g.appendChild(txt(TITLE_X,ty,ln,"nlabel")); ty+=LBL_LH; });
@@ -6352,7 +6389,7 @@ function renderCanvas(r){
       g.appendChild(annoDelHandle(w, bt, ()=>removeAnno("groups",grp.id)));
       g.appendChild(iconHandle(0, bt, "ic-expand", ()=>toggleCollapse(grp)));   // top-left → expand back in place
     }
-    g.addEventListener("mousedown",ev=>startAnnoMove(ev,groupPos(grp)));
+    g.addEventListener("mousedown",ev=>startGroupMove(ev,grp));   // collapsed card = single-unit move/splice
     g.addEventListener("click",ev=>{ ev.stopPropagation(); if(!_annoMoved) selectGroup(grp.id); });
     svg.appendChild(g);
   });
@@ -6754,6 +6791,7 @@ function wireInspector(n){
   insp.querySelectorAll("[data-bind]").forEach(inp=>{
     inp.addEventListener("change",()=>{ let v=inp.value;
       if(inp.type==="number") v=v===""?null:parseFloat(v);
+      else if(inp.dataset.bind==="owner") v=normOwner(v)||"";   // case-fold on entry → one lane per owner
       n[inp.dataset.bind]=v===""?undefined:v; render(); }); });
   insp.querySelectorAll("[data-bindchk]").forEach(ch=>ch.addEventListener("change",()=>{
     n[ch.dataset.bindchk]=ch.checked||undefined; render(); }));
@@ -6867,6 +6905,54 @@ function groupHeadEl(grp){
     title.addEventListener("dblclick",ev=>{ ev.stopPropagation(); editGroupLabel(grp); });
   }
   return fo;
+}
+/* FLOW / SWIMLANE group chrome: a labelled top bracket spanning the group's member columns instead
+   of a hugging box, so it never collides with the lane bands. Carries the group-level lens chrome
+   (label, derived value chip + "from steps inside" note in the Value lens, else the roll-up stats),
+   plus the same collapse + delete controls the box has. Members stay put — the bracket only frames. */
+function groupBracketEl(grp, lay){
+  const m=state.model;
+  const members=(grp.members||[]).map(id=>m.nodes.find(n=>n.id===id)).filter(n=>n&&lay[n.id]);
+  if(!members.length) return null;
+  let bx0=Infinity,by0=Infinity,bx1=-Infinity;
+  members.forEach(n=>{ const L=lay[n.id], t=n.y+(L.bt||0); bx0=Math.min(bx0,n.x); by0=Math.min(by0,t); bx1=Math.max(bx1,n.x+L.w); });
+  const sel=state.selected&&state.selected.type==="group"&&state.selected.id===grp.id;
+  const hue=grp.color||"var(--accent)";
+  const x0=bx0-10, x1=bx1+10, top=Math.max(2, by0-34);
+  const g=el("g",{class:"group bracket"+(sel?" selected":"")}); g.dataset.gid=grp.id;
+  const txt=(x,y,s,cls,extra)=>{ const t=el("text",Object.assign({x,y,class:cls},extra||{})); t.textContent=s; return t; };
+  // a wide grab band across the bracket span so the whole group is draggable (to splice/reorder)
+  const grab=el("rect",{class:"gbracket-grab",x:x0,y:top-16,width:x1-x0,height:by0-(top-16)+8,fill:"transparent"});
+  g.appendChild(grab);
+  const br=el("path",{class:"gbracket",d:`M${x0},${top+10} L${x0},${top} L${x1},${top} L${x1},${top+10}`});
+  if(grp.color) br.style.stroke=grp.color;
+  g.appendChild(br);
+  const lbl=txt(x0+6, top-8, grp.label||"Group", "gbracket-lbl"); if(grp.color) lbl.style.fill=grp.color;
+  g.appendChild(lbl);
+  let rx=x0+6+measure(grp.label||"Group",`800 12px ${FONT_STACK}`)+12;
+  if(view()==="value"){
+    const gv=groupValue(grp);
+    if(gv.key){ const c=VAL_COLOR[gv.key];
+      g.appendChild(useIc(VAL_IC[gv.key], rx, top-19, 13, c));
+      const nm=T.cls[gv.key].name.toUpperCase();
+      g.appendChild(txt(rx+17, top-8, nm, "", {fill:c,"font-size":"11","font-weight":"800","letter-spacing":".4"}));
+      g.appendChild(txt(rx+17+measure(nm,`800 11px ${FONT_STACK}`)+7, top-8, "· from steps inside", "", {fill:"var(--faint)","font-size":"9","font-style":"italic"}));
+    } else g.appendChild(txt(rx, top-8, "⚠ UNRATED", "", {fill:"var(--warn)","font-size":"11","font-weight":"800"}));
+  } else if(grp.showInfo!==false){
+    const gr=groupRollup(grp);
+    g.appendChild(txt(rx, top-8, `${fmt(gr.turnaround)} ${unit()} turnaround · ${gr.count} steps`, "", {fill:"var(--faint)","font-size":"10.5","font-weight":"600"}));
+  }
+  // non-contiguous flag: a non-member sitting inside the group's column span
+  const intruder=m.nodes.some(n=>!grp.members.includes(n.id) && lay[n.id] && n.type!=="start" && n.type!=="end"
+    && (n.x+lay[n.id].w/2)>bx0 && (n.x+lay[n.id].w/2)<bx1);
+  if(intruder) g.appendChild(txt(x0+6, top+22, "⚠ non-contiguous", "", {fill:"var(--nva)","font-size":"10","font-weight":"700"}));
+  if(editable()){
+    grab.addEventListener("mousedown",ev=>startGroupMove(ev,grp));
+    grab.addEventListener("click",ev=>{ ev.stopPropagation(); if(!_annoMoved) selectGroup(grp.id); });
+    g.appendChild(annoDelHandle(x1, top, ()=>removeAnno("groups",grp.id)));
+    g.appendChild(iconHandle(x0, top, "ic-collapse", ()=>toggleCollapse(grp)));
+  }
+  return g;
 }
 function renderGroupInspector(){
   const insp=$("#inspector");
@@ -7306,6 +7392,88 @@ function spliceIntoEdge(node, edge){
   t.push({ent:node, x:slotX, y:slotY});
   state.selected={type:"node",id:node.id}; state.selectedIds=[];
   animateNodes(t, 300, ()=>toast("Step spliced into the flow"));
+}
+
+/* ---------- group movement: rigid translate in FREEFORM, smart splice-relink in FLOW / SWIMLANE ---------- */
+let groupDrag=null;
+function startGroupMove(ev, grp){
+  if(!editable()) return; ev.preventDefault(); ev.stopPropagation();
+  const p=svgPt(ev); _annoMoved=false;
+  const members=(grp.members||[]).map(id=>state.model.nodes.find(n=>n.id===id)).filter(Boolean)
+    .map(n=>({n, x0:n.x, y0:n.y}));
+  groupDrag={grp, mode:layoutMode(), collapsed:!!grp.collapsed, members, sx:p.x, sy:p.y,
+    box0:{x:grp.x||0, y:grp.y||0, cx:grp.cx||0, cy:grp.cy||0}};
+  window.addEventListener("mousemove",onGroupMove); window.addEventListener("mouseup",onGroupUp);
+}
+function onGroupMove(ev){ if(!groupDrag) return; const p=svgPt(ev), d=groupDrag;
+  if(Math.abs(p.x-d.sx)>2||Math.abs(p.y-d.sy)>2) _annoMoved=true;
+  if(d.mode==="free"){
+    // rigid translation — every member (and the box/card) moves by one snapped delta, contents locked
+    const snapping=!ev.altKey && (!state.model.settings||state.model.settings.snap!==false);
+    let dx=p.x-d.sx, dy=p.y-d.sy;
+    const anchor=d.collapsed?[d.box0.cx,d.box0.cy]:[d.box0.x,d.box0.y];
+    dx=Math.max(dx, -Math.min(anchor[0], ...d.members.map(it=>it.x0)));
+    dy=Math.max(dy, -Math.min(anchor[1], ...d.members.map(it=>it.y0)));
+    const sdx=snapping?snapG(dx):dx, sdy=snapping?snapG(dy):dy;
+    d.members.forEach(it=>{ it.n.x=Math.max(0,it.x0+sdx); it.n.y=Math.max(0,it.y0+sdy); });
+    if(d.collapsed){ d.grp.cx=Math.max(0,d.box0.cx+sdx); d.grp.cy=Math.max(0,d.box0.cy+sdy); }
+    else { d.grp.x=Math.max(0,d.box0.x+sdx); d.grp.y=Math.max(0,d.box0.y+sdy); }
+    render();
+  } else {
+    // FLOW / SWIMLANE: nodes are solved, so don't drag them — dwell the block over an edge to arm a splice
+    d.px=p.x; d.py=p.y;
+    const exclude=new Set(d.members.map(it=>it.n.id)); exclude.add(d.grp.id);
+    const hit=groupEdgeAtPoint(p.x,p.y,exclude), now=performance.now();
+    if(hit && d.hoverEdge===hit.id){ if(!d.armedEdge && now-d.hoverT>350) d.armedEdge=hit.id; }
+    else { d.hoverEdge=hit?hit.id:null; d.hoverT=now; d.armedEdge=null; }
+    $("#canvas").querySelectorAll(".edge.insert-target").forEach(x=>x.classList.remove("insert-target"));
+    if(d.armedEdge){ const tp=$("#canvas").querySelector(`.edge[data-eid="${d.armedEdge}"]`); if(tp) tp.classList.add("insert-target"); }
+  }
+}
+function onGroupUp(){ window.removeEventListener("mousemove",onGroupMove); window.removeEventListener("mouseup",onGroupUp);
+  const d=groupDrag; groupDrag=null; if(!d) return;
+  if(d.mode==="free"){ if(_annoMoved && !d.collapsed) fitGroupBox(d.grp); render(); return; }
+  if(d.armedEdge && _annoMoved){ const e=state.model.edges.find(x=>x.id===d.armedEdge);
+    if(e){ spliceGroupIntoEdge(d.grp, e); return; } }
+  render();   // no drop target → the block stays where the solver put it
+}
+/* nearest edge to a point whose endpoints are all outside a set — the group-block version of edgeAtPoint */
+function groupEdgeAtPoint(px, py, excludeSet){
+  const m=state.model; let best=null, bestD=30;
+  (m.edges||[]).forEach(e=>{
+    if(excludeSet.has(e.from)||excludeSet.has(e.to)) return;
+    const a=m.nodes.find(x=>x.id===e.from), b=m.nodes.find(x=>x.id===e.to);
+    const La=_lay[e.from], Lb=_lay[e.to]; if(!a||!b||!La||!Lb) return;
+    const geo=edgeGeom(portGeo(a,La,e.fromSide||"right"), portGeo(b,Lb,e.toSide||"left"));
+    for(let t=0.05;t<=0.95;t+=0.06){ const pt=geo.at(t), dd=Math.hypot(pt.x-px,pt.y-py); if(dd<bestD){ bestD=dd; best=e; } }
+  });
+  return best;
+}
+/* splice a whole contiguous group block into an edge A→B: heal the group's OLD location
+   (old-pred → old-succ) and wire the NEW one (A → group entry, group exit → B), then let the active
+   mode re-solve clean placement in a single animateNodes. Reuses promoteGroup's boundary-edge model. */
+function spliceGroupIntoEdge(grp, edge){
+  const m=state.model, memIds=new Set(grp.members||[]);
+  if(!memIds.size) return;
+  const A=edge.from, B=edge.to;
+  if(memIds.has(A)||memIds.has(B)) { render(); return; }   // dropped onto its own boundary edge → no-op
+  const inEdges =m.edges.filter(e=>!memIds.has(e.from)&&memIds.has(e.to));
+  const outEdges=m.edges.filter(e=>memIds.has(e.from)&&!memIds.has(e.to));
+  const sorted=(grp.members||[]).map(id=>m.nodes.find(n=>n.id===id)).filter(Boolean).sort((a,b)=>(a.x||0)-(b.x||0));
+  if(!sorted.length) return;
+  let entries=[...new Set(inEdges.map(e=>e.to))];   if(!entries.length) entries=[sorted[0].id];
+  let exits  =[...new Set(outEdges.map(e=>e.from))]; if(!exits.length)   exits=[sorted[sorted.length-1].id];
+  const oldPreds=[...new Set(inEdges.map(e=>e.from))];
+  const oldSuccs=[...new Set(outEdges.map(e=>e.to))];
+  const drop=new Set([edge, ...inEdges, ...outEdges]);
+  m.edges=m.edges.filter(e=>!drop.has(e));
+  const link=(f,t)=>{ if(f!==t && !m.edges.some(e=>e.from===f&&e.to===t)) m.edges.push({id:uid("e"),from:f,to:t}); };
+  oldPreds.forEach(pp=>oldSuccs.forEach(ss=>link(pp,ss)));   // heal the old location
+  entries.forEach(en=>link(A,en));                           // wire A → block entry
+  exits.forEach(ex=>link(ex,B));                             // wire block exit → B
+  selectGroup(grp.id);
+  toast("Group spliced into the flow — old spot healed, new links wired");
+  if(layoutMode()==="lanes") laneArrange(); else autoArrange();   // ONE re-solve → ONE animateNodes
 }
 
 /* ---------- marquee (rubber-band) multi-select ---------- */
@@ -7875,6 +8043,12 @@ function tidyGroups(){
    Swimlanes keeps rules 1–2 and replaces the rows with one horizontal lane per owner. */
 const ARR={CELL_W:236, CELL_H:156, GAPY:44, MARGIN_X:40, HEAD_ROOM:104, BASE_GAP:44, BRANCH_BONUS:32};
 
+/* the one active layout mode — one is ALWAYS set. Absent (untouched maps) reads as "free" so nothing
+   is written to their settings and their export stays byte-identical; Flow/Swimlane persist explicitly. */
+function layoutMode(){ const m=state.model; return (m&&m.settings&&m.settings.layout) || "free"; }
+/* case-fold owners so "Sales" / "sales" / " SALES " collapse to one lane and one stored value */
+const normOwner=o=>((o==null?"":String(o)).trim().toUpperCase());
+
 /* the canvas as ONE graph of movable units: real nodes (minus legacy sub-steps and collapsed-group
    members) plus one card per collapsed group, with every edge resolved onto those units */
 function unitGraph(){
@@ -7989,24 +8163,83 @@ function applyArrange(core, colX, centerYOf, msg){
   toast(msg);
 }
 
+/* FREEFORM: no solving. Just leaves whatever positions the map already has and drops out of any
+   solved mode. Untouched maps never had a layout key, so we DELETE rather than write "free" —
+   that keeps their serialization (and export) byte-identical. */
+function freeArrange(){
+  if(!state.model) return;
+  const m=state.model;
+  if(m.settings&&m.settings.layout) delete m.settings.layout;
+  render(); toast("Freeform — place steps anywhere; groups move as a locked block");
+}
+
+/* the happy-path spine over the unit graph: from Start take the primary edge if flagged, else the
+   highest Split %. Mirrors mainPath/flowWeights but on resolved units (so a collapsed group counts
+   as one spine unit). Returns unit ids in spine order. */
+function spineUnits(core){
+  const {m, unitIds, unitSet, resolve, adj, startU}=core;
+  const byId=Object.fromEntries(m.nodes.map(n=>[n.id,n]));
+  const out={}; unitIds.forEach(u=>out[u]=[]);
+  m.edges.forEach(e=>{ const u=resolve(e.from), v=resolve(e.to);
+    if(u===v||!unitSet.has(u)||!unitSet.has(v)) return;
+    out[u].push({to:v, primary:!!e.primary, split:+e.splitPct||0}); });
+  const start = unitSet.has(startU) ? startU
+    : (unitIds.find(u=>(byId[u]||{}).type==="start") || unitIds[0]);
+  const seen=new Set(), sp=[]; let cur=start;
+  while(cur!=null && !seen.has(cur)){ sp.push(cur); seen.add(cur);
+    const os=(out[cur]||[]).filter(e=>!seen.has(e.to));
+    if(!os.length) break;
+    os.sort((a,b)=>(b.primary?1:0)-(a.primary?1:0) || (b.split-a.split));
+    cur=os[0].to; }
+  return sp;
+}
+/* generic row packer (the global row-band model — the diagonal fix): walk units left→right; an
+   off-spine chain continues on its predecessor's row band if that cell is free, else drops to the
+   next free row. Rows are ABSOLUTE (shared across columns), so a child lands on its parent's line. */
+function packRows(ids, colOf, preds, spineSet, rowOf, occ, base){
+  ids.forEach(u=>{
+    if(rowOf[u]!=null) return;
+    const ps=(preds[u]||[]).filter(p=>rowOf[p]!=null && !spineSet.has(p)).sort((a,b)=>rowOf[a]-rowOf[b]);
+    let r=null;
+    for(const p of ps){ const rp=rowOf[p]; if(!(occ[colOf[u]]&&occ[colOf[u]].has(rp))){ r=rp; break; } }
+    if(r==null){ r=base; while(occ[colOf[u]]&&occ[colOf[u]].has(r)) r++; }
+    rowOf[u]=r; (occ[colOf[u]]=occ[colOf[u]]||new Set()).add(r);
+  });
+}
+
+/* FLOW (rebrand of Tidy — the core fix): spine on row 0 dead straight; every off-spine chain gets an
+   absolute row band below and keeps it; a pure pendant branch (one forward pred, no forward succ —
+   e.g. Parking Lot) is pulled into its parent's COLUMN so its edge is a clean vertical drop, never a
+   diagonal. Idempotent: positions never feed back into ordering. */
 function autoArrange(){
   if(!editable()||!state.model||!state.model.nodes.length) return;
   const m=state.model;
-  if(m.settings&&m.settings.layout) delete m.settings.layout;   // Tidy = the plain flow grid → leaves swimlane mode
+  m.settings=m.settings||{}; m.settings.layout="flow";
   const core=arrangeCore();
-  const {unitIds, col, preds, si, oy}=core;
-  const colGroups={}; unitIds.forEach(u=>{ (colGroups[col[u]]=colGroups[col[u]]||[]).push(u); });
-  const row={};
-  Object.keys(colGroups).map(Number).sort((a,b)=>a-b).forEach(c=>{
-    const list=colGroups[c], key={};
-    list.forEach(u=>{ const ps=preds[u].filter(p=>row[p]!=null);
-      key[u]= ps.length ? ps.reduce((s,p)=>s+row[p],0)/ps.length : si(u); });
-    list.sort((a,b)=> (key[a]-key[b]) || (si(a)-si(b)) || (oy(a)-oy(b)) || (a<b?-1:1));
-    list.forEach((u,i)=>row[u]=i); });
+  const {unitIds, col, preds, fwd}=core;
+  const spine=spineUnits(core), spineSet=new Set(spine);
+  const rowOf={}, occ={};
+  spine.forEach(u=>{ rowOf[u]=0; (occ[col[u]]=occ[col[u]]||new Set()).add(0); });
+  const rest=unitIds.filter(u=>!spineSet.has(u)).sort((a,b)=> (col[a]-col[b]) || (a<b?-1:1));
+  packRows(rest, col, preds, spineSet, rowOf, occ, 1);
+  unitIds.forEach(u=>{ if(rowOf[u]==null){ let r=1; while(occ[col[u]]&&occ[col[u]].has(r)) r++;
+    rowOf[u]=r; (occ[col[u]]=occ[col[u]]||new Set()).add(r); } });
+  // "under the branch point" anchor: pull each pure pendant beneath its single parent → vertical edge
+  const ecol={...col};
+  unitIds.forEach(u=>{ if(spineSet.has(u)) return;
+    const ps=preds[u]||[], succ=(fwd[u]||[]);
+    if(ps.length===1 && succ.length===0){ const want=ecol[ps[0]];
+      if(want!=null && !(occ[want]&&occ[want].has(rowOf[u]))){
+        if(occ[ecol[u]]) occ[ecol[u]].delete(rowOf[u]);
+        ecol[u]=want; (occ[want]=occ[want]||new Set()).add(rowOf[u]); } } });
+  // squeeze any column the pull emptied so no wide gap survives, then place from the compacted columns
+  { const used=[...new Set(unitIds.map(u=>ecol[u]))].sort((a,b)=>a-b);
+    const remap={}; used.forEach((c,i)=>remap[c]=i); unitIds.forEach(u=>ecol[u]=remap[ecol[u]]); }
+  core.col=ecol;   // colX + applyArrange read the final (pulled + squeezed) columns
   const ROW_PITCH=ARR.CELL_H+ARR.GAPY;
   const anyHdr=(m.groups||[]).some(g=>g.showInfo!==false && (g.members||[]).length);
   const ROW0=60+(anyHdr?ARR.HEAD_ROOM:0)+ARR.CELL_H/2;   // centre-line of row 0 (constant → no drift)
-  applyArrange(core, arrangeColX(core), u=>ROW0+row[u]*ROW_PITCH, "Layout tidied");
+  applyArrange(core, arrangeColX(core), u=>ROW0+rowOf[u]*ROW_PITCH, "Flow — spine straight, branches drop into their own rows");
 }
 
 /* ---------- Swimlanes: which lane does each unit belong to? ----------
@@ -8022,9 +8255,9 @@ function laneKeys(core){
   unitIds.forEach(u=>{
     const g=collById[u];
     if(g){ const cnt={};
-      (g.members||[]).forEach(id=>{ const o=((byIdNode[id]||{}).owner||"").trim(); if(o) cnt[o]=(cnt[o]||0)+1; });
+      (g.members||[]).forEach(id=>{ const o=normOwner((byIdNode[id]||{}).owner); if(o) cnt[o]=(cnt[o]||0)+1; });
       const best=Object.entries(cnt).sort((a,b)=>b[1]-a[1])[0]; raw[u]=best?best[0]:"";
-    } else raw[u]=((byIdNode[u]||{}).owner||"").trim(); });
+    } else raw[u]=normOwner((byIdNode[u]||{}).owner); });
   const radj={}; unitIds.forEach(u=>radj[u]=[]);
   unitIds.forEach(u=>adj[u].forEach(v=>radj[v].push(u)));
   const nearest=(u,nbrs)=>{ const seen=new Set([u]), q=[u];
@@ -8047,26 +8280,34 @@ function laneArrange(){
   if(!editable()||!state.model||!state.model.nodes.length) return;
   const m=state.model;
   const core=arrangeCore(), keyOf=laneKeys(core);
-  const {unitIds, col, preds, si, oy}=core;
+  const {unitIds, col, preds, fwd}=core;
   const lanes=[...new Set(unitIds.map(u=>keyOf[u]))];
-  const st={}; unitIds.forEach(u=>{ const s=st[keyOf[u]]||(st[keyOf[u]]={c:1/0,s:1/0});
-    s.c=Math.min(s.c,col[u]); s.s=Math.min(s.s,si(u)); });
-  lanes.sort((a,b)=> ((a===LANE_UNASSIGNED)-(b===LANE_UNASSIGNED)) ||
-    (st[a].c-st[b].c) || (st[a].s-st[b].s) || (a<b?-1:1));
-  // sub-rows inside a lane mirror Tidy's row logic, with only same-lane predecessors pulling —
-  // a lane's main chain hugs its top line and parallel work stacks beneath it
-  const sub={}, rowsOf={};
+  const st={}; unitIds.forEach(u=>{ const s=st[keyOf[u]]||(st[keyOf[u]]={c:1/0}); s.c=Math.min(s.c,col[u]); });
+  lanes.sort((a,b)=> ((a===LANE_UNASSIGNED)-(b===LANE_UNASSIGNED)) || (st[a].c-st[b].c) || (a<b?-1:1));
+  // rows inside a lane use the SAME global row-band model as Flow: the happy-path spine (where it runs
+  // through the lane) pins the top line at row 0, and branches (Parking Lot) drop to their own row band
+  // below — so they sit directly under their parent instead of drifting diagonally.
+  const spine=spineUnits(core), spineSet=new Set(spine);
+  const rowOf={}, rowsOf={}, occByLane={};
   lanes.forEach(k=>{
-    const colGroups={};
-    unitIds.forEach(u=>{ if(keyOf[u]!==k) return; (colGroups[col[u]]=colGroups[col[u]]||[]).push(u); });
-    let maxRows=1;
-    Object.keys(colGroups).map(Number).sort((a,b)=>a-b).forEach(c=>{
-      const list=colGroups[c], key={};
-      list.forEach(u=>{ const ps=preds[u].filter(p=>keyOf[p]===k && sub[p]!=null);
-        key[u]= ps.length ? ps.reduce((s,p)=>s+sub[p],0)/ps.length : si(u); });
-      list.sort((a,b)=> (key[a]-key[b]) || (si(a)-si(b)) || (oy(a)-oy(b)) || (a<b?-1:1));
-      list.forEach((u,i)=>sub[u]=i); maxRows=Math.max(maxRows,list.length); });
-    rowsOf[k]=maxRows; });
+    const ids=unitIds.filter(u=>keyOf[u]===k).sort((a,b)=>(col[a]-col[b])||(a<b?-1:1));
+    const occ={}; occByLane[k]=occ;
+    const hasSpine=ids.some(u=>spineSet.has(u));
+    ids.filter(u=>spineSet.has(u)).forEach(u=>{ rowOf[u]=0; (occ[col[u]]=occ[col[u]]||new Set()).add(0); });
+    const localPreds={}; ids.forEach(u=>localPreds[u]=(preds[u]||[]).filter(p=>keyOf[p]===k));
+    packRows(ids.filter(u=>!spineSet.has(u)), col, localPreds, spineSet, rowOf, occ, hasSpine?1:0);
+    rowsOf[k]=Math.max(1,...ids.map(u=>rowOf[u]+1)); });
+  // "under the branch point" pull, scoped to the lane: a pure pendant beside its same-lane parent
+  const ecol={...col};
+  unitIds.forEach(u=>{ const ps=preds[u]||[], succ=fwd[u]||[];
+    if(ps.length===1 && succ.length===0 && keyOf[ps[0]]===keyOf[u]){
+      const occ=occByLane[keyOf[u]], want=ecol[ps[0]];
+      if(want!=null && !(occ[want]&&occ[want].has(rowOf[u]))){
+        if(occ[ecol[u]]) occ[ecol[u]].delete(rowOf[u]);
+        ecol[u]=want; (occ[want]=occ[want]||new Set()).add(rowOf[u]); } } });
+  { const used=[...new Set(unitIds.map(u=>ecol[u]))].sort((a,b)=>a-b);
+    const remap={}; used.forEach((c,i)=>remap[c]=i); unitIds.forEach(u=>ecol[u]=remap[ecol[u]]); }
+  core.col=ecol;
   // stack the lanes: label headroom at each lane's top, group-header room when headers exist
   const ROW_PITCH=ARR.CELL_H+ARR.GAPY;
   const anyHdr=(m.groups||[]).some(g=>g.showInfo!==false && (g.members||[]).length);
@@ -8074,12 +8315,12 @@ function laneArrange(){
   const centerY={}; let acc=40;
   lanes.forEach(k=>{
     const first=acc+LANE_LBL+PAD_TOP+ARR.CELL_H/2;
-    unitIds.forEach(u=>{ if(keyOf[u]===k) centerY[u]=first+sub[u]*ROW_PITCH; });
+    unitIds.forEach(u=>{ if(keyOf[u]===k) centerY[u]=first+rowOf[u]*ROW_PITCH; });
     acc = first + (rowsOf[k]-1)*ROW_PITCH + ARR.CELL_H/2 + PAD_BOT; });
   m.settings=m.settings||{}; m.settings.layout="lanes";
   const named=lanes.filter(k=>k!==LANE_UNASSIGNED).length;
   applyArrange(core, arrangeColX(core), u=>centerY[u],
-    named ? "Swimlanes — one lane per owner · Tidy switches back"
+    named ? "Swimlane — one lane per owner · Flow switches back"
           : "No owners set yet — give steps an Owner to split them into lanes");
 }
 
@@ -8860,8 +9101,16 @@ function setZoom(z){ state.zoom=Math.max(0.4,Math.min(2,Math.round(z*100)/100));
   const zl=$("#zoomLevel"); if(zl) zl.textContent=Math.round(state.zoom*100)+"%"; render(); }
 $("#zoomIn").onclick=()=>setZoom(Z()+0.1);
 $("#zoomOut").onclick=()=>setZoom(Z()-0.1);
+$("#freeArrange").onclick=freeArrange;
 $("#autoArrange").onclick=autoArrange;
 $("#laneArrange").onclick=laneArrange;
+// SWIMLANE hover-focus: delegated on the (persistent) canvas element so it survives every re-render
+$("#canvas").addEventListener("mouseover",ev=>{ if(layoutMode()!=="lanes") return;
+  const nd=ev.target.closest("g.node[data-id]"), ed=ev.target.closest("path.edge[data-eid]");
+  if(nd) laneHoverDim([nd.dataset.id]);
+  else if(ed){ const e=state.model.edges.find(x=>x.id===ed.dataset.eid); laneHoverDim(e?[e.from,e.to]:null); }
+  else laneHoverDim(null); });
+$("#canvas").addEventListener("mouseleave",()=>laneHoverDim(null));
 
 /* analysis drawer — collapse to free up canvas room; state persists per browser */
 const ANALYSIS_OPEN_KEY="flowbuilder.analysisOpen";
