@@ -15,6 +15,7 @@
     --ink:#e8eef5; --muted:#9fb0c3; --faint:#6b7d92;
     --va:#34c38f; --nnva:#5a8dee; --nva:#f06548; --wait:#7b8aa0; --vmixed:#9b8cff;
     --warn:#f7b84b; --accent:#4cc9f0; --shadow:0 6px 24px rgba(0,0,0,.35);
+    --rework:#8b7bd6;   /* rework / loop-back connector hue — a fixed data hue, never themed */
     /* chrome accent glow (derived from --accent so it follows the identity + any flow theme) */
     --accent-soft:color-mix(in srgb, var(--accent) 15%, transparent);
     --ring:0 0 0 3px var(--accent-soft);
@@ -955,7 +956,13 @@
   .edge.primary{stroke:var(--va);stroke-width:2.5}   /* happy path — the desired route; bottleneck red still wins */
   .edge.sel{stroke:var(--accent);stroke-width:2.5}
   .edge.insert-target{stroke:var(--accent);stroke-width:4}
-  .edge.faded{opacity:.12;transition:opacity .12s var(--ease)}   /* swimlane hover-focus: dim off-path edges */
+  /* connector hierarchy: rework / loop-back edges read as a distinct dashed purple tier
+     (happy path = .primary cyan, bottleneck = .hot red, normal = grey) */
+  .edge.rework{stroke:var(--rework);stroke-width:1.8;stroke-dasharray:5 4}
+  /* hover path-focus (all modes): fade everything off the hovered step's stream; emphasise its own edges */
+  .edge.faded,.eband.faded,.eflow.faded{opacity:.1;transition:opacity .12s var(--ease)}
+  .eband.faded{opacity:.03}
+  .edge.focus{stroke-width:3.2}
   .edge-hit{fill:none;stroke:transparent;stroke-width:14;cursor:pointer}
   /* port dots: hollow when free, filled when the port already carries an arrow (drag adds another → branch) */
   .anchor{fill:var(--panel2);stroke:var(--accent);stroke-width:1.5;opacity:0;cursor:crosshair;transition:opacity .1s}
@@ -5567,25 +5574,64 @@ function drawLinkCard(g,n,L,r){
   g.addEventListener("dblclick",ev=>{ ev.stopPropagation(); if(canOpen) openLinked(n); });
 }
 
-/* SWIMLANE hover-focus (the chosen spaghetti strategy: keep the beziers, dim the rest). Lights the
-   hovered unit's edges and its immediate neighbours' edges, fades everything else — pure DOM class
-   toggles, no re-render. anchors = the unit ids the pointer is on (a node id, or an edge's two ends). */
-function laneHoverDim(anchors){
+/* rework / loop-back edges: DFS from Start over the node graph; an edge onto a still-open (grey)
+   ancestor closes a cycle → it's rework. Mirrors arrangeCore's cycle break, so the connector styling
+   agrees with the layout's own notion of "backward" flow. Returns a Set of edge ids. */
+function backEdgeSet(m){
+  const adj={}; m.nodes.forEach(n=>adj[n.id]=[]);
+  m.edges.forEach(e=>{ if(adj[e.from]) adj[e.from].push(e); });
+  const color={}, back=new Set();
+  const dfs=root=>{ color[root]=1; const stack=[[root,adj[root]||[],0]];
+    while(stack.length){ const fr=stack[stack.length-1];
+      if(fr[2]>=fr[1].length){ color[fr[0]]=2; stack.pop(); continue; }
+      const e=fr[1][fr[2]++], v=e.to;
+      if(color[v]===1){ back.add(e.id); continue; }         // edge to a grey ancestor → loop-back
+      if(color[v]==null){ color[v]=1; stack.push([v,adj[v]||[],0]); } } };
+  const start=m.nodes.find(n=>n.type==="start")||m.nodes[0];
+  if(start) dfs(start.id);
+  m.nodes.forEach(n=>{ if(color[n.id]==null) dfs(n.id); });
+  return back;
+}
+
+/* hover path-focus (all modes): light the full stream the pointer is on — every edge upstream AND
+   downstream of the hovered step (or edge) — and fade the rest, so a tangled map untangles under the
+   cursor. Pure DOM class toggles on the last render, no re-layout. `sel` = {node} or {edge} or null. */
+let _focusKey=null;
+function focusPath(sel){
   const svg=$("#canvas"); if(!svg) return;
-  if(!anchors||!anchors.length){ svg.querySelectorAll(".edge.faded").forEach(p=>p.classList.remove("faded")); return; }
-  const m=state.model;
-  const memberOf={}; (m.groups||[]).forEach(g=>{ if(g.collapsed) (g.members||[]).forEach(id=>memberOf[id]=g.id); });
+  const key=sel?(sel.node?"n:"+sel.node:"e:"+sel.edge):null;
+  if(key===_focusKey) return; _focusKey=key;
+  const clear=()=>svg.querySelectorAll(".faded,.edge.focus").forEach(p=>p.classList.remove("faded","focus"));
+  if(!sel){ clear(); return; }
+  const m=state.model; if(!m) return;
+  const memberOf={}; (m.groups||[]).forEach(g=>{ if(g.collapsed)(g.members||[]).forEach(id=>memberOf[id]=g.id); });
   const res=id=>memberOf[id]||id;
-  const near=new Set(anchors.map(res));
-  m.edges.forEach(e=>{ const a=res(e.from),b=res(e.to);
-    if(near.has(a)) near.add(b); if(near.has(b)) near.add(a); });
-  svg.querySelectorAll("path.edge[data-eid]").forEach(p=>{
-    const e=m.edges.find(x=>x.id===p.dataset.eid);
-    if(!e){ p.classList.remove("faded"); return; }
-    p.classList.toggle("faded", !near.has(res(e.from)) && !near.has(res(e.to))); });
+  // trace over the FORWARD dag only (loop-backs excluded) so a rework edge can't bleed the focus
+  // back upstream and light the whole map; the loop-back itself lights only if it joins the stream.
+  const back=backEdgeSet(m);
+  const fwd={}, rev={};
+  m.edges.forEach(e=>{ if(back.has(e.id)) return; const a=res(e.from),b=res(e.to); if(a===b) return;
+    (fwd[a]=fwd[a]||[]).push(b); (rev[b]=rev[b]||[]).push(a); });
+  const reach=(starts,g)=>{ const seen=new Set(starts), q=[...starts];
+    while(q.length){ const u=q.shift(); (g[u]||[]).forEach(v=>{ if(!seen.has(v)){ seen.add(v); q.push(v); } }); } return seen; };
+  let Rd, Ru, hub=null;
+  if(sel.node){ hub=res(sel.node); Rd=reach([hub],fwd); Ru=reach([hub],rev); }
+  else { const e=m.edges.find(x=>x.id===sel.edge); if(!e){ clear(); return; }
+    const a=res(e.from), b=res(e.to); Rd=reach([b],fwd); Rd.add(a); Ru=reach([a],rev); Ru.add(b); }
+  const stream=new Set([...Rd,...Ru]);
+  const lit=e=>{ const a=res(e.from), b=res(e.to);
+    return back.has(e.id) ? (stream.has(a)&&stream.has(b))   // loop-back: lit only when both ends are on the stream
+                          : (Rd.has(a)||Ru.has(b)); };
+  const eidLit={};
+  m.edges.forEach(e=>{ eidLit[e.id]=lit(e); });
+  svg.querySelectorAll("path.edge[data-eid],path.eband[data-eid],text.eflow[data-eid]").forEach(p=>{
+    const e=m.edges.find(x=>x.id===p.dataset.eid); if(!e){ p.classList.remove("faded"); return; }
+    p.classList.toggle("faded", !eidLit[e.id]);
+    if(p.classList.contains("edge"))
+      p.classList.toggle("focus", hub!=null && (res(e.from)===hub||res(e.to)===hub)); });
 }
 function renderCanvas(r){
-  const m=state.model, svg=$("#canvas"); svg.innerHTML="";
+  const m=state.model, svg=$("#canvas"); svg.innerHTML=""; _focusKey=null;   // fresh DOM → drop any hover-focus state
   svg.setAttribute("class", editable()?"build":"");
   // queue-cells normalisation: queues against the busiest queue
   const mwQ = maxWip();
@@ -5634,10 +5680,13 @@ function renderCanvas(r){
   if(_canvasFlow!==state.currentId){ _canvasFlow=state.currentId;
     requestAnimationFrame(()=>{ const st=$("#stage"); st.scrollLeft=P*z; st.scrollTop=P*z; }); }
 
+  // rework / loop-back edges styled as a distinct connector tier (computed once per render)
+  const backSet=backEdgeSet(m);
   const defs=el("defs");
-  /* arrowPrimary only exists when a happy path is drawn — keeps untouched maps byte-identical */
+  /* arrowPrimary / arrowRework only exist when actually drawn — keeps simpler maps' SVG lean */
   [["arrow","var(--faint)"],["arrowHot","var(--nva)"],
-   ...(m.edges.some(e=>e.primary)?[["arrowPrimary","var(--va)"]]:[])].forEach(([id,col])=>{
+   ...(m.edges.some(e=>e.primary)?[["arrowPrimary","var(--va)"]]:[]),
+   ...(backSet.size?[["arrowRework","var(--rework)"]]:[])].forEach(([id,col])=>{
     const mk=el("marker",{id,viewBox:"0 0 10 10",refX:"9",refY:"5",markerWidth:"7",markerHeight:"7",orient:"auto-start-reverse"});
     mk.appendChild(el("path",{d:"M0,0 L10,5 L0,10 z",fill:col})); defs.appendChild(mk); });
   svg.appendChild(defs);
@@ -5751,14 +5800,16 @@ function renderCanvas(r){
     const eOff=segOff(fa)||segOff(fb);   // touches a step the active segment bypasses
     if(showFlow){
       const bw=Math.max(5,Math.min(22,5+17*ef/maxEF));
-      svg.appendChild(el("path",{d:bandD(geo,bw),class:"eband"+(eOff?" seg-off":""),
+      svg.appendChild(el("path",{d:bandD(geo,bw),class:"eband"+(eOff?" seg-off":""),"data-eid":e.id,
         fill:hot?"var(--nva)":"var(--wait)","fill-opacity":hot?"0.16":"0.13","pointer-events":"none"}));
     }
     const edgeSel = state.selected && state.selected.type==="edge" && state.selected.id===e.id;
-    const ep=el("path",{d,class:"edge"+(hot?" hot":"")+(!hot&&e.primary?" primary":"")+(edgeSel?" sel":"")+(eOff?" seg-off":""),"marker-end":`url(#${hot?'arrowHot':e.primary?'arrowPrimary':'arrow'})`});
+    const rework = backSet.has(e.id) && !e.primary && !hot;   // loop-back → dashed purple tier
+    const ep=el("path",{d,class:"edge"+(hot?" hot":"")+(!hot&&e.primary?" primary":"")+(rework?" rework":"")+(edgeSel?" sel":"")+(eOff?" seg-off":""),
+      "marker-end":`url(#${hot?'arrowHot':e.primary?'arrowPrimary':rework?'arrowRework':'arrow'})`});
     ep.dataset.eid=e.id;                         // the simulator finds edge paths by id
     svg.appendChild(ep);
-    if(editable()){ const hit=el("path",{d,class:"edge-hit"});
+    if(editable()){ const hit=el("path",{d,class:"edge-hit","data-eid":e.id});   // data-eid → hover path-focus finds it
       hit.addEventListener("click",ev=>{ev.stopPropagation(); selectEdge(e.id);}); svg.appendChild(hit); }
     // Grabbable endpoint handles: every edge in Connect mode, or just the selected edge in Cursor mode.
     // Inset along the curve so they never sit on top of the port dots (dragging a port always adds a NEW arrow).
@@ -5799,7 +5850,7 @@ function renderCanvas(r){
       if(clash(pos.x,pos.y)){ if(!clash(pos.x,pos.y-15)) pos={x:pos.x,y:pos.y-15};
         else if(!clash(pos.x,pos.y+15)) pos={x:pos.x,y:pos.y+15}; }
       placedPills.push({x:pos.x,y:pos.y,w:tw});
-      const tl=el("text",{x:pos.x,y:pos.y+3.5,class:"eflow"+(eOff?" seg-off":""),"text-anchor":"middle"});
+      const tl=el("text",{x:pos.x,y:pos.y+3.5,class:"eflow"+(eOff?" seg-off":""),"data-eid":e.id,"text-anchor":"middle"});
       parts.forEach((p,i)=>{ const ts=el("tspan",{fill:p[1],"font-weight":p[2]});
         ts.textContent=(i?" · ":"")+p[0]; tl.appendChild(ts); });
       const tip=el("title");
@@ -9104,13 +9155,18 @@ $("#zoomOut").onclick=()=>setZoom(Z()-0.1);
 $("#freeArrange").onclick=freeArrange;
 $("#autoArrange").onclick=autoArrange;
 $("#laneArrange").onclick=laneArrange;
-// SWIMLANE hover-focus: delegated on the (persistent) canvas element so it survives every re-render
-$("#canvas").addEventListener("mouseover",ev=>{ if(layoutMode()!=="lanes") return;
-  const nd=ev.target.closest("g.node[data-id]"), ed=ev.target.closest("path.edge[data-eid]");
-  if(nd) laneHoverDim([nd.dataset.id]);
-  else if(ed){ const e=state.model.edges.find(x=>x.id===ed.dataset.eid); laneHoverDim(e?[e.from,e.to]:null); }
-  else laneHoverDim(null); });
-$("#canvas").addEventListener("mouseleave",()=>laneHoverDim(null));
+// hover path-focus (all modes): delegated on the persistent canvas element so it survives re-renders.
+// Skipped mid-gesture (drag / connect / simulate) so it never fights an active interaction.
+$("#canvas").addEventListener("mouseover",ev=>{
+  if(!state.model || state.mode!=="build" || state.simming) return;
+  if(drag || groupDrag || annoDrag || connectState || marquee || groupSel) return;
+  const nd=ev.target.closest("g.node[data-id]"), gd=ev.target.closest("g.gcard[data-gid]"),
+        ed=ev.target.closest("path.edge[data-eid],path.edge-hit[data-eid],text.eflow[data-eid]");
+  if(gd) focusPath({node:gd.dataset.gid});
+  else if(nd) focusPath({node:nd.dataset.id});
+  else if(ed) focusPath({edge:ed.dataset.eid});
+  else focusPath(null); });
+$("#canvas").addEventListener("mouseleave",()=>focusPath(null));
 
 /* analysis drawer — collapse to free up canvas room; state persists per browser */
 const ANALYSIS_OPEN_KEY="flowbuilder.analysisOpen";
