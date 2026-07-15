@@ -868,8 +868,20 @@
   body.tool-group #stage, body.tool-comment #stage{cursor:crosshair}
   body.tool-group .node{opacity:.5;transition:opacity .08s}
   body.tool-group .node.in-group{opacity:1}
-  /* note tool armed: hovering a step signals "drop here to attach" */
-  body.tool-comment .node:hover .nbox{stroke-width:2.5}
+  /* note tool armed: the mode is note-only — every inline editor / port on a step goes quiet,
+     hovering a step selects it (accent ring) and floats the type menu in its middle */
+  body.tool-comment #stage .node .vedit,
+  body.tool-comment #stage .node .subchip,
+  body.tool-comment #stage .node .anchor,
+  body.tool-comment #stage .node .plus-handle,
+  body.tool-comment #stage .node .del-handle,
+  body.tool-comment #stage .group .gbracket-edit{pointer-events:none}
+  body.tool-comment #stage .node,body.tool-comment #stage .node *{cursor:pointer}
+  body.tool-comment .node.note-target:hover .nbox{stroke:var(--accent);stroke-width:3}
+  .note-hovermenu .nhm-plate{fill:var(--panel);stroke:var(--accent);stroke-opacity:.5;filter:drop-shadow(0 4px 12px rgba(0,0,0,.4))}
+  .note-hovermenu .nhm-chip{cursor:pointer}
+  .note-hovermenu .nhm-chip:hover rect{filter:brightness(1.12)}
+  .note-hovermenu .nhm-lbl{fill:var(--muted);font-family:var(--font);pointer-events:none}
   /* dragging/resizing a group box over steps → same "include" affordance as drawing a group */
   body.anno-grouping .node[data-id]{opacity:.5;transition:opacity .08s}
   body.anno-grouping .node[data-id].in-group{opacity:1}
@@ -903,6 +915,10 @@
   .group.selected .gbracket{stroke-opacity:1;stroke-width:2;stroke-dasharray:none}
   .group .gbracket-lbl{fill:var(--accent);font-family:var(--font);font-size:12px;font-weight:800;letter-spacing:.3px}
   .build .group .gbracket-grab{pointer-events:all;cursor:grab}
+  /* click-to-rename the bracket label, right on the canvas (same affordance as card fields) */
+  .build .group .gbracket-edit{fill:var(--accent);fill-opacity:0;stroke:var(--accent);stroke-opacity:0;stroke-width:1;stroke-dasharray:3 2;cursor:text;transition:fill-opacity .1s,stroke-opacity .1s}
+  .build .group:hover .gbracket-edit{fill-opacity:.07}
+  .build .group .gbracket-edit:hover{fill-opacity:.14;stroke-opacity:.7}
   /* on-canvas group header card — title + roll-up stats, top-left of the frame */
   .ghead{display:inline-flex;flex-direction:column;gap:7px;background:var(--panel);border:1px solid var(--line);
     border-left:3px solid var(--accent);border-radius:9px;padding:8px 13px 9px;box-shadow:0 2px 9px rgba(0,0,0,.24);width:max-content}
@@ -1479,9 +1495,9 @@
   <button data-tool="comment" class="pb-mini pb-ico" data-tip="Note" data-tipd="Drop a note, frustration, waste flag or idea anywhere on the map. Shortcut: N"><svg class="t-ic"><use href="#ic-nt-note"/></svg></button>
   <span class="pb-sep"></span>
   <span class="pb-label">Card view</span>
-  <button data-cardview="value" title="Value lens — classify each step as value / necessary / waste"><svg class="t-ic"><use href="#ic-val-value"/></svg>Value</button>
-  <button data-cardview="metrics" title="Metrics lens — show the speed / capacity / quality numbers on each card"><svg class="t-ic"><use href="#ic-metrics"/></svg>Metrics</button>
-  <button data-cardview="gaps" title="Gaps lens — highlight bottlenecks and where the flow stalls"><svg class="t-ic"><use href="#ic-flag"/></svg>Gaps</button>
+  <button data-cardview="value" class="pb-ico" data-tip="Value" data-tipd="Classify each step as value / necessary / waste."><svg class="t-ic"><use href="#ic-val-value"/></svg></button>
+  <button data-cardview="metrics" class="pb-ico" data-tip="Metrics" data-tipd="Show the speed / capacity / quality numbers on each card."><svg class="t-ic"><use href="#ic-metrics"/></svg></button>
+  <button data-cardview="gaps" class="pb-ico" data-tip="Gaps" data-tipd="Highlight bottlenecks and where the flow stalls."><svg class="t-ic"><use href="#ic-flag"/></svg></button>
   <!-- segment switcher (org platform — phase 2): shown only when the map defines segments -->
   <span class="pb-sep" id="segSep" style="display:none"></span>
   <span class="pb-label" id="segDimLabel" style="display:none">Segments</span>
@@ -6336,12 +6352,21 @@ function renderCanvas(r){
     }
 
     g.dataset.id=n.id;
+    // note tool: hovering a step floats its type menu in the middle — pick a type to attach a note
+    if(state.tool==="comment" && editable() && (L.kind==="card"||L.kind==="frame") && (n.type==="touch"||n.type==="wait")){
+      g.classList.add("note-target");
+      let menu=null;
+      const midY = bt + (L.h||NODE_H)/2;
+      g.addEventListener("mouseenter",()=>{ if(menu) return; menu=noteHoverMenu(n, w/2, midY); g.appendChild(menu); });
+      g.addEventListener("mouseleave",()=>{ if(menu){ menu.remove(); menu=null; } });
+    }
     { const rid=n.parentId||n.id;   // hovering a card lights its ribbon band (sub-steps light the parent's)
       g.addEventListener("mouseenter",()=>{ const sb=document.querySelector(`.seg-b[data-nid="${rid}"]`); if(sb) sb.classList.add("hl"); });
       g.addEventListener("mouseleave",()=>{ const sb=document.querySelector(`.seg-b[data-nid="${rid}"]`); if(sb) sb.classList.remove("hl"); }); }
     g.addEventListener("mousedown",ev=>onNodeDown(ev,n));
     g.addEventListener("click",ev=>{ ev.stopPropagation();
       if(state.linkingFrom){ completeLink(n.id); return; }
+      if(state.tool==="comment") return;   // note mode: the hover menu owns clicks, never selection
       if(g._dragged || _annoJustFinished) return;
       if(ev.shiftKey && editable()){   // shift-click: build/toggle a multi-selection without a marquee
         const ids=new Set(state.selectedIds);
@@ -7000,6 +7025,15 @@ function groupBracketEl(grp, lay){
   if(editable()){
     grab.addEventListener("mousedown",ev=>startGroupMove(ev,grp));
     grab.addEventListener("click",ev=>{ ev.stopPropagation(); if(!_annoMoved) selectGroup(grp.id); });
+    // click-to-rename the label in place (over the grab band, so it wins the label's own clicks)
+    const lw=measure(grp.label||"Group",`800 12px ${FONT_STACK}`);
+    const ez=el("rect",{class:"gbracket-edit",x:x0+3,y:top-21,width:Math.max(46,lw)+10,height:19,rx:5});
+    ez.appendChild(el("title")).textContent="Rename group";
+    ez.addEventListener("mousedown",ev=>ev.stopPropagation());
+    ez.addEventListener("click",ev=>{ ev.stopPropagation();
+      editCardField({x:x0+3,y:top-21,w:Math.max(90,lw)+40,h:20,value:grp.label,placeholder:"Group name",
+        onCommit:v=>{ grp.label=v||"Group"; }}); });
+    g.appendChild(ez);
     g.appendChild(annoDelHandle(x1, top, ()=>removeAnno("groups",grp.id)));
     g.appendChild(iconHandle(x0, top, "ic-collapse", ()=>toggleCollapse(grp)));
   }
@@ -7340,7 +7374,7 @@ function promoteSub(id){
 let drag=null;
 function onNodeDown(ev,n){ if(!editable()||state.linkingFrom) return;
   if(state.tool==="group"){ startGroupSel(ev); return; }
-  if(state.tool==="comment"){ placeComment(ev); return; }
+  if(state.tool==="comment"){ return; }   // note mode: adds come only from the hover menu, never a body-click
   if(n.parentId){ const p=state.model.nodes.find(x=>x.id===n.parentId); if(p) n=p; }  // dragging a sub-step moves the whole frame
   ev.preventDefault();
   const svg=$("#canvas"),rect=svg.getBoundingClientRect(),z=Z();
@@ -7579,7 +7613,9 @@ function setTool(t){
   if(t==="pan"||t==="select") t="cursor";   // legacy ids from older call sites
   const prev=state.tool;
   if(t==="cursor"||t==="connect"){ state.tool=t; state.baseTool=t; }
-  else if(t==="group"||t==="comment"){ state.tool=t; }
+  else if(t==="group"||t==="comment"){ state.tool=t;
+    // note mode only makes sense with notes visible — force them on so adds and the picker show
+    if(t==="comment" && state.model && !showNotes()){ state.model.settings=state.model.settings||{}; state.model.settings.showNotes=true; } }
   else { state.tool=state.baseTool||"cursor"; }
   $("#paletteBar").querySelectorAll("[data-tool]").forEach(b=>b.classList.toggle("tool-on", b.dataset.tool===state.tool));
   document.body.classList.toggle("tool-group", state.tool==="group");
@@ -7768,16 +7804,44 @@ function placeComment(ev){ ev.preventDefault(); const p=svgPt(ev);
   const c={id:uid("cmt"), x:Math.max(0,p.x-100), y:Math.max(0,p.y-60), w:200, h:120, text:"", type:"note"};
   const hit=groupHits(p.x,p.y,p.x,p.y).find(n=>n.type==="touch"||n.type==="wait");
   if(hit){ c.nodeId=hit.id; state._notesOpen.add(hit.id); }
-  state.model.comments.push(c); setTool(null);
+  state.model.comments.push(c);   // note mode stays armed (exclusive mode) until you switch tools
   state._notePick={cid:c.id, stage:"type", thenEdit:true};
   annoDone(); render(); }
-/* the card's "+" note control (and the stack's ghost row): new attached note → type picker → typing */
-function addNoteToNode(n){
-  const c={id:uid("cmt"), x:n.x, y:n.y, w:200, h:120, text:"", type:"note", nodeId:n.id};
+/* the card's "+" note control (and the stack's ghost row): new attached note → type picker → typing.
+   With a presetType (the note-tool hover menu) the type is already chosen: Waste jumps to its subtype
+   row, everything else drops straight into typing the note. */
+function addNoteToNode(n, presetType){
+  const c={id:uid("cmt"), x:n.x, y:n.y, w:200, h:120, text:"", type:presetType||"note", nodeId:n.id};
   state.model.comments.push(c);
   if(!state._notesOpen.has(n.id)) state._notesOpen.add(n.id);
-  state._notePick={cid:c.id, stage:"type", thenEdit:true};
+  if(presetType==="waste"){ state._notePick={cid:c.id, stage:"subtype", thenEdit:true}; }
+  else if(presetType){ state._notePick=null; state._editComment=c.id; }
+  else state._notePick={cid:c.id, stage:"type", thenEdit:true};
   annoDone(); render(); }
+/* note-tool hover menu: the four type chips floated in the middle of a step; a pick attaches a note */
+function noteHoverMenu(n, cx, cy){
+  const g=el("g",{class:"note-hovermenu"});
+  const keys=Object.keys(NOTE_TYPES), CH=30, GAP=8;
+  const W=keys.length*CH+(keys.length-1)*GAP, H=CH+22;
+  const x0=cx-W/2, y0=cy-H/2;
+  g.appendChild(el("rect",{class:"nhm-plate",x:x0-9,y:y0-9,width:W+18,height:H+18,rx:12}));
+  const lbl=el("text",{class:"nhm-lbl",x:cx,y:y0+CH+15,"text-anchor":"middle","font-size":"10.5","font-weight":"700"});
+  lbl.textContent="Add a note";
+  keys.forEach((tk,i)=>{
+    const NT=NOTE_TYPES[tk], x=x0+i*(CH+GAP);
+    const chip=el("g",{class:"nhm-chip"});
+    const r=el("rect",{x,y:y0,width:CH,height:CH,rx:8}); r.style.fill=NT.fill; r.style.stroke=NT.line;
+    chip.appendChild(r);
+    chip.appendChild(useIc(NT.ic, x+7, y0+7, CH-14, NT.ink));
+    chip.addEventListener("mouseenter",()=>{ lbl.textContent=NT.label; });
+    chip.addEventListener("mousedown",ev=>ev.stopPropagation());
+    chip.addEventListener("click",ev=>{ ev.stopPropagation(); addNoteToNode(n, tk); });
+    g.appendChild(chip);
+  });
+  g.addEventListener("mouseleave",()=>{ lbl.textContent="Add a note"; });
+  g.appendChild(lbl);
+  return g;
+}
 
 /* transient type-picker: a chip row floating above the note — stage "type" offers the four
    note types; picking Waste reveals the subtype row (leading plain-waste chip = skip) */
