@@ -1506,6 +1506,7 @@
   <span class="pb-label">View</span>
   <button id="flowToggle" class="pb-ico" data-tip="Case flow" data-tipd="Show case volume and branch splits on the arrows — line thickness follows the flow."><svg class="t-ic"><use href="#ic-flow"/></svg></button>
   <button id="notesToggle" class="pb-ico" data-tip="Notes" data-tipd="Show notes, frustrations and waste flags on the map."><svg class="t-ic"><use href="#ic-nt-note"/></svg></button>
+  <button id="toolsToggle" class="pb-ico" data-tip="Tools" data-tipd="Show each step's automation tool (UiPath, Copilot, Excel…) as a logo in its top-right corner."><svg class="t-ic"><use href="#ic-bot"/></svg></button>
   <span class="pb-sep"></span>
   <span class="pb-label">Layout</span>
   <div class="pb-seg" id="layoutSeg">
@@ -4761,6 +4762,7 @@ function render(){
   document.querySelectorAll("[data-cardview]").forEach(b=>b.classList.toggle("tool-on",b.dataset.cardview===view()));
   { const ft=$("#flowToggle"); if(ft) ft.classList.toggle("tool-on",(state.model.settings&&state.model.settings.showFlow)!==false); }
   { const nt=$("#notesToggle"); if(nt) nt.classList.toggle("tool-on",showNotes()); }
+  { const tt=$("#toolsToggle"); if(tt){ tt.classList.toggle("tool-on",showTools()); tt.style.display=toolViews()?"":"none"; } }
   { const lm=layoutMode();
     [["freeArrange","free"],["autoArrange","flow"],["laneArrange","lanes"]].forEach(([id,mode])=>{
       const b=$("#"+id); if(b) b.classList.toggle("tool-on", lm===mode); }); }
@@ -5291,6 +5293,10 @@ const CARD_W=236, CARD_H=156, TITLE_X=44;
 const VIEW_DIMS={ metrics:{w:236,h:156}, gaps:{w:236,h:156}, people:{w:236,h:118}, value:{w:236,h:156}, compact:{w:170,h:56} };
 const view  = () => (state.model&&state.model.settings&&state.model.settings.cardView)||"value";
 const showNotes = () => !state.model || (state.model.settings&&state.model.settings.showNotes)!==false;
+// automation-tool logo (top-right of a step) — universal across value/metrics/gaps, default on
+const showTools = () => !state.model || (state.model.settings&&state.model.settings.showTools)!==false;
+const toolViews = () => view()==="value"||view()==="metrics"||view()==="gaps";
+const hasToolBadge = n => showTools() && toolViews() && n.type!=="wait" && n.tool && TOOL_IC[n.tool];
 const viewW = () => VIEW_DIMS[view()].w;
 /* ---- sub-steps: a touch step can hold child steps (granularity control) ----
    Children are full nodes flagged with parentId; they carry NO edges — arrows always
@@ -5370,6 +5376,17 @@ const VAL_IC    = {VA:"ic-val-value", NNVA:"ic-val-necessary", NVA:"ic-val-waste
 const VAL_COLOR = {VA:"var(--va)", NNVA:"var(--nnva)", NVA:"var(--nva)", MIXED:"var(--vmixed)"};
 const TOOL_IC   = {uipath:"ic-tool-uipath", copilot:"ic-tool-copilot", excel:"ic-tool-excel"};
 const TOOL_NAME = {uipath:"UiPath", copilot:"Copilot", excel:"Excel"};
+/* automation-tool logo, top-right of a step card — shared across the value/metrics/gaps lenses.
+   Returns the width it reserves on the right (0 when nothing is drawn) so titles wrap clear of it. */
+function drawToolBadge(g, n, w, bt){
+  if(!hasToolBadge(n)) return 0;
+  const TW=26, tx=w-12-TW, ty=bt+12;
+  const r=el("rect",{class:"toolbadge",x:tx,y:ty,width:TW,height:TW,rx:7,fill:"#ffffff",stroke:"var(--line)","stroke-width":1});
+  const t=el("title"); t.textContent=TOOL_NAME[n.tool]||n.tool; r.appendChild(t);
+  g.appendChild(r);
+  g.appendChild(useIc(TOOL_IC[n.tool], tx+3, ty+3, TW-6));
+  return TW+12;   // badge width + right-edge gap
+}
 /* typed notes (comments): fixed identity colors like --cat-*, applied as inline style so they
    survive exports and beat the legacy .comment .cbox CSS rule */
 const NOTE_TYPES={
@@ -5429,9 +5446,10 @@ function nodeLayout(n){
   if(n.type==="touch" && hasSubs(n) && n.expanded){   // expanded meta step → wide frame holding its child cards
     return {w:frameWOf(n.children.length), h:SUB_HEAD+VD.h+SUB_PADF+10, mt, kind:"frame"};
   }
+  const tRes = hasToolBadge(n) ? 34 : 0;                                     // keep the title clear of the top-right tool logo
   const titleLines = view()==="compact"
-    ? [truncToWidth(n.label, VD.w-52, F_LABEL)]                              // compact: one truncated line
-    : wrapText(n.label, VD.w-TITLE_X-14, F_LABEL).slice(0,2);                // others: title clamps to 2 lines
+    ? [truncToWidth(n.label, VD.w-52, F_LABEL)]                              // compact: one truncated line (no tool badge)
+    : wrapText(n.label, VD.w-TITLE_X-14-tRes, F_LABEL).slice(0,2);           // others: title clamps to 2 lines, clear of the tool
   return {w:VD.w, h:VD.h, titleLines, mt, kind:"card"};
 }
 
@@ -6026,6 +6044,7 @@ function renderCanvas(r){
       const WELL=26;
       g.appendChild(el("rect",{x:12,y:bt+12,width:WELL,height:WELL,rx:7,fill:hue}));
       g.appendChild(useIc(ICON_FOR(n), 16, bt+16, WELL-8, "#0f1720"));
+      drawToolBadge(g,n,w,bt);   // automation-tool logo, top-right (Tools toggle)
       // inline-edit hit zone helper (editable mode only) — sits over a field, blocks drag, opens an editor on click
       const zone=(zx,zy,zw,zh,extra,on)=>{ if(!editable()) return;
         const rr=el("rect",{class:"vedit"+(extra?" "+extra:""),x:zx,y:zy,width:Math.max(24,zw),height:zh,rx:6});
@@ -6088,11 +6107,7 @@ function renderCanvas(r){
       const WELL=26;
       g.appendChild(el("rect",{x:12,y:bt+12,width:WELL,height:WELL,rx:7,fill:hue}));
       g.appendChild(useIc(ICON_FOR(n), 16, bt+16, WELL-8, "#0f1720"));
-      if(!isQ && n.tool && TOOL_IC[n.tool]){
-        const TW=26, tx2=w-12-TW, ty2=bt+12;
-        g.appendChild(el("rect",{x:tx2,y:ty2,width:TW,height:TW,rx:7,fill:"#ffffff",stroke:"var(--line)","stroke-width":1}));
-        g.appendChild(useIc(TOOL_IC[n.tool], tx2+3, ty2+3, TW-6));
-      }
+      drawToolBadge(g,n,w,bt);
       const ownerStr=(n.owner||"").trim();
       if(ownerStr){ const ot=truncToWidth(ownerStr.toUpperCase(), w-TITLE_X-30, F_META);
         g.appendChild(txt(TITLE_X,bt+20,ot,"nowner")); }
@@ -6186,12 +6201,8 @@ function renderCanvas(r){
       const WELL=26;
       g.appendChild(el("rect",{x:12,y:bt+12,width:WELL,height:WELL,rx:7,fill:hue}));
       g.appendChild(useIc(ICON_FOR(n), 16, bt+16, WELL-8, "#0f1720"));
-      // tool glyph (steps only) — top-right, mirrors the left icon-well; blank when no tool
-      if(!isQ && n.tool && TOOL_IC[n.tool]){
-        const TW=26, tx=w-12-TW, ty=bt+12;
-        g.appendChild(el("rect",{x:tx,y:ty,width:TW,height:TW,rx:7,fill:"#ffffff",stroke:"var(--line)","stroke-width":1}));
-        g.appendChild(useIc(TOOL_IC[n.tool], tx+3, ty+3, TW-6));
-      }
+      // tool glyph (steps only) — top-right, mirrors the left icon-well; gated by the Tools toggle
+      drawToolBadge(g,n,w,bt);
       // inline-edit hit zone (editable mode only) — mirrors the Value lens: a .vedit rect that
       // blocks drag and opens an editor / tooltip on click
       const zone=(zx,zy,zw,zh,on,tip)=>{ if(!editable()) return;
@@ -9253,6 +9264,10 @@ $("#flowToggle").onclick=()=>{ if(!state.model) return;
 $("#notesToggle").onclick=()=>{ if(!state.model) return;
   state.model.settings=state.model.settings||{};
   state.model.settings.showNotes=!showNotes(); render();
+};
+$("#toolsToggle").onclick=()=>{ if(!state.model) return;
+  state.model.settings=state.model.settings||{};
+  state.model.settings.showTools=!showTools(); render();
 };
 $("#simBtn").onclick=()=>{ state.simming?stopSim():startSim(0); };
 $("#simViewerBtn").onclick=()=>{ state.simming?stopSim():startSim(0); };
