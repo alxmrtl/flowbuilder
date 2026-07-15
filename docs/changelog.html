@@ -195,6 +195,10 @@ const TAGS = {
 };
 
 const HISTORY = [
+  { date: "2026-07-15", tag: "Views & Lenses", commit: "e12c2ed",
+    title: "Steps now hint at their type by shape, and decision points show their fork on every view",
+    body: "Cards used to all look the same rounded rectangle and only differed by colour. Now each type carries a subtle shape cue that peeks out from behind the card, so you can read a map at a glance without leaning on colour alone: a queue gets a faint cylinder (like a container things pile up in), a decision point gets a light diamond behind it, and an ordinary step stays a plain rectangle. The card itself, its size and everything on it are unchanged — the shape just shows around the edges. Alongside that, the little fork icon that marks a decision (a step where cases split more than one way) now appears on all of the card views, including the Value view where it was previously missing; it shows how many ways things split when that's known from the arrows. A step can also be marked as a decision directly, which is handy when importing. Finally, importing a Visio drawing now translates more shapes sensibly: decision diamonds come in as decision steps, databases / stored-data / inventory shapes become queues, and document or data shapes come in as steps with a note explaining what they were — so fewer things land in the \"unrecognised\" pile." },
+
   { date: "2026-07-15", tag: "Views & Lenses", commit: "0bad138",
     title: "A step's automation tool now shows in every lens — and you can switch it on or off",
     body: "If a step is done with a tool like UiPath, Copilot or Excel, its logo now sits in the same spot — the top-right corner of the card — whether you're looking at the Value, Metrics or Gaps view, instead of only appearing on one of them. A new \"Tools\" button in the View section (right after Notes) lets you show or hide those logos whenever you like, and it tucks itself away in views where it doesn't apply. And when a step's name is long, it now wraps onto a second line rather than running underneath the logo, so titles stay readable." },
