@@ -1,3 +1,6 @@
 .DS_Store
 mockups/
 samples/
+.agents/
+.claude/skills/
+skills-lock.json
