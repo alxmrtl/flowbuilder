@@ -3028,6 +3028,7 @@ function validateImportModel(obj){
     n.type = NODE_TYPES_OK.includes(n.type) ? n.type : "touch";
     if(typeof n.label!=="string"||!n.label.trim()) n.label = n.type==="wait"?"Queue":n.type==="start"?"Start":n.type==="end"?"End":"Step";
     if(n.performer!=="bot") delete n.performer;
+    if(n.decision) n.decision=true; else delete n.decision;   // decision-point flag: keep only when truthy
     if(n.classification!=null && !CLASS_OK.includes(n.classification)) delete n.classification;
     if(n.tool!=null && !TOOL_IC[n.tool]) delete n.tool;
     NUM_FIELDS.forEach(f=>{ if(n[f]!=null){ const v=Number(n[f]); if(Number.isFinite(v)) n[f]=v; else delete n[f]; } });
@@ -3259,15 +3260,17 @@ function vsdxPageToModel(page,baseName,multiPage){
     const m=s.master, ml=m.toLowerCase(), txt=s.text.toLowerCase();
     const n={ id:uid("n_"), label:s.text||m||"Step",
               x:snapG(s.pinX*S-NODE_W/2), y:snapG((pageH-s.pinY)*S-NODE_H/2) };
-    let unknown=false;
+    let unknown=false, docShape=false;
     if(/terminat|start\/end|\bstart\b|\bend\b/.test(ml)||(!m&&/^(start|begin|end|stop|finish)\b/.test(txt))){
       n.type=/end|stop|finish|complete|done|deliver|close/.test(txt)?"end"
         :/start|begin|open|trigger|receive|request/.test(txt)?"start"
         :!(inD[s.id])?"start":!(outD[s.id])?"end":"touch";   // mid-flow terminator → a step, not a wall
     }
-    else if(/decision/.test(ml)) n.type="touch";              // decisions become Human Steps; branch labels live on the edges
-    else if(/delay|wait|queue/.test(ml)) n.type="wait";
+    else if(/decision/.test(ml)){ n.type="touch"; n.decision=true; }  // decision shape → a step flagged as a branch point (renders the diamond + fork)
+    // delays plus stored-data / inventory read as a queue (things pile up and wait) — match before the document branch so "data store" doesn't fall through
+    else if(/delay|wait|queue|data\s*store|datastore|stored\s*data|database|\bdisk\b|internal storage|direct data|inventory|\bstore\b/.test(ml)) n.type="wait";
     else if(KNOWN.test(ml)) n.type="touch";
+    else if(/document|multi-?doc|\bdata\b|parallelogram/.test(ml)){ n.type="touch"; docShape=true; }  // I/O document/data → a step + a note flagging what it was
     else { n.type="touch"; unknown=true; }                     // custom/unknown stencil → generic step, nothing dropped
     /* Shape Data rows → metrics via aliases; anything unrecognized lands in valueNote verbatim */
     const noted=[];
@@ -3283,6 +3286,9 @@ function vsdxPageToModel(page,baseName,multiPage){
     if(unknown){
       report.unmapped.push({name:s.text||s.name||("shape "+s.id),master:m||"no master"});
       comments.push({ text:`Visio shape “${s.text||s.name||s.id}” (stencil “${m||"no master"}”) wasn't recognized — imported as a generic step so nothing was dropped.`,
+                      type:"note", nodeId:n.id });
+    } else if(docShape){
+      comments.push({ text:`Visio “${s.text||s.name||m||s.id}” was a document / data shape (stencil “${m||"no master"}”) — imported as a step; switch it to a queue if it's really a store.`,
                       type:"note", nodeId:n.id });
     }
     vidToNid[s.id]=n.id; nodes.push(n); report.steps++;
@@ -5900,23 +5906,44 @@ function renderCanvas(r){
 
   const txt=(x,y,str,cls,extra)=>{ const t=el("text",Object.assign({x,y,class:cls},extra||{})); t.textContent=str; return t; };
 
-  /* decision marker — auto: any card whose cases split ≥2 ways gets a double outline
-     (an intensification of the card's own hue, not a new shape); steps also get a fork badge */
-  const decorateDecision=(g,n,L,hue,bt,opts)=>{
-    if((outCount[n.id]||0)<2) return;
-    const o=opts||{};
-    g.appendChild(el("rect",{x:4,y:bt+4,width:L.w-8,height:L.h-8,rx:o.compact?8:10,fill:"none",
-      stroke:hue,"stroke-width":1,opacity:"0.45","pointer-events":"none"}));
-    if(o.badge && n.type==="touch"){
-      const bx=L.w-38, by=bt+L.h-9, cnt=outCount[n.id];
-      const bg=el("g",{class:"decbadge"});
-      bg.appendChild(el("rect",{x:bx,y:by,width:30,height:18,rx:6,fill:hue}));
-      bg.appendChild(el("path",{d:`M${bx+5},${by+9} h5 M${bx+10},${by+9} L${bx+16},${by+4.5} M${bx+10},${by+9} L${bx+16},${by+13.5}`,
-        stroke:"#0f1720","stroke-width":1.8,fill:"none","stroke-linecap":"round"}));
-      bg.appendChild(txt(bx+25,by+13,String(cnt),"",{fill:"#0f1720","font-size":"9.5","font-weight":"800","text-anchor":"middle"}));
-      const tip=el("title"); tip.textContent=`Decision — cases split ${cnt} ways from here`;
-      bg.appendChild(tip); g.appendChild(bg);
+  /* a step reads as a decision when its cases split ≥2 ways (from the edges) or it's
+     explicitly flagged n.decision (e.g. a Visio Decision shape before its edges resolve) */
+  const isDecision = n => (outCount[n.id]||0)>=2 || !!n.decision;
+
+  /* subtle type silhouette drawn BEHIND the card body: the opaque .nbox covers the
+     middle, so only the shape's edges peek out — queue = cylinder caps, decision =
+     light diamond, action = nothing. Pure SVG so it survives exports. */
+  const drawCardShape=(g,n,L,hue,bt)=>{
+    const w=L.w, h=L.h, cx=w/2, cy=bt+h/2;
+    if(n.type==="wait"){                        // cylinder: elliptical caps peek above top & below bottom
+      const rx=w/2-6, ry=7;
+      const cap=cyy=>el("ellipse",{cx,cy:cyy,rx,ry,fill:hue,"fill-opacity":"0.13",
+        stroke:hue,"stroke-opacity":"0.4","stroke-width":1,"pointer-events":"none"});
+      g.appendChild(cap(bt)); g.appendChild(cap(bt+h));
+    } else if(isDecision(n)){                    // diamond: four points peek past the card's mid-edges
+      const dx=w/2+9, dy=h/2+9;
+      g.appendChild(el("path",{d:`M${cx},${cy-dy} L${cx+dx},${cy} L${cx},${cy+dy} L${cx-dx},${cy} Z`,
+        fill:hue,"fill-opacity":"0.10",stroke:hue,"stroke-opacity":"0.4","stroke-width":1,"pointer-events":"none"}));
     }
+  };
+
+  /* decision fork badge (steps only): a small fork glyph on any decision card, on every
+     lens; the split count rides along when it's known from the edges. Placement is
+     collision-aware — bottom-right by default, top-right on the value lens (its footer
+     row is taken by the classification chip + time badge). */
+  const decorateDecision=(g,n,L,hue,bt,opts)=>{
+    if(!isDecision(n) || n.type!=="touch") return;
+    const o=opts||{};
+    const cnt=outCount[n.id]||0, showCnt=cnt>=2, bw=showCnt?30:20;
+    let bx=L.w-8-bw, by=bt+L.h-9;
+    if(o.topRight){ by=bt+8; bx=(hasToolBadge(n)?L.w-12-26-8:L.w-12)-bw; }
+    const bg=el("g",{class:"decbadge"});
+    bg.appendChild(el("rect",{x:bx,y:by,width:bw,height:18,rx:6,fill:hue}));
+    bg.appendChild(el("path",{d:`M${bx+5},${by+9} h5 M${bx+10},${by+9} L${bx+16},${by+4.5} M${bx+10},${by+9} L${bx+16},${by+13.5}`,
+      stroke:"#0f1720","stroke-width":1.8,fill:"none","stroke-linecap":"round"}));
+    if(showCnt) bg.appendChild(txt(bx+25,by+13,String(cnt),"",{fill:"#0f1720","font-size":"9.5","font-weight":"800","text-anchor":"middle"}));
+    const tip=el("title"); tip.textContent=showCnt?`Decision — cases split ${cnt} ways from here`:"Decision point"; bg.appendChild(tip);
+    g.appendChild(bg);
   };
 
   // attached notes indexed once per render (badge + stack lookups stay O(1) per node)
@@ -5983,8 +6010,9 @@ function renderCanvas(r){
       }
     } else if(L.kind==="card" && view()==="compact"){ // compact lens: icon + name only
       const isQ=n.type==="wait", hue=typeHue(n);
+      drawCardShape(g,n,L,hue,bt);
       g.appendChild(el("rect",{class:"nbox",x:0,y:bt,width:w,height:L.h,rx:12,fill:col.fill,stroke:hue,"stroke-width":1.5}));
-      decorateDecision(g,n,L,hue,bt,{compact:true});
+      decorateDecision(g,n,L,hue,bt);
       g.appendChild(el("rect",{x:8,y:bt+17,width:22,height:22,rx:6,fill:hue}));
       g.appendChild(useIc(ICON_FOR(n), 11, bt+20, 16, "#0f1720"));
       g.appendChild(txt(38,bt+32,L.titleLines[0],"nlabel"));
@@ -6000,6 +6028,7 @@ function renderCanvas(r){
       }
     } else if(L.kind==="card" && view()==="people"){ // people & tools lens: who does it, with what
       const isQ=n.type==="wait", hue=typeHue(n);
+      drawCardShape(g,n,L,hue,bt);
       g.appendChild(el("rect",{class:"nbox",x:0,y:bt,width:w,height:L.h,rx:14,fill:col.fill,stroke:hue,"stroke-width":1.5}));
       decorateDecision(g,n,L,hue,bt);
       const WELL=26;
@@ -6039,8 +6068,9 @@ function renderCanvas(r){
     } else if(L.kind==="card" && view()==="value"){ // value / Lean lens: the waste-hunting view
       const isQ=n.type==="wait", hue=typeHue(n);
       const bandC = isQ ? "var(--wait)" : (n.classification?VAL_COLOR[n.classification]:"var(--faint)");
+      drawCardShape(g,n,L,hue,bt);
       g.appendChild(el("rect",{class:"nbox",x:0,y:bt,width:w,height:L.h,rx:14,fill:col.fill,stroke:hue,"stroke-width":1.5}));
-      decorateDecision(g,n,L,hue,bt);
+      decorateDecision(g,n,L,hue,bt,{topRight:true});
       const WELL=26;
       g.appendChild(el("rect",{x:12,y:bt+12,width:WELL,height:WELL,rx:7,fill:hue}));
       g.appendChild(useIc(ICON_FOR(n), 16, bt+16, WELL-8, "#0f1720"));
@@ -6102,8 +6132,9 @@ function renderCanvas(r){
         g.appendChild(chip); }
     } else if(L.kind==="card" && view()==="gaps"){ // gaps lens: required vs available, in raw numbers
       const isQ=n.type==="wait", hue=typeHue(n), isBot=n.performer==="bot";
+      drawCardShape(g,n,L,hue,bt);
       g.appendChild(el("rect",{class:"nbox",x:0,y:bt,width:w,height:L.h,rx:14,fill:col.fill,stroke:hue,"stroke-width":1.5}));
-      decorateDecision(g,n,L,hue,bt,{badge:true});
+      decorateDecision(g,n,L,hue,bt);
       const WELL=26;
       g.appendChild(el("rect",{x:12,y:bt+12,width:WELL,height:WELL,rx:7,fill:hue}));
       g.appendChild(useIc(ICON_FOR(n), 16, bt+16, WELL-8, "#0f1720"));
@@ -6195,8 +6226,9 @@ function renderCanvas(r){
       }
     } else { // uniform card — split columns: primary (quantity/rate) | time, each with the minor metrics that explain it
       const isQ=n.type==="wait", isBot=n.performer==="bot", hue=typeHue(n);
+      drawCardShape(g,n,L,hue,bt);
       g.appendChild(el("rect",{class:"nbox",x:0,y:bt,width:w,height:L.h,rx:14,fill:col.fill,stroke:hue,"stroke-width":1.5}));
-      decorateDecision(g,n,L,hue,bt,{badge:true});
+      decorateDecision(g,n,L,hue,bt);
       // type icon-well
       const WELL=26;
       g.appendChild(el("rect",{x:12,y:bt+12,width:WELL,height:WELL,rx:7,fill:hue}));
