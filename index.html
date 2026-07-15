@@ -5821,6 +5821,40 @@ function renderCanvas(r){
       (bins[fb+"|"+ts]=bins[fb+"|"+ts]||[]).push({tag:e.id+"|t", c:(ts==="left"||ts==="right")?aY:aX}); });
     Object.values(bins).forEach(list=>{ list.sort((p,q)=>p.c-q.c); const k=list.length;
       list.forEach((it,i)=>{ fanFrac[it.tag]= k===1?0.5 : 0.2+0.6*(i+0.5)/k; }); }); }
+  /* a step reads as a decision when its cases split ≥2 ways (from the edges) or it's
+     explicitly flagged n.decision (e.g. a Visio Decision shape before its edges resolve) */
+  const isDecision = n => (outCount[n.id]||0)>=2 || !!n.decision;
+
+  /* type silhouette drawn in its OWN layer BEHIND the edges (so connectors always sit on
+     top) and behind the opaque card body — queue = stacked-backlog cards peeking out,
+     decision = a shaded diamond frame whose points peek past the card. Pure SVG (exports). */
+  const drawCardShape=(g,n,L,hue,bt)=>{
+    const w=L.w, h=L.h, rx=(view()==="compact"?12:14);
+    if(n.type==="wait"){                        // stacked backlog: two cards behind → a pile of waiting work
+      g.appendChild(el("rect",{x:16,y:bt+16,width:w,height:h,rx,fill:"var(--panel2)",
+        stroke:hue,"stroke-opacity":"0.4","stroke-width":1.3,"pointer-events":"none"}));
+      g.appendChild(el("rect",{x:8,y:bt+8,width:w,height:h,rx,fill:"var(--panel2)",
+        stroke:hue,"stroke-opacity":"0.6","stroke-width":1.4,"pointer-events":"none"}));
+    } else if(isDecision(n)){                    // decision: a shaded diamond frame, its points peeking past the card
+      const cx=w/2, cy=bt+h/2, dx=w/2+16, dy=h/2+16;
+      g.appendChild(el("path",{d:`M${cx},${cy-dy} L${cx+dx},${cy} L${cx},${cy+dy} L${cx-dx},${cy} Z`,
+        fill:hue,"fill-opacity":"0.12",stroke:hue,"stroke-opacity":"0.55","stroke-width":1.2,"pointer-events":"none"}));
+    }
+  };
+
+  // card silhouettes (queue = stacked backlog, decision = shaded diamond) get their own layer
+  // appended here — after the groups, BEFORE the edges — so connectors always draw on top of them
+  { const shapeLayer=el("g",{id:"cardShapes"});
+    m.nodes.forEach(n=>{
+      if(hidden.has(n.id)) return;
+      if(n.parentId){ const p=byId[n.parentId]; if(!p||!p.expanded||!(p.children||[]).includes(n.id)) return; }
+      const L=lay[n.id]; if(!L || L.kind!=="card" || isLinkNode(n)) return;
+      if(n.type!=="wait" && !isDecision(n)) return;                 // only queues + decisions carry a silhouette
+      const wrap=el("g",{transform:`translate(${n.x},${n.y})`});
+      drawCardShape(wrap,n,L,typeHue(n),L.bt);
+      shapeLayer.appendChild(wrap);
+    });
+    svg.appendChild(shapeLayer); }
   m.edges.forEach(e=>{
     // resolve endpoints through collapsed groups: a hidden member routes to its group card
     const fa=resolveEndpoint(e.from), fb=resolveEndpoint(e.to);
@@ -5906,37 +5940,13 @@ function renderCanvas(r){
 
   const txt=(x,y,str,cls,extra)=>{ const t=el("text",Object.assign({x,y,class:cls},extra||{})); t.textContent=str; return t; };
 
-  /* a step reads as a decision when its cases split ≥2 ways (from the edges) or it's
-     explicitly flagged n.decision (e.g. a Visio Decision shape before its edges resolve) */
-  const isDecision = n => (outCount[n.id]||0)>=2 || !!n.decision;
-
-  /* subtle type silhouette drawn BEHIND the card body: the opaque .nbox covers the
-     middle, so only the shape's edges peek out — queue = cylinder caps, decision =
-     light diamond, action = nothing. Pure SVG so it survives exports. */
-  const drawCardShape=(g,n,L,hue,bt)=>{
-    const w=L.w, h=L.h, cx=w/2, cy=bt+h/2;
-    if(n.type==="wait"){                        // cylinder: elliptical caps peek above top & below bottom
-      const rx=w/2-6, ry=7;
-      const cap=cyy=>el("ellipse",{cx,cy:cyy,rx,ry,fill:hue,"fill-opacity":"0.13",
-        stroke:hue,"stroke-opacity":"0.4","stroke-width":1,"pointer-events":"none"});
-      g.appendChild(cap(bt)); g.appendChild(cap(bt+h));
-    } else if(isDecision(n)){                    // diamond: four points peek past the card's mid-edges
-      const dx=w/2+9, dy=h/2+9;
-      g.appendChild(el("path",{d:`M${cx},${cy-dy} L${cx+dx},${cy} L${cx},${cy+dy} L${cx-dx},${cy} Z`,
-        fill:hue,"fill-opacity":"0.10",stroke:hue,"stroke-opacity":"0.4","stroke-width":1,"pointer-events":"none"}));
-    }
-  };
-
-  /* decision fork badge (steps only): a small fork glyph on any decision card, on every
-     lens; the split count rides along when it's known from the edges. Placement is
-     collision-aware — bottom-right by default, top-right on the value lens (its footer
-     row is taken by the classification chip + time badge). */
-  const decorateDecision=(g,n,L,hue,bt,opts)=>{
+  /* decision fork badge (steps only): a small fork glyph pinned to the bottom-right
+     corner — sitting on the edge of the card — the SAME in every lens. The split count
+     rides along when it's known from the edges. */
+  const decorateDecision=(g,n,L,hue,bt)=>{
     if(!isDecision(n) || n.type!=="touch") return;
-    const o=opts||{};
     const cnt=outCount[n.id]||0, showCnt=cnt>=2, bw=showCnt?30:20;
-    let bx=L.w-8-bw, by=bt+L.h-9;
-    if(o.topRight){ by=bt+8; bx=(hasToolBadge(n)?L.w-12-26-8:L.w-12)-bw; }
+    const bx=L.w-bw-3, by=bt+L.h-18-3;   // hug the bottom-right corner, on the edge
     const bg=el("g",{class:"decbadge"});
     bg.appendChild(el("rect",{x:bx,y:by,width:bw,height:18,rx:6,fill:hue}));
     bg.appendChild(el("path",{d:`M${bx+5},${by+9} h5 M${bx+10},${by+9} L${bx+16},${by+4.5} M${bx+10},${by+9} L${bx+16},${by+13.5}`,
@@ -6010,7 +6020,6 @@ function renderCanvas(r){
       }
     } else if(L.kind==="card" && view()==="compact"){ // compact lens: icon + name only
       const isQ=n.type==="wait", hue=typeHue(n);
-      drawCardShape(g,n,L,hue,bt);
       g.appendChild(el("rect",{class:"nbox",x:0,y:bt,width:w,height:L.h,rx:12,fill:col.fill,stroke:hue,"stroke-width":1.5}));
       decorateDecision(g,n,L,hue,bt);
       g.appendChild(el("rect",{x:8,y:bt+17,width:22,height:22,rx:6,fill:hue}));
@@ -6028,7 +6037,6 @@ function renderCanvas(r){
       }
     } else if(L.kind==="card" && view()==="people"){ // people & tools lens: who does it, with what
       const isQ=n.type==="wait", hue=typeHue(n);
-      drawCardShape(g,n,L,hue,bt);
       g.appendChild(el("rect",{class:"nbox",x:0,y:bt,width:w,height:L.h,rx:14,fill:col.fill,stroke:hue,"stroke-width":1.5}));
       decorateDecision(g,n,L,hue,bt);
       const WELL=26;
@@ -6068,9 +6076,8 @@ function renderCanvas(r){
     } else if(L.kind==="card" && view()==="value"){ // value / Lean lens: the waste-hunting view
       const isQ=n.type==="wait", hue=typeHue(n);
       const bandC = isQ ? "var(--wait)" : (n.classification?VAL_COLOR[n.classification]:"var(--faint)");
-      drawCardShape(g,n,L,hue,bt);
       g.appendChild(el("rect",{class:"nbox",x:0,y:bt,width:w,height:L.h,rx:14,fill:col.fill,stroke:hue,"stroke-width":1.5}));
-      decorateDecision(g,n,L,hue,bt,{topRight:true});
+      decorateDecision(g,n,L,hue,bt);
       const WELL=26;
       g.appendChild(el("rect",{x:12,y:bt+12,width:WELL,height:WELL,rx:7,fill:hue}));
       g.appendChild(useIc(ICON_FOR(n), 16, bt+16, WELL-8, "#0f1720"));
@@ -6108,7 +6115,9 @@ function renderCanvas(r){
         onCommit:v=>{ n.valueNote=v||undefined; } }));
       // footer — rating / status, pinned to the bottom, sharing its row with the time badge on the right
       const tstr = isQ ? (mt.wait!=null?`${fmt(mt.wait)} ${unit()}`:"") : (mt.touch!=null?`${fmt(mt.touch)} ${unit()}`:"");
-      const footerY=bt+L.h-24, footerMaxW = w-24-(tstr?measure(tstr,F_META)+10:0);
+      // a decision card carries the fork badge in the bottom-right corner — keep the footer clear of it
+      const badgeW = (isDecision(n)&&n.type==="touch") ? (((outCount[n.id]||0)>=2?30:20)+8) : 0;
+      const footerY=bt+L.h-24, footerMaxW = w-24-(tstr?measure(tstr,F_META)+10:0)-badgeW;
       if(isQ){
         const qtext=truncToWidth("⏳ WAITING — NO VALUE ADDED",footerMaxW,`800 10.5px ${FONT_STACK}`);
         g.appendChild(txt(12,footerY+14,qtext,"",{fill:"var(--wait)","font-size":"10.5","font-weight":"800","letter-spacing":".5"}));
@@ -6122,7 +6131,7 @@ function renderCanvas(r){
         g.appendChild(txt(12,footerY+14,utext,"",{fill:"var(--warn)","font-size":"11","font-weight":"800","letter-spacing":".5"}));
         zone(8, footerY, 12+measure(utext,`800 11px ${FONT_STACK}`), 20, "pick", ()=>cycleValue(n));
       }
-      if(tstr) g.appendChild(txt(w-12,bt+L.h-10,tstr,"nmeta",{"text-anchor":"end"}));
+      if(tstr) g.appendChild(txt(w-12-badgeW,bt+L.h-10,tstr,"nmeta",{"text-anchor":"end"}));
       if(!isQ && hasSubs(n)){ const chip=el("g",{class:"subchip"});
         const lbl3=`▸ ${n.children.length} SUB-STEPS`, cw3=30+lbl3.length*5.6;
         chip.appendChild(el("rect",{x:8,y:bt+L.h+6,width:cw3,height:18,rx:6,fill:hue}));
@@ -6132,7 +6141,6 @@ function renderCanvas(r){
         g.appendChild(chip); }
     } else if(L.kind==="card" && view()==="gaps"){ // gaps lens: required vs available, in raw numbers
       const isQ=n.type==="wait", hue=typeHue(n), isBot=n.performer==="bot";
-      drawCardShape(g,n,L,hue,bt);
       g.appendChild(el("rect",{class:"nbox",x:0,y:bt,width:w,height:L.h,rx:14,fill:col.fill,stroke:hue,"stroke-width":1.5}));
       decorateDecision(g,n,L,hue,bt);
       const WELL=26;
@@ -6226,7 +6234,6 @@ function renderCanvas(r){
       }
     } else { // uniform card — split columns: primary (quantity/rate) | time, each with the minor metrics that explain it
       const isQ=n.type==="wait", isBot=n.performer==="bot", hue=typeHue(n);
-      drawCardShape(g,n,L,hue,bt);
       g.appendChild(el("rect",{class:"nbox",x:0,y:bt,width:w,height:L.h,rx:14,fill:col.fill,stroke:hue,"stroke-width":1.5}));
       decorateDecision(g,n,L,hue,bt);
       // type icon-well
