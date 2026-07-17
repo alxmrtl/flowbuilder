@@ -1815,7 +1815,8 @@ const METRICS_SPEC = {
     worstRework: {l:"Most rework",       c:"quality",  u:"%",       d:"The step where the most work bounces back."},
     lostToRework:{l:"Lost to rework",    c:"quality",  u:"hrs/day", d:"Touch-time hours spent redoing work each day."}
   },
-  inputs:{ people:{l:"People"}, hoursPerDay:{l:"Hours per day"} },
+  inputs:{ people:{l:"People", d:"How many people work this step. With hours per day, it models what the step could get through."},
+           hoursPerDay:{l:"Hours per day", d:"Hours each person actually spends on this step in a day — not their whole shift."} },
   rels:[
     {f:["people","hoursPerDay","touch"],t:"capacity",   eq:"people × hours/day ÷ touch time",        d:"When nothing is measured, staffing models what a step could do."},
     {f:["capacity","rework"],           t:"effCapacity",eq:"capacity × (1 − rework %)",              d:"Rework eats capacity — redone work isn’t new work."},
@@ -1829,15 +1830,23 @@ const METRICS_SPEC = {
   ],
   prec:{
     dataSource:{ title:"Where a number comes from",
-      chips:["Measured — imported sheet","Observed — typed override","Modelled — people × hours"],
-      d:"When more than one source exists for the same number, the more real one wins." },
+      chips:["Measured — imported sheet","Entered — typed by you","Modelled — people × hours","Assumed — a default, shown with ≈"],
+      d:"When more than one source exists for the same number, the more real one wins. The cards use these same words, so you can always tell a measurement from an assumption." },
     bottleneckFlag:{ title:"Who gets the bottleneck flag",
       chips:["A step at or above the load threshold (default 80%)","The longest queue","(optional) the weakest link"],
       d:"One flag across the whole tool — a loaded step beats a long queue. Set the threshold on the Biggest bottleneck card, or turn on “always show the weakest step.”" }
   },
   explainer:{
     title:"Metrics explained",
-    intro:"Every number in Flow Builder answers one of three questions: how fast does work move (Speed), can the team keep up (Capacity), and how often is it right first time (Quality). The three are woven together — rework quietly drains capacity, capacity shapes waiting, and the slowest step sets everyone’s pace."
+    intro:"Every number in Flow Builder answers one of three questions: how fast does work move (Speed), can the team keep up (Capacity), and how often is it right first time (Quality). The three are woven together — rework quietly drains capacity, capacity shapes waiting, and the slowest step sets everyone’s pace.",
+    notes:[
+      {t:"Every number describes a typical day",
+       d:"Times, queues and rates are averages over a normal day — not a snapshot of this morning. Days are the yardstick because every other window is the same rate times a constant: a 2/day step is 10 a week and about 44 a month. Thinking in weeks or months adds arithmetic, not insight, so the tool stays on days and lets you multiply."},
+      {t:"An estimated wait assumes the queue settles",
+       d:"Where you haven’t set a wait, it’s the queue size divided by the next step’s pace (Little’s Law). That only holds while the next step can keep up. When more arrives than clears there is no steady size to average: the wait shown is how long the pile ahead of a case arriving today takes to drain, and the card marks it “growing” and says by how much, because tomorrow’s case waits longer."},
+      {t:"Assumed numbers are marked, not hidden",
+       d:"A number you typed or imported is shown in full strength. One worked out from those is quieter. One resting on an assumption — a default, or incoming work passing through a step with no capacity set — is fainter still and carries a “≈”. If a figure looks too good, check whether it’s an assumption waiting for your input."}
+    ]
   }
 };
 /* display label for a metric — a workspace vocabulary (state.vocab, org-chosen terms) wins over
@@ -4586,13 +4595,52 @@ function flowWeights(){
   }
   return {visits, order:order.map(id=>byId[id]).filter(Boolean), edgeFlow, edgeShare};
 }
+/* actual cases/day along each edge: incoming work enters at the Start step and is throttled at
+   every step by its effective capacity, so the arrow leaving a step shows what the step can
+   really push out — a step that can only do 2/day never feeds 4/day downstream.
+   The cap applies to CUMULATIVE inflow, not to each wave: capping wave-by-wave would let a
+   rework loop leak more than capacity out of an already-saturated step.
+   Rates are populated lazily — an edge with no entry was never reached from Start (renders "—"),
+   which is a different answer from a reached-but-choked 0/day. */
+function flowRates(m, demand, capOf, edgeShare){
+  const edgeRate={}, nodeIn={}, nodeOut={};
+  if(!m || !m.nodes.length || demand==null) return {edgeRate, nodeIn, nodeOut};
+  const start=m.nodes.find(n=>n.type==="start")||m.nodes[0]; if(!start) return {edgeRate, nodeIn, nodeOut};
+  const outOf=id=>{ const es=m.edges.filter(e=>e.from===id);
+    return es.map(e=>({id:e.id, to:e.to, w: edgeShare[e.id]!=null?edgeShare[e.id]:1/es.length})); };
+  const settle=id=>{ const cap=capOf(id);
+    nodeOut[id] = cap==null ? nodeIn[id] : Math.min(nodeIn[id], cap); return nodeOut[id]; };
+  const EPS=1e-6*Math.max(1,demand), CAP=2000;   // mass is now demand-scaled, not 1
+  let frontier={[start.id]:demand};
+  for(let guard=0; guard<CAP; guard++){
+    let live=0; const next={};
+    for(const id in frontier){ const f=frontier[id]; if(f<=0) continue;
+      live+=f; nodeIn[id]=(nodeIn[id]||0)+f;
+      const was=nodeOut[id]||0, delta=settle(id)-was;   // nodeIn only grows, so delta >= 0 — no oscillation
+      for(const o of outOf(id)){
+        if(edgeRate[o.id]==null) edgeRate[o.id]=0;      // reached: 0/day is an answer, undefined is not
+        const add=delta*o.w; if(add>0){ next[o.to]=(next[o.to]||0)+add; edgeRate[o.id]+=add; } } }
+    if(live<EPS) break;
+    frontier=next;
+    const rem=Object.values(next).reduce((a,b)=>a+b,0);
+    if(rem<EPS){ for(const id in next){ nodeIn[id]=(nodeIn[id]||0)+next[id]; settle(id); } break; }
+  }
+  return {edgeRate, nodeIn, nodeOut};
+}
+/* the "/day" chunk of an edge label. One definition for both the canvas label and the Tidy
+   width measure — they sit far apart and must not drift. */
+function edgeRateLabel(r, e, showFlow){
+  if(!showFlow || !r.cap || r.cap.demand==null) return null;
+  const rt=r.edgeRate?r.edgeRate[e.id]:null;
+  return rt==null ? "—" : fmt(rt)+"/day";   // no entry = never reached from Start
+}
 function rollup(){
   const path=mainPath();
   const em=engineModel();   // segment view: skipped steps spliced out; otherwise state.model itself
   const {visits, order, edgeFlow, edgeShare}=flowWeights();
   const S=state.model.settings||{};
   const demand = S.demand!=null && S.demand!=="" ? +S.demand : null;
-  let touch=0, wait=0, unclassified=0; const waits=[]; const flow=[]; const dw={}; const qOut={};
+  let touch=0, wait=0, unclassified=0; const waits=[]; const flow=[]; const dw={}; const qOut={}; const qGrow={};
   state.model.nodes.forEach(n=>{ if(n.type==="touch" && !n.classification && !n.excludeStats && !isLinkNode(n)) unclassified++; });
   /* capacity web — per on-path touch step: demand at the step, load vs effective capacity, pace.
      Loads use each step's own demand (incoming × visits), so rework loop-backs raise the load. */
@@ -4604,11 +4652,19 @@ function rollup(){
     if(stepDemand!=null && mt.effCapacity!=null && mt.effCapacity>0){ load=stepDemand/mt.effCapacity; modeled=true; }
     else if(mt.throughput!=null && mt.capacity!=null && mt.capacity>0) load=mt.throughput/mt.capacity;
     let pace=mt.throughput;
+    /* nothing real to cap against — the "output" is just incoming work passing through.
+       Flagged so the card can show it as an assumption rather than a measurement. */
+    const paceAssumed = mt.throughput==null && mt.effCapacity==null && stepDemand!=null;
     if(pace==null){ pace = stepDemand!=null && mt.effCapacity!=null ? Math.min(stepDemand,mt.effCapacity)
                          : (mt.effCapacity!=null ? mt.effCapacity : stepDemand); }
-    per[n.id]={demand:stepDemand, load, modeled, pace, effCap:mt.effCapacity};
+    per[n.id]={demand:stepDemand, load, modeled, pace, paceAssumed, effCap:mt.effCapacity};
     if(mt.effCapacity!=null){ const del=mt.effCapacity/v; flowCap = flowCap==null?del:Math.min(flowCap,del); }
     if(load!=null && (!busiest || load>busiest.load)) busiest={node:n, load}; });
+  /* what actually flows, capped step by step — the arrows and the delivered pill read this.
+     cap.flowCap stays the flow's *ceiling* (a different question) and keeps its own consumers. */
+  const rate = demand!=null
+    ? flowRates(em, demand, id=>{ const p=per[id]; return p && p.effCap!=null && p.effCap>0 ? p.effCap : null; }, edgeShare)
+    : null;
   /* downstream touch step of a queue (follow the highest-split edges) — for Little's Law waits */
   const byId=Object.fromEntries(em.nodes.map(n=>[n.id,n]));
   const downTouch=id=>{ let cur=id; for(let i=0;i<10;i++){ const es=em.edges.filter(e=>e.from===cur);
@@ -4630,6 +4686,13 @@ function rollup(){
       if(t&&!t.excludeStats){ const dm=metricFor(t);
         const dcap=dm.effCapacity!=null?dm.effCapacity:(dm.throughput!=null?dm.throughput:null);
         if(dcap!=null) qOut[n.id]=dcap; }
+      /* arrivals the next step can't absorb: the pile has no steady size, it grows every day.
+         The clear-time below still means something real — how long the pile ahead of a case
+         arriving TODAY takes to drain — so it keeps counting toward turnaround. What it is not
+         is a stable average: tomorrow's case waits longer. The card labels it "growing" and
+         shows by how much, rather than letting it read as a number that settles. */
+      const arriving = demand!=null ? demand*v : null;
+      if(arriving!=null && qOut[n.id]!=null && arriving>qOut[n.id]+1e-9) qGrow[n.id]=arriving-qOut[n.id];
       if(base==null && mt.wip!=null && mt.wip>0){   // time to clear the queue at today's pace
         if(dpace!=null && dpace>0){ base=(mt.wip/dpace)*CAL_PER_UNIT[unit()]; derived=true; dw[n.id]=base; } }
       if(base!=null && base>0){ const wt=v*base; wait+=wt;
@@ -4673,7 +4736,9 @@ function rollup(){
              any: demand!=null || flowCap!=null || byOwner.length>0};
   const qual={rft: rcount?rft:null, count:rcount, worst};
   const out={path, flow, touch, wait, turnaround, eff, waits, bottleneck, flag, unclassified, cap, qual, dw,
-          visits, edgeFlow, edgeShare, qOut};
+          visits, edgeFlow, edgeShare, qOut, qGrow,
+          /* null (not {}) when there is no incoming-work number — "not computed" is not "computed, zero" */
+          edgeRate: rate?rate.edgeRate:null, nodeIn: rate?rate.nodeIn:null, nodeOut: rate?rate.nodeOut:null};
   /* segments (org platform — phase 2): in the all-cases view of a segmented map, also run the
      engine once per segment (its route + overrides, same semantics throughout) and attach
      (a) the per-segment rollups and (b) the share-weighted "All cases" blend of the headline
@@ -5015,6 +5080,9 @@ function showMetricsModal(){
     ${web}
     <div class="mx-h">The rules, in plain words</div>
     <div class="mx-rules">${rules}</div>
+    <div class="mx-h">Reading these numbers</div>
+    <div class="mx-rules">${S.explainer.notes.map(nt=>
+      `<div class="mx-rule"><b>${esc(nt.t)}</b><span class="d">${esc(nt.d)}</span></div>`).join("")}</div>
     <div class="mx-h">When numbers compete</div>
     <div class="mx-prec">${strip("dataSource")}${strip("bottleneckFlag")}</div>`;
   $("#metricsOverlay").classList.add("show");
@@ -5427,7 +5495,8 @@ function useIc(id, x, y, size, color){
 }
 
 /* the key number on a terminal pill: Start = requests arriving per day (editable input),
-   End = cases actually completed per day (min of demand and the flow's ceiling). */
+   End = cases actually completed per day — what the arrows deliver here after every step's
+   capacity has had its say. Nothing arriving (nothing connected) reads "—", not the demand. */
 function pillMetric(n, r){
   const cap=(r&&r.cap)||{};
   if(n.type==="start"){
@@ -5436,10 +5505,15 @@ function pillMetric(n, r){
   }
   const demand=cap.demand, flowCap=cap.flowCap;
   let v=null;
-  if(demand!=null && flowCap!=null) v=Math.min(demand,flowCap);
+  if(demand!=null && r && r.nodeIn) v = r.nodeIn[n.id]!=null ? r.nodeIn[n.id] : null;   // null → "—"
   else if(flowCap!=null) v=flowCap;
   else if(demand!=null) v=demand;
-  return {eyebrow:"COMPLETED", value:v, unit:"/day", editable:false};
+  /* nothing on the way here has a capacity, so "delivered" is just the incoming work walking
+     through untouched — an assumption, not a result. Say so rather than bolding a guess. */
+  const assumed = v!=null && flowCap==null;
+  return {eyebrow:"COMPLETED", value:v, unit:"/day", editable:false, assumed,
+    tip: assumed ? ["Delivered — assumed","No step in the flow has a capacity yet, so this is just the incoming work passing through. Add People and Hours/day to a step to get a real number."]
+                 : ["Delivered","Cases completed per day — the incoming work after every step's capacity has had its say."]};
 }
 /* every work/queue node is the SAME uniform card; start/end stay terminal pills */
 function nodeLayout(n){
@@ -5906,8 +5980,9 @@ function renderCanvas(r){
     if(showFlow && branch && share!=null)
       parts.push([`${assumed?"≈":""}${Math.round(share*100)}%`, assumed?"var(--warn)":(share<=0?"var(--faint)":"var(--muted)"),"700"]);
     else if(!showFlow && e.splitPct!=null) parts.push([`${e.splitPct}%`,"var(--muted)","700"]);
-    const flowStr=showFlow && demandV!=null ? `${fmt(ef*demandV)}/day` : null;
-    if(flowStr) parts.push([flowStr, ef<=0?"var(--faint)":"var(--muted)","500"]);
+    const flowStr=edgeRateLabel(r,e,showFlow);
+    const rt=r.edgeRate?r.edgeRate[e.id]:null;
+    if(flowStr) parts.push([flowStr, (rt==null||rt<=0)?"var(--faint)":"var(--muted)","500"]);
     if(parts.length){
       const str=parts.map(p=>p[0]).join(" · ");
       const tw=measure(str,`600 10.5px ${FONT_STACK}`);
@@ -5929,7 +6004,8 @@ function renderCanvas(r){
         ts.textContent=(i?" · ":"")+p[0]; tl.appendChild(ts); });
       const tip=el("title");
       tip.textContent=assumed?"Assumed even split — no Split % set on this branch. Click to set the real share."
-        : branch?"Share of cases down this path":"Cases flowing along this arrow per day";
+        : branch?"Share of cases down this path"
+        : "Cases actually flowing along this arrow each day — what the step behind it can push out, not what wants in.";
       tl.appendChild(tip);
       if(editable()){ tl.style.pointerEvents="all"; tl.style.cursor="pointer";
         tl.addEventListener("mousedown",ev=>ev.stopPropagation());
@@ -5999,8 +6075,12 @@ function renderCanvas(r){
       const NUMF=`800 16px ${FONT_STACK}`, UF=`600 10px ${FONT_STACK}`;
       const numY=divY+31;
       if(pm.value!=null){
-        const vs=fmt(pm.value), nw=measure(vs,NUMF), uw=pm.unit?measure(pm.unit,UF)+3:0, sx=w/2-(nw+uw)/2;
-        g.appendChild(txt(sx+nw/2,numY,vs,"",{"font-size":"16","font-weight":"800","text-anchor":"middle",fill:"var(--ink)"}));
+        // an assumed figure reads "≈4" and quiet — the same tier the step cards use
+        const vs=(pm.assumed?"≈":"")+fmt(pm.value), nw=measure(vs,NUMF), uw=pm.unit?measure(pm.unit,UF)+3:0, sx=w/2-(nw+uw)/2;
+        const nt=txt(sx+nw/2,numY,vs,"",{"font-size":"16","font-weight":pm.assumed?"600":"800","text-anchor":"middle",
+          fill:pm.assumed?"var(--faint)":"var(--ink)","fill-opacity":pm.assumed?"0.72":"1"});
+        if(pm.tip){ nt.setAttribute("data-tip",pm.tip[0]); nt.setAttribute("data-tipd",pm.tip[1]); }
+        g.appendChild(nt);
         if(uw) g.appendChild(txt(sx+nw+3,numY,pm.unit,"nmeta",{"font-size":"10"}));
       } else {
         g.appendChild(txt(w/2,numY,editable()&&pm.editable?"＋ set":"—","nmeta",
@@ -6242,16 +6322,28 @@ function renderCanvas(r){
       g.appendChild(useIc(ICON_FOR(n), 16, bt+16, WELL-8, "#0f1720"));
       // tool glyph (steps only) — top-right, mirrors the left icon-well; gated by the Tools toggle
       drawToolBadge(g,n,w,bt);
+      /* hover explainer for a card field: [title, description] on the shared #tipPop.
+         Not a native SVG <title> — those can't be styled and fire on their own schedule. */
+      const setTip=(node,tip)=>{ if(node && tip && tip[0]){ node.setAttribute("data-tip",tip[0]);
+        if(tip[1]) node.setAttribute("data-tipd",tip[1]); } return node; };
       // inline-edit hit zone (editable mode only) — mirrors the Value lens: a .vedit rect that
-      // blocks drag and opens an editor / tooltip on click
+      // blocks drag and opens an editor on click. It covers the text it belongs to, so it has to
+      // carry that field's explainer too, or hovering an editable field would say nothing.
       const zone=(zx,zy,zw,zh,on,tip)=>{ if(!editable()) return;
         const rr=el("rect",{class:"vedit",x:zx,y:zy,width:Math.max(24,zw),height:zh,rx:6});
         rr.addEventListener("mousedown",ev=>ev.stopPropagation());
         rr.addEventListener("click",ev=>{ ev.stopPropagation(); on(); });
-        if(tip){ const t=el("title"); t.textContent=tip; rr.appendChild(t); }
+        setTip(rr, tip);
         g.appendChild(rr); };
-      const editField=(zx,zy,zw,zh,value,onCommit,ph,ml)=>zone(zx,zy,zw,zh,()=>editCardField({
-        x:n.x+zx, y:n.y+zy, w:zw, h:zh, value, multiline:ml, placeholder:ph, onCommit }), "Click to edit");
+      const editField=(zx,zy,zw,zh,value,onCommit,ph,ml,tip)=>zone(zx,zy,zw,zh,()=>editCardField({
+        x:n.x+zx, y:n.y+zy, w:zw, h:zh, value, multiline:ml, placeholder:ph, onCommit }),
+        tip || ["Click to edit"]);
+      /* A read-only field deserves the same comfortable hover target as an editable one — its
+         glyphs are 10px tall. Transparent, and it never stops propagation, so the card still drags.
+         Carries a class so the export CSS can drop it like the other interaction-only layers. */
+      const tipZone=(zx,zy,zw,zh,tip)=>{ if(!tip||!tip[0]) return;
+        const rr=el("rect",{class:"tipz",x:zx,y:zy,width:Math.max(24,zw),height:zh,rx:6,fill:"#000","fill-opacity":0});
+        setTip(rr,tip); g.appendChild(rr); };
       // owner eyebrow (small all-caps, above the title) — editable, with a "+ owner" hint when empty
       const ownerStr=(n.owner||"").trim();
       if(ownerStr){ const ot=truncToWidth(ownerStr.toUpperCase(), w-TITLE_X-30, F_META);
@@ -6267,48 +6359,71 @@ function renderCanvas(r){
       const NUMF=`800 21px ${FONT_STACK}`;
       const padL=12, midX=Math.round(w/2), colTop=bt+64, colW=midX-padL-12, rx=midX+12;
       g.appendChild(el("line",{x1:midX,y1:colTop-2,x2:midX,y2:bt+L.h-12,stroke:"var(--line)","stroke-width":1}));
-      // primary: tiny Speed/Capacity/Quality glyph + all-caps eyebrow + 21px number (+ unit).
-      // `calc` (tooltip text) marks a derived, read-only number — rendered quieter (lighter
-      // weight + reduced opacity) than the editable inputs, with a hover explainer.
-      const drawNum=(x,label,numStr,unitStr,numColor,cat,calc)=>{
+      /* Three tiers, one convention across every card — so you can tell at a glance which
+         numbers are real and which are still waiting on you:
+           entered — you typed it, or it came from an imported sheet: full weight
+           derived — computed from numbers that are themselves real: quieter
+           assumed — a stand-in (a default, or incoming work passing straight through): quieter
+                     AND faint, with the caller prefixing "≈" (same convention as assumed splits
+                     and estimated waits). An assumption must never look like a measurement.
+         Every field takes tip:[title, description] for the shared #tipPop explainer. */
+      const NUM_TIER={entered:["800","1"], derived:["600","0.72"], assumed:["600","0.72"]};
+      const ROW_TIER={entered:["700","1"],  derived:["400","0.68"], assumed:["400","0.68"]};
+      // primary: tiny Speed/Capacity/Quality glyph + all-caps eyebrow + 21px number (+ unit)
+      const drawNum=(x,label,numStr,unitStr,numColor,cat,o)=>{
+        const oo=o||{}, tier=oo.tier||"entered", tv=NUM_TIER[tier];
         let lx=x;
         if(cat){ g.appendChild(useIc(METRICS_SPEC.categories[cat].icon, x, colTop-4.5, 9, `var(--cat-${cat})`)); lx=x+13; }
         g.appendChild(txt(lx,colTop+4,truncToWidth(label,midX-padL-(cat?28:14),F_META),"nowner"));
-        const num=txt(x,colTop+26,numStr,"",{"font-size":"21","font-weight":calc?"600":"800",fill:numColor||"var(--ink)","fill-opacity":calc?"0.72":"1"});
-        if(calc){ const t=el("title"); t.textContent=calc; num.appendChild(t); }
+        const fill = numColor || (tier==="assumed" ? "var(--faint)" : "var(--ink)");
+        const num=txt(x,colTop+26,numStr,"",{"font-size":"21","font-weight":tv[0],fill,"fill-opacity":tv[1]});
+        setTip(num, oo.tip);
         g.appendChild(num);
         if(unitStr){ const nw=measure(numStr,NUMF);
           g.appendChild(txt(x+nw+5,colTop+26,unitStr,"nmeta",{"font-size":"10"})); }
+        tipZone(x-4, colTop-8, colW, 34, oo.tip);   // an editField, when there is one, layers over this
       };
       // minor "key ···· value" row beneath a primary — the driver metrics, small, with a faint dotted leader
       const F_ROW=`10px ${FONT_STACK}`, F_ROWB=`700 10px ${FONT_STACK}`, rowY0=colTop+44, rowH=12.5;
-      // opts.edit={value,ph,commit} → value becomes inline-editable; opts.calc=tooltip → derived,
-      // shown quieter (regular weight + reduced opacity) with a hover explainer
+      // o.edit={value,ph,commit} → value becomes inline-editable; o.tier picks the provenance style
       const drawRow=(colX,i,key,val,valColor,opts)=>{
-        const y=rowY0+i*rowH, vs=String(val), o=opts||{}, vw=measure(vs, o.calc?F_ROW:F_ROWB);
+        const y=rowY0+i*rowH, vs=String(val), o=opts||{}, tier=o.tier||"entered", tv=ROW_TIER[tier];
+        const vw=measure(vs, tier==="entered"?F_ROWB:F_ROW);
         g.appendChild(txt(colX,y,key,"",{"font-size":"10",fill:"var(--faint)"}));
-        const vt=txt(colX+colW,y,vs,"",{"font-size":"10","font-weight":o.calc?"400":"700","text-anchor":"end",fill:valColor||"var(--muted)","fill-opacity":o.calc?"0.68":"1"});
-        if(o.calc){ const t=el("title"); t.textContent=o.calc; vt.appendChild(t); }
+        const fill = valColor || (tier==="assumed" ? "var(--faint)" : "var(--muted)");
+        const vt=txt(colX+colW,y,vs,"",{"font-size":"10","font-weight":tv[0],"text-anchor":"end",fill,"fill-opacity":tv[1]});
+        setTip(vt, o.tip);
         g.appendChild(vt);
         const x1=colX+measure(key,F_ROW)+4, x2=colX+colW-vw-4;
         if(x2-x1>6) g.appendChild(el("line",{x1,y1:y-3,x2,y2:y-3,stroke:"var(--line)","stroke-width":1,"stroke-dasharray":"1 2.5"}));
-        if(o.edit) editField(colX, y-10, colW, 13, o.edit.value, o.edit.commit, o.edit.ph);
+        if(o.edit) editField(colX, y-10, colW, 13, o.edit.value, o.edit.commit, o.edit.ph, false, o.tip);
+        else tipZone(colX, y-10, colW, 13, o.tip);
       };
       const rowPct = p => p==null?"—":(p<1?"<1%":Math.round(p)+"%");
       // an inline numeric editor for a raw input field (blank when unset; ignores non-numeric)
       const numEdit=(field,ph)=>({value:n[field]!=null?String(n[field]):"", ph, commit:v=>{ n[field]=v===""?undefined:(isNaN(+v)?n[field]:+v); }});
       const measured = !!(n.stepId && rowsFor(n.stepId).length);   // backed by imported data → inputs are read-only
+      const mtip = id => [ML(id), METRICS_SPEC.metrics[id].d];      // a metric's own name + spec blurb
+      const IMPORTED=["Averaged from imported data","Edit it at the source sheet, not here."];
 
       // RIGHT = primary quantity/rate + its drivers
       if(isQ){
-        drawNum(rx,ML("wip").toUpperCase(), mt.wip!=null?fmt(mt.wip):"—","cases", mt.wip!=null?null:"var(--faint)","capacity", measured?"Averaged from imported data — edit at the source":null);
-        if(!measured) editField(rx-4, colTop-8, colW, 34, n.wip!=null?String(n.wip):"", v=>{ n.wip=v===""?undefined:(isNaN(+v)?n.wip:+v); }, "Items in queue");
+        drawNum(rx,ML("wip").toUpperCase(), mt.wip!=null?fmt(mt.wip):"—","cases", mt.wip!=null?null:"var(--faint)","capacity",
+          {tip: measured?IMPORTED:mtip("wip")});
+        if(!measured) editField(rx-4, colTop-8, colW, 34, n.wip!=null?String(n.wip):"", v=>{ n.wip=v===""?undefined:(isNaN(+v)?n.wip:+v); }, "Items in queue", false, mtip("wip"));
         const dmd=(state.model.settings&&state.model.settings.demand);
         const vv=(r.visits&&r.visits[n.id])||1;
         const arriving=dmd!=null?dmd*vv:null;
         const clears=(r.qOut&&r.qOut[n.id]!=null)?r.qOut[n.id]:null;
-        drawRow(rx,0,"Arriving",arriving!=null?fmt(arriving)+"/d":"—",null,{calc:"Cases reaching this queue each day — incoming work × how often a case passes here."});
-        drawRow(rx,1,"Clears",clears!=null?fmt(clears)+"/d":"—",clears!=null?"var(--ink)":"var(--muted)",{calc:"How fast the next step can drain this queue."});
+        const grow=(r.qGrow&&r.qGrow[n.id]!=null)?r.qGrow[n.id]:null;
+        drawRow(rx,0,"Arriving",arriving!=null?fmt(arriving)+"/d":"—",null,
+          {tier:"derived", tip:["Arriving","Cases reaching this queue each day — incoming work × how often a case passes here."]});
+        drawRow(rx,1,"Clears",clears!=null?fmt(clears)+"/d":"—",clears!=null?"var(--ink)":"var(--muted)",
+          {tier:"derived", tip:["Clears","How fast the next step can drain this queue."]});
+        /* more arrives than clears → the pile has no steady size, so say by how much it grows
+           rather than let the wait number imply it settles */
+        if(grow!=null) drawRow(rx,2,"Backlog","+"+fmt(grow)+"/day","var(--nva)",
+          {tier:"derived", tip:["Backlog is growing",`More arrives than clears, so the queue grows by about ${fmt(grow)} a day. There is no average wait to quote until the next step can keep up.`]});
       } else {
         // pace + load come from the metric web when it can derive them (demand × visits ÷ people × hours)
         const pc=(r.cap&&r.cap.per&&r.cap.per[n.id])||null;
@@ -6316,29 +6431,63 @@ function renderCanvas(r){
         const capV=mt.effCapacity!=null?mt.effCapacity:mt.capacity;
         const load=pc&&pc.load!=null?Math.max(0,pc.load):((tp!=null&&capV!=null&&capV>0)?Math.max(0,tp/capV):null);
         const lc=load==null?"var(--faint)":SEVC[load>=0.8?"hot":load>=0.6?"warn":"calm"].c;
-        drawNum(rx, ML("pace").toUpperCase(), tp!=null?fmt(tp):"—","/day", tp!=null?null:"var(--faint)","capacity", METRICS_SPEC.metrics.pace.d);
-        const capRow=(i)=>drawRow(rx,i,"Capacity",capV!=null?fmt(capV)+"/d":"—",capV!=null?"var(--ink)":"var(--muted)",{calc:METRICS_SPEC.metrics.capacity.d});
-        const loadRow=(i)=>drawRow(rx,i,"Load",load!=null?Math.round(load*100)+"%":"—",lc,{calc:METRICS_SPEC.metrics.load.d});
+        /* no capacity anywhere → "output" is only the incoming work walking through. Say so. */
+        const paceAssumed = !!(pc&&pc.paceAssumed) && !measured;
+        drawNum(rx, ML("pace").toUpperCase(), tp!=null?(paceAssumed?"≈"+fmt(tp):fmt(tp)):"—","/day",
+          tp!=null&&!paceAssumed?null:"var(--faint)","capacity",
+          {tier: paceAssumed?"assumed":(measured?"entered":"derived"),
+           tip: paceAssumed?["Output — assumed","No capacity set yet, so this is just the incoming work passing through. Add People and Hours/day to get a real number."]
+              : measured?IMPORTED : mtip("pace")});
+        const capRow=(i)=>drawRow(rx,i,"Capacity",capV!=null?fmt(capV)+"/d":"—",capV!=null?"var(--ink)":"var(--muted)",
+          {tier:"derived", tip:mtip("capacity")});
+        const loadRow=(i)=>drawRow(rx,i,"Load",load!=null?Math.round(load*100)+"%":"—",lc,
+          {tier:"derived", tip:mtip("load")});
         if(isBot){ capRow(0); loadRow(1); }
         else {
-          drawRow(rx,0,"People",n.people!=null?fmt(n.people):"—",null,{edit:numEdit("people","People")});
-          drawRow(rx,1,"Hours/day",fmt(n.hoursPerDay!=null?n.hoursPerDay:AVAIL_HRS)+"h",null,{edit:numEdit("hoursPerDay","Hours per day")});
+          drawRow(rx,0,"People",n.people!=null?fmt(n.people):"—",null,
+            {edit:numEdit("people","People"), tip:[METRICS_SPEC.inputs.people.l, METRICS_SPEC.inputs.people.d]});
+          /* Hours/day used to print a confident "6h" nobody typed. The 6 is only ever an
+             assumption, and only earns its place once People says someone is here to work it —
+             with nobody staffed there is nothing to assume about. */
+          const hSet=n.hoursPerDay!=null, hAssumed=!hSet && n.people!=null;
+          drawRow(rx,1,"Hours/day", hSet?fmt(n.hoursPerDay)+"h" : hAssumed?"≈"+fmt(AVAIL_HRS)+"h" : "—", null,
+            {edit:numEdit("hoursPerDay","Hours per day"), tier:hAssumed?"assumed":"entered",
+             tip: hAssumed?["Hours per day — assumed",`Nothing set, so Capacity is modelled on ${fmt(AVAIL_HRS)} hrs per person per day. Set your own to make it real.`]
+                : [METRICS_SPEC.inputs.hoursPerDay.l, METRICS_SPEC.inputs.hoursPerDay.d]});
           capRow(2); loadRow(3);
         }
       }
 
       // LEFT = time primary + its share of the flow's turnaround
       const dwv=isQ&&r.dw?r.dw[n.id]:null;
+      const growing=isQ&&r.qGrow&&r.qGrow[n.id]!=null;
       const time=isQ?(mt.wait!=null?mt.wait:dwv):mt.touch;
       const approx=isQ&&mt.wait==null&&dwv!=null;
       const info=tl[n.id]||{start:0,pct:0}, pct = time!=null ? info.pct : null;
-      const primCalc = measured ? "Averaged from imported data — edit at the source" : null;
-      drawNum(padL, (isQ?ML("wait"):ML("touch")).toUpperCase(), time!=null?(approx?"≈"+fmt(time):fmt(time)):"—", unit(), time!=null?null:"var(--faint)","speed", primCalc);
+      /* A growing queue's clear-time is real for a case arriving today, so it still shows and
+         still counts — but it is not an average that holds, and the card says which. */
+      const grew=growing?r.qGrow[n.id]:null;
+      const growTip=["Wait is growing",`This is how long the pile ahead of a case arriving today takes to clear. It is not a steady average — ${fmt(grew)} more cases arrive each day than clear, so tomorrow's wait is longer.`];
+      drawNum(padL, (isQ?ML("wait"):ML("touch")).toUpperCase(),
+        time!=null?(approx?"≈"+fmt(time):fmt(time)):"—",
+        unit(), time!=null?(growing?"var(--nva)":null):"var(--faint)","speed",
+        {tier: approx?"derived":"entered",
+         tip: growing?growTip : measured?IMPORTED : approx?mtip("derivedWait") : mtip(isQ?"wait":"touch")});
       if(!measured){ const field=isQ?"waitTimeManual":"touchTimeManual";
-        editField(padL-4, colTop-8, colW, 34, n[field]!=null?String(n[field]):"", v=>{ n[field]=v===""?undefined:(isNaN(+v)?n[field]:+v); }, `${isQ?"Wait":"Touch"} time (${unit()})`); }
-      drawRow(padL,0,"of turnaround",rowPct(pct),pct!=null?"var(--ink)":"var(--muted)",{calc:`${isQ?"Wait":"Touch"} time here as a share of the whole flow's turnaround.`});
-      if(isQ) drawRow(padL,1,"Basis",time==null?"—":(approx?"≈ estimate":"measured"),null,{calc:approx?"Estimated from queue size ÷ the next step's pace (Little's Law).":"Taken straight from the wait time you set."});
-      else drawRow(padL,1,"Rework",mt.rework!=null?fmt(mt.rework)+"%":"—",null, measured?{calc:"Averaged from imported data — edit at the source"}:{edit:numEdit("reworkPct","Rework %")});
+        editField(padL-4, colTop-8, colW, 34, n[field]!=null?String(n[field]):"", v=>{ n[field]=v===""?undefined:(isNaN(+v)?n[field]:+v); }, `${isQ?"Wait":"Touch"} time (${unit()})`, false, mtip(isQ?"wait":"touch")); }
+      drawRow(padL,0,"of turnaround",rowPct(pct),pct!=null?"var(--ink)":"var(--muted)",
+        {tier:"derived", tip:["Share of turnaround",`${isQ?"Wait":"Touch"} time here as a share of the whole flow's turnaround.`]});
+      /* Basis says where the wait came from, in the words the rest of the tool uses:
+         measured = imported sheet · entered = you typed it · ≈ estimate = Little's Law
+         · ≈ growing = Little's Law on a queue that never settles */
+      if(isQ) drawRow(padL,1,"Basis",
+        time==null?"—":(approx?(growing?"≈ growing":"≈ estimate"):measured?"measured":"entered"),
+        growing&&approx?"var(--nva)":null,
+        {tier:"derived", tip: growing&&approx?growTip
+           : approx?["Estimated wait","Queue size ÷ the next step's pace (Little's Law) — it only holds while the next step can keep up."]
+           : measured?IMPORTED : ["Entered wait","Taken straight from the wait time you set."]});
+      else drawRow(padL,1,"Rework",mt.rework!=null?fmt(mt.rework)+"%":"—",null,
+        measured?{tier:"derived", tip:IMPORTED}:{edit:numEdit("reworkPct","Rework %"), tip:mtip("rework")});
 
       // bottleneck flag — only the single biggest bottleneck
       if(r.flag && r.flag.node.id===n.id){
@@ -8125,7 +8274,6 @@ function animateNodes(targets, ms=280, done){
 function flowLabelNeeds(){
   const m=state.model; const r=rollup();
   const showFlow=(m.settings&&m.settings.showFlow)!==false;
-  const demandV=r.cap?r.cap.demand:null;
   const outCount={}; m.edges.forEach(e=>outCount[e.from]=(outCount[e.from]||0)+1);
   const byId=Object.fromEntries(m.nodes.map(n=>[n.id,n]));
   const items=[];
@@ -8137,7 +8285,7 @@ function flowLabelNeeds(){
     if(name) parts.push(name);
     if(showFlow && branch && share!=null) parts.push(`${e.splitPct==null?"≈":""}${Math.round(share*100)}%`);
     else if(!showFlow && e.splitPct!=null) parts.push(`${e.splitPct}%`);
-    if(showFlow && demandV!=null) parts.push(`${fmt((r.edgeFlow[e.id]||0)*demandV)}/day`);
+    const flowStr=edgeRateLabel(r,e,showFlow); if(flowStr) parts.push(flowStr);
     if(!parts.length) return;
     items.push({a,b,need:measure(parts.join(" · "),`600 10.5px ${FONT_STACK}`)+36});
   });
@@ -8904,7 +9052,7 @@ function buildExportSVG(){
     .laneband{fill:var(--ink)}.lanesep{stroke:var(--line);stroke-opacity:.8;stroke-width:1;stroke-dasharray:2 6}
     .lanelbl{fill:var(--faint);font-size:10.5px;font-weight:700;letter-spacing:.8px;text-transform:uppercase}
     .edge{fill:none;stroke:var(--faint);stroke-width:2}.edge.hot{stroke:var(--nva)}${(state.model.edges||[]).some(e=>e.primary)?".edge.primary{stroke:var(--va);stroke-width:2.5}":""}
-    .anchor,.edge-hit,.temp-edge,.del-handle,.guide,.canvas-hint,.vedit,.anno-resize,.note-picker{display:none}
+    .anchor,.edge-hit,.temp-edge,.del-handle,.guide,.canvas-hint,.vedit,.tipz,.anno-resize,.note-picker{display:none}
     #simLayer,.sim-dot,.sim-rim,.sim-count{display:none}
     .nbox{filter:none}`;
   const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="${styleVars}">
@@ -9235,8 +9383,16 @@ $("#paletteBar").querySelectorAll("[data-tool]").forEach(b=>b.addEventListener("
 /* on-brand hover tip: title + description for any [data-tip] element (icon-only palette buttons) */
 const tipPop=(()=>{ const el=document.createElement("div"); el.id="tipPop";
   el.innerHTML='<span class="tip-t"></span><span class="tip-d"></span>'; document.body.appendChild(el); return el; })();
-let _tipHide=null;
-function showTip(el){
+let _tipHide=null, _tipOpen=null;
+/* Card fields sit shoulder to shoulder, so an instant tip strobes as the pointer crosses them —
+   they open on a dwell instead. Toolbar buttons pass delay 0 and stay instant. */
+function showTip(el, delay){
+  clearTimeout(_tipOpen);
+  const d = delay!=null ? delay : 600;
+  if(d>0){ _tipOpen=setTimeout(()=>openTip(el), d); return; }
+  openTip(el);
+}
+function openTip(el){
   const t=el.getAttribute("data-tip"); if(!t) return;
   clearTimeout(_tipHide);
   tipPop.querySelector(".tip-t").textContent=t;
@@ -9252,8 +9408,9 @@ function showTip(el){
     tipPop.classList.add("show");
   });
 }
-function hideTip(){ tipPop.classList.remove("show"); _tipHide=setTimeout(()=>{ tipPop.style.display="none"; },160); }
-document.addEventListener("mouseover",e=>{ const el=e.target.closest("[data-tip]"); if(el) showTip(el); });
+function hideTip(){ clearTimeout(_tipOpen); tipPop.classList.remove("show"); _tipHide=setTimeout(()=>{ tipPop.style.display="none"; },160); }
+document.addEventListener("mouseover",e=>{ const el=e.target.closest("[data-tip]");
+  if(el) showTip(el, el.closest("#paletteBar")?0:null); });   // toolbar buttons stay instant
 document.addEventListener("mouseout",e=>{ const el=e.target.closest("[data-tip]"); if(el && !el.contains(e.relatedTarget)) hideTip(); });
 document.addEventListener("mousedown",hideTip,true);
 window.addEventListener("scroll",hideTip,true);
